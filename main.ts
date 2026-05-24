@@ -44,7 +44,7 @@ async function loadChart(): Promise<ChartModule> {
 
 // ─── View ────────────────────────────────────────────────────────────────────
 
-export class XLSXCardView extends FileView {
+export class CardView extends FileView {
   settings: CardViewSettings;
   headers: string[] = [];
   rows: CSVRow[] = [];
@@ -1784,7 +1784,7 @@ export default class CardViewPlugin extends Plugin {
   settings: CardViewSettings = DEFAULT_SETTINGS;
   async onload(): Promise<void> {
     await this.loadSettings();
-    this.registerView(CARD_VIEW_TYPE, leaf=>new XLSXCardView(leaf, this.settings, () => this.saveSettings()));
+    this.registerView(CARD_VIEW_TYPE, leaf=>new CardView(leaf, this.settings, () => this.saveSettings()));
     this.registerExtensions(["csv"], CARD_VIEW_TYPE);
     this.addSettingTab(new CardViewSettingTab(this.app, this));
 

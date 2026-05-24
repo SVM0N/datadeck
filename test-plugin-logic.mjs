@@ -97,7 +97,7 @@ function parseCSV(raw) {
   return { headers, rows };
 }
 
-// Simulates resolveCol from XLSXCardView
+// Simulates resolveCol from CardView
 function resolveCol(headers, candidates) {
   for (const c of candidates) {
     const found = headers.find(h => h.toLowerCase() === c.toLowerCase());
