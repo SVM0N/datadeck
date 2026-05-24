@@ -76,19 +76,62 @@
    other direction. Both buttons exist in the DOM at all times so the
    layout responds to window resize / orientation flips without re-render. */
 .csv-cfg-btn-overflow { display: none; }
+/* Search toggle is mobile-only — desktop always shows the input directly. */
+.csv-search-toggle { display: none; }
+
+/* Tiny build-info icon (desktop only) — same shape as the cfg buttons but
+   icon-tight so it doesn't compete with the primary actions. Click toasts
+   the build timestamp; on mobile the ⋯ menu surfaces the same info. */
+.csv-info-btn {
+  padding: 4px 8px;
+  font-size: 14px;
+  opacity: 0.6;
+}
+.csv-info-btn:hover { opacity: 1; }
 
 /* Mobile: hide the filename title (already in the tab) and let the search
    bar shrink so the action buttons don't get pushed off-screen. */
 @media (max-width: 600px) {
   .csv-toolbar-title { display: none; }
   .csv-toolbar { padding: 8px 12px; gap: 8px; }
-  .csv-toolbar-controls { gap: 6px; }
-  /* `!important` here defeats the desktop `.csv-search-input:focus { width:220px }`
-     rule which otherwise wins on specificity and forces the input wider than
-     its mobile wrap (overflowing the toolbar). On phones we want the input
-     to always fill the wrap, focused or not. */
+  /* Keep all controls on a single row; if they don't fit, the controls
+     row scrolls horizontally rather than wrapping onto a second row. */
+  .csv-toolbar-controls {
+    gap: 6px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    /* hide scrollbar — it's discoverable enough as a fallback */
+    scrollbar-width: none;
+  }
+  .csv-toolbar-controls::-webkit-scrollbar { display: none; }
+  /* Prevent the buttons themselves from shrinking — they'd otherwise
+     squish to unreadable widths instead of scrolling. */
+  .csv-toolbar-controls > * { flex-shrink: 0; }
+    /* On mobile the search input is hidden until the user taps the 🔍 toggle.
+     When expanded the input OVERLAYS the toolbar (absolute position over
+     the controls row) instead of displacing the mode buttons sideways.
+     Without the overlay, expanding the search pushes [Cards|Kanban|Table]
+     off the visible toolbar area and the user reads that as "the view
+     disappeared". With the overlay the buttons stay put underneath and
+     reappear instantly when the search closes.
+     `!important` defeats the base `.csv-search-wrap { display: flex; }`
+     rule that wins on cascade order otherwise. */
+  .csv-toolbar { position: relative; }
+  .csv-search-toggle { display: inline-flex !important; }
+  .csv-search-wrap { display: none !important; }
+  .csv-toolbar--search-expanded .csv-search-toggle { display: none !important; }
+  .csv-toolbar--search-expanded .csv-search-wrap {
+    display: flex !important;
+    position: absolute;
+    inset: 0 12px 0 12px; /* match the toolbar's horizontal padding */
+    z-index: 5;
+    background: var(--csv-surface);
+    align-items: center;
+  }
+  /* `!important` defeats the desktop `.csv-search-input:focus { width:220px }`
+     rule which otherwise overflows the toolbar at mobile widths. */
   .csv-search-input { width: 100% !important; min-width: 0; max-width: 100%; }
-  .csv-search-wrap { flex: 1 1 140px; min-width: 0; max-width: 100%; }
   /* Toolbar buttons go icon-tight on mobile */
   .csv-cfg-btn, .csv-add-btn { padding: 6px 10px; font-size: 12px; }
   .csv-row-count { display: none; }
@@ -165,7 +208,7 @@
   width: 180px;
   outline: none;
   box-sizing: border-box;
-  transition: border-color 0.15s, width 0.2s;
+  transition: border-color 0.1s, width 0.1s;
 }
 
 .csv-search-input:focus {
@@ -295,7 +338,7 @@
   background: var(--csv-surface);
   border-radius: var(--csv-radius);
   box-shadow: var(--csv-shadow);
-  transition: box-shadow 0.2s ease, transform 0.15s ease;
+  transition: box-shadow 0.1s ease, transform 0.1s ease;
   overflow: hidden;
 }
 
@@ -622,12 +665,44 @@
   transform: translateY(-1px);
 }
 
+/* Title row holds the title and a small notes-file icon button. Flex so the
+   icon hugs the right edge regardless of title length. */
+.csv-kanban-card-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
 .csv-kanban-card-title {
   font-size: 13px;
   font-weight: 600;
   color: var(--csv-text);
   line-height: 1.3;
-  margin-bottom: 3px;
+  flex: 1;
+  min-width: 0; /* allow ellipsis inside flex */
+}
+
+/* Small notes-file create/open icon — quiet by default, brightens on hover.
+   Shown when an .md sidecar exists (📄) or not (+). */
+.csv-kanban-notes-icon {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  color: var(--csv-text-faint);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 4px;
+  opacity: 0.55;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.csv-kanban-notes-icon.exists { opacity: 0.9; }
+.csv-kanban-card:hover .csv-kanban-notes-icon { opacity: 1; }
+.csv-kanban-notes-icon:hover {
+  color: var(--csv-accent);
+  background: var(--background-modifier-hover);
 }
 
 .csv-kanban-card-sub {
@@ -695,6 +770,10 @@
   overflow-x: auto;
   border-radius: var(--csv-radius);
   box-shadow: var(--csv-shadow);
+  /* Hint to the compositor that this is a scroll container — promotes it
+     to its own layer on iOS, which smooths scroll on big tables. */
+  will-change: scroll-position;
+  -webkit-overflow-scrolling: touch;
 }
 
 .csv-table {
@@ -738,50 +817,60 @@
      30 lines tall and pushes every other row off-screen. */
   max-height: 7.5em;
   overflow: hidden;
-  position: relative;
+  /* position:relative is only needed when the .csv-cell--clipped pseudo
+     renders — moving it under that class avoids creating N×M stacking
+     contexts for cells that don't need one. */
 }
+.csv-table td.csv-cell--clipped { position: relative; }
 
-/* Long-content fade-out hint: a soft gradient on the bottom of clamped
-   cells so the user sees there's more. Click opens the expander
-   (every row supports right-click → Open entry). */
-.csv-table td::after {
+/* Hover background only on hover-capable devices. iOS sticky-hover
+   otherwise leaves the last-touched row tinted and forces a recomposite
+   per scroll frame — a major cause of table lag on iPhone. */
+@media (hover: hover) {
+  .csv-table tr:hover td { background: var(--background-modifier-hover); }
+  .csv-table tr:hover td.csv-cell--clipped::after { background: linear-gradient(to bottom, transparent, var(--background-modifier-hover)); }
+}
+/* Long-content fade-out hint, scoped to cells JS measured as overflowing.
+   The pseudo-element previously existed on every td (opacity:0 by default)
+   producing N×M compositor pseudo-elements — a material chunk of mobile
+   table scroll lag. Now only clipped cells get the pseudo, and clip
+   detection is skipped on touch entirely, so mobile pays zero overhead. */
+.csv-table td.csv-cell--clipped::after {
   content: "";
   position: absolute;
   inset: auto 0 0 0;
   height: 14px;
   background: linear-gradient(to bottom, transparent, var(--csv-surface));
   pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.15s ease;
 }
-.csv-table tr:hover td { background: var(--background-modifier-hover); }
-.csv-table tr:hover td::after { background: linear-gradient(to bottom, transparent, var(--background-modifier-hover)); }
-/* Show the fade only when the content actually overflows. CSS alone can't
-   conditionally apply, so we leave the gradient transparent by default and
-   reveal it via a `.csv-cell--clipped` class added from JS when measured
-   scrollHeight > clientHeight. */
-.csv-table td.csv-cell--clipped::after { opacity: 1; }
 
 .csv-table tr:last-child td {
   border-bottom: none;
 }
 
-/* Higher specificity than `.csv-table td` so we can drop the !important
-   that the original rule used to win the cascade. */
+/* (Previously had `contain: content` on tbody tr for paint isolation, but
+   contain on table-internal elements is spec-undefined and iOS WebKit
+   sometimes drops rows from layout. Removed — the per-td ::after + position
+   pseudo cleanup alone was enough to make scroll smooth.) */
+
+/* Notes cell stays a normal table-cell so its row aligns with the others.
+   The line-clamp lives on the inner span so it doesn't disrupt table
+   layout (display:-webkit-box on the td would override display:table-cell
+   and misalign row borders relative to other cells in the same row). */
 .csv-table td.csv-table-notes-cell {
   color: var(--csv-text-muted);
   font-style: italic;
   font-size: 12px;
   min-width: 200px;
   max-width: 320px;
-  /* Notes preview is intentionally single-line — full text is in the
-     expander. The cell's own max-height inherits from .csv-table td. */
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-height: 2.4em; /* tighter than the default td clamp — notes never need wrapping */
+  line-height: 1.4;
 }
-.csv-table td.csv-table-notes-cell::after { display: none; } /* no fade — single line already ellipsises */
+.csv-table td.csv-table-notes-cell > span {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 
 .csv-table-action {
   width: 40px;
@@ -800,8 +889,13 @@
   transition: opacity 0.15s, color 0.15s;
 }
 
-.csv-table tr:hover .csv-table-del-btn {
-  opacity: 1;
+@media (hover: hover) {
+  .csv-table tr:hover .csv-table-del-btn { opacity: 1; }
+}
+/* On touch the affordance has to be discoverable without hover, so just
+   show it at low opacity always. */
+@media (hover: none) {
+  .csv-table-del-btn { opacity: 0.5; }
 }
 
 .csv-table-del-btn:hover {
@@ -850,31 +944,6 @@
   background: rgba(var(--interactive-accent-rgb), 0.08);
 }
 
-/* Kanban notes button (shows on hover) */
-.csv-kanban-notes-btn {
-  display: none;
-  margin-top: 8px;
-  width: 100%;
-  padding: 5px 8px;
-  border-radius: var(--csv-radius-sm);
-  font-size: 11px;
-  font-weight: 500;
-  border: 1px dashed var(--csv-border);
-  background: transparent;
-  color: var(--csv-text-muted);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.csv-kanban-card:hover .csv-kanban-notes-btn {
-  display: block;
-}
-
-.csv-kanban-notes-btn:hover {
-  border-color: var(--csv-accent);
-  color: var(--csv-accent);
-}
-
 /* Table notes button */
 .csv-table-notes-btn {
   border: none;
@@ -888,8 +957,8 @@
   margin-right: 4px;
 }
 
-.csv-table tr:hover .csv-table-notes-btn {
-  opacity: 1;
+@media (hover: hover) {
+  .csv-table tr:hover .csv-table-notes-btn { opacity: 1; }
 }
 
 .csv-table-notes-btn.exists {
@@ -1158,6 +1227,11 @@ td .csv-select-chip {
   cursor: text; /* hints "click to edit"; matches the textarea that opens */
   border-radius: 2px;
   transition: background 0.12s ease, border-color 0.12s ease;
+  /* Unbreakable tokens (URLs, hash strings) would otherwise push the card
+     wider than the column, producing per-column horizontal scroll on the
+     kanban board. `anywhere` lets them break at any character. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .csv-kanban-notes-preview:hover {
@@ -1347,7 +1421,32 @@ td .csv-select-chip {
 
 .csv-note-expander-modal {
   width: min(780px, 90vw) !important;
+  /* Keyboard-aware modal height. The JS in NoteExpanderModal sets
+     --csv-modal-vh to visualViewport.height (the screen minus the iOS
+     keyboard, when it's open). When that variable is absent the modal
+     falls back to dvh, then vh — those work on desktop and on browsers
+     without the visualViewport API. The 85% factor leaves a margin
+     around the modal so it doesn't butt against the edges. */
   max-height: 85vh !important;
+  max-height: 85dvh !important;
+  max-height: calc(var(--csv-modal-vh, 100dvh) * 0.85) !important;
+}
+
+/* Mobile: dock the modal to the top of the visible viewport instead of
+   center-of-window. Obsidian's default centering uses window.innerHeight
+   which doesn't shrink when the iOS keyboard appears — so the modal stays
+   centered in the no-keyboard viewport and its bottom (footer + textarea)
+   ends up behind the keyboard. Obsidian centers via flex on the parent
+   container (not a transform on the modal itself), so we keep horizontal
+   centering by overriding only align-self and adding a small margin-top.
+   max-height is bound to visualViewport.height (written by the JS handler
+   into --csv-modal-vh) so the modal always fits above the keyboard. */
+@media (max-width: 600px) {
+  .csv-note-expander-modal {
+    align-self: flex-start !important;
+    margin-top: 10px !important;
+    max-height: calc(var(--csv-modal-vh, 100dvh) - 20px) !important;
+  }
 }
 
 .csv-note-expander-modal .modal-content {
@@ -1355,12 +1454,25 @@ td .csv-select-chip {
   display: flex;
   flex-direction: column;
   max-height: 85vh;
+  max-height: 85dvh;
+  max-height: calc(var(--csv-modal-vh, 100dvh) * 0.85);
+  /* The modal-content itself scrolls when its body exceeds the keyboard-
+     aware max-height. Combined with `position: sticky` on the footer, this
+     guarantees the action bar stays reachable no matter what iOS does with
+     the keyboard or how long the note is. */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 600px) {
+  .csv-note-expander-modal .modal-content {
+    max-height: calc(var(--csv-modal-vh, 100dvh) - 20px);
+  }
 }
 
 .csv-note-expander {
   display: flex;
   flex-direction: column;
-  height: 100%;
   min-height: 400px;
 }
 
@@ -1483,6 +1595,15 @@ td .csv-select-chip {
   resize: none;
 }
 
+/* On mobile the 320px min-height combined with the iOS keyboard pushes
+   the modal's footer below the keyboard. Letting the textarea shrink
+   gives the flex container the room it needs to keep header + footer
+   visible at the same time. */
+@media (max-width: 600px) {
+  .csv-expander-textarea { min-height: 120px; }
+  .csv-expander-editor { padding: 10px 12px; }
+}
+
 .csv-expander-textarea:focus {
   border-color: var(--csv-accent);
 }
@@ -1494,20 +1615,24 @@ td .csv-select-chip {
   transition: background 0.12s ease;
 }
 
-.csv-table tr:hover .csv-table-notes-cell {
-  background: var(--csv-surface-2);
+@media (hover: hover) {
+  .csv-table tr:hover .csv-table-notes-cell { background: var(--csv-surface-2); }
 }
 
 /* Empty-cell placeholder — only visible on row hover so unfilled notes
-   don't clutter the table at rest. */
+   don't clutter the table at rest. On touch (no hover) keep it visible
+   at low opacity so the user can still discover the affordance. */
 .csv-table-notes-empty {
   color: var(--csv-text-faint);
   opacity: 0;
   transition: opacity 0.15s ease;
 }
 
-.csv-table tr:hover .csv-table-notes-empty {
-  opacity: 1;
+@media (hover: hover) {
+  .csv-table tr:hover .csv-table-notes-empty { opacity: 1; }
+}
+@media (hover: none) {
+  .csv-table-notes-empty { opacity: 0.5; }
 }
 
 /* ─── Column config button & modal ────────────────────────────────────────── */
@@ -1687,6 +1812,14 @@ td .csv-select-chip {
   padding: 12px 20px;
   border-top: 1px solid var(--csv-border);
   flex-shrink: 0;
+  /* Pin the action bar to the bottom of the modal's scroll container so
+     the Delete / Cancel / Save buttons stay reachable on iOS even when
+     the keyboard pushes content up. Opaque bg so scrolled content doesn't
+     bleed through. */
+  position: sticky;
+  bottom: 0;
+  background: var(--background-primary);
+  z-index: 2;
 }
 
 .csv-expander-footer-right {
@@ -2031,7 +2164,7 @@ td .csv-select-chip {
   height: 100%;
   background: var(--csv-accent);
   border-radius: 2px;
-  transition: width 0.3s ease;
+  transition: width 0.15s ease;
 }
 
 /* Per-habit timeline section */
@@ -2171,30 +2304,6 @@ td .csv-select-chip {
 .csv-dash-timeline-stats strong {
   color: var(--csv-text);
   font-weight: 700;
-}
-
-/* Kanban button row */
-.csv-kanban-card-btns {
-  display: none;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
-}
-
-.csv-kanban-card:hover .csv-kanban-card-btns {
-  display: flex;
-}
-
-.csv-kanban-card-btns .csv-kanban-notes-btn {
-  display: inline-block;
-  margin-top: 0;
-  width: auto;
-  flex: 1;
-  min-width: 80px;
-}
-
-.csv-kanban-create-btn {
-  border-style: dashed;
 }
 
 /* ─── Mobile Scrollable Table ─────────────────────────────────────────────── */
@@ -2565,7 +2674,7 @@ select.csv-add-row-control {
 .csv-library-arrow {
   font-size: 11px;
   color: var(--csv-text-faint);
-  transition: transform 0.2s;
+  transition: transform 0.1s;
   display: inline-block;
   line-height: 1;
 }
@@ -2711,11 +2820,10 @@ select.csv-add-row-control {
   .csv-kanban-card-sub { font-size: 11px; margin-bottom: 6px; }
   .csv-kanban-card-meta { gap: 4px; }
   .csv-kanban-chip { font-size: 11px; padding: 1px 6px; }
-  /* Hide the per-card secondary buttons on touch — context menu (long-press
-     / right-click) already exposes Open notes / Expand. */
-  .csv-kanban-card-btns { display: none; }
   /* Inline notes preview reads tighter inside the smaller card. */
   .csv-kanban-notes-preview { font-size: 11px; -webkit-line-clamp: 2; }
+  /* Notes icon stays visible on touch (no hover state). */
+  .csv-kanban-notes-icon { opacity: 0.9; padding: 4px 8px; }
 
   /* — Table: comfortable on phone widths — */
   .csv-table { font-size: 12px; }
@@ -2728,6 +2836,11 @@ select.csv-add-row-control {
     min-width: 110px;
     max-width: 220px;
   }
+  /* Mobile keeps the 3-line clamp (now on the inner span, doesn't disrupt
+     table layout). The original "freezes when I scroll to notes" report
+     turned out to be position:relative on every td + ::after pseudo on
+     every td — both now scoped to clipped cells only, so the clamp on the
+     inner span is safe to keep. */
   .csv-table td.csv-table-notes-cell {
     min-width: 140px;
     max-width: 220px;

@@ -29,6 +29,11 @@ import {
   generateGenericMobileDashboard as genericMobileTemplate,
 } from "./src/mobile-templates";
 
+// Injected by esbuild at build time (see esbuild.config.mjs). Surfaced via
+// the ⋯ menu so the user can confirm which build is actually loaded —
+// handy on iPhone where iCloud sync of the deployed bundle can lag.
+declare const __BUILD_TIME__: string;
+
 // Lazy-load Chart.js + register the bits we use. Only paid when the dashboard
 // view first renders. Sessions that only touch books/movies/quotes/dictionary
 // never load Chart.js at all.
@@ -335,11 +340,68 @@ export class CardView extends FileView {
         // Apply all field changes back to the original row
         Object.assign(row, updatedRow);
         this.scheduleSave();
-        this.renderView();
+        // Re-render rebuilds the whole content area, so scroll positions
+        // would reset to (0,0). Snapshot scroll across all known scrollers
+        // (table y+x, library y, kanban board x + per-column y) and restore
+        // after the re-render so closing the expander doesn't jump the view.
+        this.renderViewPreservingScroll();
       },
       // Delete with undo: the helper handles splice + save + rerender + Notice.
       () => this.deleteWithUndo(row)
     ).open();
+  }
+
+  /**
+   * Snapshot scroll positions of every scrollable container in the current
+   * view, re-render, then put them back. Used after modal saves so the user
+   * isn't yanked back to (0,0) every time they edit an entry.
+   *
+   * Kanban columns are keyed by their header text — column DOM nodes are
+   * recreated on re-render, so we re-find the same column by its (stable)
+   * title and replay its scrollTop. Replays are scheduled across two rAFs +
+   * a setTimeout because Obsidian sometimes adjusts scroll after our
+   * immediate write (matches the same defense used in the inline note editor).
+   */
+  private renderViewPreservingScroll(): void {
+    const root = this.contentEl;
+    const contentArea = root.querySelector<HTMLElement>(".csv-content-area");
+    const tableWrap = root.querySelector<HTMLElement>(".csv-table-wrapper");
+    const kanbanBoard = root.querySelector<HTMLElement>(".csv-kanban-board");
+    const snapshot = {
+      contentTop: contentArea?.scrollTop ?? 0,
+      contentLeft: contentArea?.scrollLeft ?? 0,
+      tableLeft: tableWrap?.scrollLeft ?? 0,
+      boardLeft: kanbanBoard?.scrollLeft ?? 0,
+      cols: new Map<string, number>(),
+    };
+    root.querySelectorAll<HTMLElement>(".csv-kanban-col").forEach(col => {
+      const title = col.querySelector(".csv-kanban-col-title")?.textContent ?? "";
+      const body = col.querySelector<HTMLElement>(".csv-kanban-col-body");
+      if (title && body) snapshot.cols.set(title, body.scrollTop);
+    });
+
+    this.renderView();
+
+    const restore = () => {
+      const ca = this.contentEl.querySelector<HTMLElement>(".csv-content-area");
+      const tw = this.contentEl.querySelector<HTMLElement>(".csv-table-wrapper");
+      const kb = this.contentEl.querySelector<HTMLElement>(".csv-kanban-board");
+      if (ca) { ca.scrollTop = snapshot.contentTop; ca.scrollLeft = snapshot.contentLeft; }
+      if (tw) tw.scrollLeft = snapshot.tableLeft;
+      if (kb) kb.scrollLeft = snapshot.boardLeft;
+      this.contentEl.querySelectorAll<HTMLElement>(".csv-kanban-col").forEach(col => {
+        const title = col.querySelector(".csv-kanban-col-title")?.textContent ?? "";
+        const body = col.querySelector<HTMLElement>(".csv-kanban-col-body");
+        const saved = snapshot.cols.get(title);
+        if (body && saved != null) body.scrollTop = saved;
+      });
+    };
+    restore();
+    requestAnimationFrame(() => {
+      restore();
+      requestAnimationFrame(restore);
+    });
+    setTimeout(restore, 50);
   }
 
   private openAddModal(): void {
@@ -483,8 +545,8 @@ export class CardView extends FileView {
     const modes: {id: ViewMode, label: string}[] = [];
     if (this.hasDateColumn()) modes.push({id: "dashboard", label: "Dashboard"});
     if (this.getCategoryCol()) {
-      modes.push({id: "library", label: "Library"});
-      modes.push({id: "kanban-genre", label: "By Genre"});
+      modes.push({id: "library", label: "Cards"});
+      modes.push({id: "kanban-genre", label: "Kanban"});
     }
     modes.push({id: "table", label: "Table"});
 
@@ -493,9 +555,20 @@ export class CardView extends FileView {
       btn.addEventListener("click",()=>{ this.mode=id; this.renderView(); });
     });
 
-    // Search bar (only for kanban/table views, not dashboard)
+    // Search bar (only for kanban/table views, not dashboard).
+    // On mobile the input collapses to a 🔍 toggle so the toolbar fits
+    // on one row; tapping the toggle expands the input + auto-focuses it.
+    // Empty-blur recollapses. CSS toggles which is visible per screen size.
     if (this.mode !== "dashboard") {
+      const searchToggle = ctrl.createEl("button", {
+        cls: "csv-cfg-btn csv-search-toggle",
+        text: "🔍",
+        title: "Search",
+      });
       const searchWrap = ctrl.createDiv({ cls: "csv-search-wrap" });
+      // Active query keeps the input visible even on mobile so the user
+      // can see they have a filter applied; empty restores the collapsed icon.
+      if (this.searchQuery) bar.addClass("csv-toolbar--search-expanded");
       const searchInput = searchWrap.createEl("input", {
         cls: "csv-search-input",
         type: "text",
@@ -504,16 +577,45 @@ export class CardView extends FileView {
       });
       const clearBtn = searchWrap.createEl("button", { cls: "csv-search-clear", text: "×" });
       clearBtn.style.display = this.searchQuery ? "block" : "none";
+      // Debounce filter re-renders so typing doesn't trigger a full content
+      // rebuild on every keystroke — on large tables (300+ rows) the empty-
+      // then-refill flash reads as "the table disappeared while I'm typing."
+      // 120ms is below human reaction latency but lets bursts collapse into
+      // a single render.
+      let searchDebounce: number | null = null;
       searchInput.addEventListener("input", (e) => {
         this.searchQuery = (e.target as HTMLInputElement).value;
         clearBtn.style.display = this.searchQuery ? "block" : "none";
-        this.renderView(true); // Only re-render content, not toolbar
+        if (searchDebounce !== null) window.clearTimeout(searchDebounce);
+        searchDebounce = window.setTimeout(() => {
+          searchDebounce = null;
+          this.renderView(true); // Only re-render content, not toolbar
+        }, 120);
       });
       clearBtn.addEventListener("click", () => {
         this.searchQuery = "";
         searchInput.value = "";
         clearBtn.style.display = "none";
+        bar.removeClass("csv-toolbar--search-expanded");
         this.renderView(true);
+      });
+      searchInput.addEventListener("blur", () => {
+        if (!searchInput.value) bar.removeClass("csv-toolbar--search-expanded");
+      });
+      searchToggle.addEventListener("click", () => {
+        bar.addClass("csv-toolbar--search-expanded");
+        // iOS WKWebView scrolls the document so the focused input sits
+        // just above the keyboard — even when the input is already
+        // visible. That pushes everything below the toolbar (i.e. the
+        // table) underneath the keyboard, and the user sees a blank
+        // view. preventScroll doesn't catch this; we have to manually
+        // reset scroll on every ancestor after focus has settled.
+        searchInput.focus({ preventScroll: true });
+        requestAnimationFrame(() => {
+          window.scrollTo(0, 0);
+          let p: HTMLElement | null = bar;
+          while (p) { if (p.scrollTop) p.scrollTop = 0; p = p.parentElement; }
+        });
       });
     }
 
@@ -567,8 +669,22 @@ export class CardView extends FileView {
       menu.addItem(i => i.setTitle("Columns").setIcon("settings").onClick(openColumns));
       menu.addItem(i => i.setTitle("Mobile dashboard").setIcon("smartphone").onClick(openMobile));
       menu.addItem(i => i.setTitle("Backup").setIcon("save").onClick(openBackup));
+      menu.addSeparator();
+      // Build timestamp baked in at compile time. Lets the user confirm on
+      // iPhone that iCloud has actually synced the latest deploy.
+      menu.addItem(i => i.setTitle(`Built ${__BUILD_TIME__}`).setIcon("info").setDisabled(true));
       menu.showAtMouseEvent(e);
     });
+
+    // Desktop: a tiny ⓘ button next to ⋯ that toasts the build time on
+    // click. On mobile it's hidden — the ⋯ menu already surfaces the same
+    // info, and toolbar real estate is precious.
+    const infoBtn = ctrl.createEl("button", {
+      cls: "csv-cfg-btn csv-cfg-btn-secondary csv-info-btn",
+      text: "ⓘ",
+      title: `Built ${__BUILD_TIME__} — click to confirm`,
+    });
+    infoBtn.addEventListener("click", () => new Notice(`csv-card-view — built ${__BUILD_TIME__}`, 4000));
   }
 
   // ── Archive backup ──────────────────────────────────────────────────────────
@@ -1330,25 +1446,20 @@ export class CardView extends FileView {
     });
     genreSelect.value = this.libraryGenreFilter;
 
-    // Search
-    const searchInput = filtersBar.createEl("input", {
-      cls: "csv-library-search",
-      type: "text",
-      placeholder: "Search by title...",
-      value: this.searchQuery
-    });
+    // Search lives in the toolbar (the 🔍 toggle on mobile, always-visible
+    // input on desktop). Library used to render its own search input here,
+    // duplicating the one in the toolbar — both wrote to the same
+    // this.searchQuery. Removed.
 
     // Filter handlers
     const applyFilters = () => {
       this.libraryStatusFilter = statusSelect.value;
       this.libraryGenreFilter = genreSelect.value;
-      this.searchQuery = searchInput.value;
       this.renderView(true);
     };
 
     statusSelect.addEventListener("change", applyFilters);
     genreSelect.addEventListener("change", applyFilters);
-    searchInput.addEventListener("input", applyFilters);
 
     // Filter rows
     let filtered = this.rows.filter(row => {
@@ -1567,13 +1678,23 @@ export class CardView extends FileView {
   private renderKanbanCard(container: HTMLElement, row: CSVRow, statuses: string[], sc: string|null): void {
     const card = container.createDiv({cls:"csv-kanban-card"});
     const notesColForCard = this.getNotesCol();
-    const titleEl = card.createDiv({cls:"csv-kanban-card-title", text:this.getTitle(row)});
-    // Title was styled clickable (dotted underline, cursor: pointer) but had
-    // no handler — the dotted-underline was a promise nothing kept. Now it
-    // opens the same expander as the "⤢ Expand" button.
+
+    // Title row: title text on the left, small notes-file icon on the right.
+    // Tapping the title opens the entry expander; the small icon creates or
+    // opens the sidecar .md. Replaces the old hover-revealed bottom button row.
+    const titleRow = card.createDiv({cls:"csv-kanban-card-title-row"});
+    const titleEl = titleRow.createDiv({cls:"csv-kanban-card-title", text:this.getTitle(row)});
     if (notesColForCard) {
       titleEl.addEventListener("click", e => { e.stopPropagation(); this.openNoteExpander(row, notesColForCard); });
     }
+    const hasNotesFile = this.notesFileExists(row);
+    const notesIconBtn = titleRow.createEl("button", {
+      cls: `csv-kanban-notes-icon ${hasNotesFile ? "exists" : ""}`,
+      text: hasNotesFile ? "📄" : "+",
+      title: hasNotesFile ? "Open notes file" : "Create notes file",
+    });
+    notesIconBtn.addEventListener("click", e => { e.stopPropagation(); this.openOrCreateNotes(row); });
+
     const sub = this.getSubtitle(row);
     if (sub) card.createDiv({cls:"csv-kanban-card-sub", text:sub});
 
@@ -1603,7 +1724,6 @@ export class CardView extends FileView {
     // Inline notes
     const notesCol = this.getNotesCol();
     const hasInlineNotes = !!(notesCol && row[notesCol]?.trim());
-    const hasFile = this.notesFileExists(row);
 
     // The preview is itself the editor affordance — clicking opens the
     // inline textarea. When there's no note yet, render a quiet "+ Add note"
@@ -1692,19 +1812,23 @@ export class CardView extends FileView {
       }
     };
 
-    notesPreviewEl.addEventListener("click", e => { e.stopPropagation(); openInlineEditor(); });
+    notesPreviewEl.addEventListener("click", e => {
+      e.stopPropagation();
+      // On touch devices, opening the inline textarea pops iOS's virtual
+      // keyboard, which scrolls the focused element into view — that yanks
+      // the user's y-position so far down the originally-tapped card
+      // disappears off-screen. The expander modal sits in its own viewport,
+      // so the keyboard only resizes the modal and the underlying view
+      // stays put. Desktop keeps the inline textarea (faster, no modal lift).
+      if (notesCol && matchMedia("(pointer: coarse)").matches) {
+        this.openNoteExpander(row, notesCol);
+        return;
+      }
+      openInlineEditor();
+    });
 
-    // Buttons (visible on hover). "Edit note" used to live here but the
-    // preview above is itself click-to-edit (and shows "+ Add note" when
-    // empty), so the button was a duplicate affordance. Only Expand +
-    // Notes-file remain.
-    const btnRow = card.createDiv({cls:"csv-kanban-card-btns"});
-    if (notesCol) {
-      btnRow.createEl("button",{cls:"csv-kanban-notes-btn", text:"⤢ Expand"})
-        .addEventListener("click", e => { e.stopPropagation(); this.openNoteExpander(row, notesCol); });
-    }
-    btnRow.createEl("button",{cls:`csv-kanban-notes-btn ${hasFile?"":"csv-kanban-create-btn"}`, text:hasFile?"📄 Open notes file":"✚ Notes file"})
-      .addEventListener("click", e => { e.stopPropagation(); this.openOrCreateNotes(row); });
+    // Expand and Notes-file actions are now in the title row (title-tap and
+    // small + icon). No bottom button row.
 
     // (Previously had a click handler that just called stopPropagation — no
     // useful purpose. Removed; specific child elements stop propagation when
@@ -1742,6 +1866,11 @@ export class CardView extends FileView {
     });
     hr.createEl("th",{text:""});
 
+    // Skip the clip-detection on touch — the fade gradient it triggers is
+    // a hover affordance and irrelevant without a cursor. Saves N rAFs × N
+    // forced reflows per render on phones (the prime cause of table-view lag
+    // on iPhone when the file has hundreds of rows).
+    const isTouch = matchMedia("(pointer: coarse)").matches;
     const tbody = table.createEl("tbody");
     filteredRows.forEach((row) => {
       const tr = tbody.createEl("tr");
@@ -1750,8 +1879,8 @@ export class CardView extends FileView {
         const td = tr.createEl("td");
         if (this.isNotesCol(h)) {
           td.addClass("csv-table-notes-cell");
-          const preview = (row[h]??"").replace(/#{1,6}\s/g,"").replace(/[*_>`]/g,"").split("\n").filter(l=>l.trim()).slice(0,2).join(" · ");
-          const display = preview ? (preview.slice(0,100)+(preview.length>100?"…":"")) : "+ Add note";
+          const preview = (row[h]??"").replace(/#{1,6}\s/g,"").replace(/[*_>`]/g,"").split("\n").filter(l=>l.trim()).slice(0,3).join(" · ");
+          const display = preview ? (preview.slice(0,200)+(preview.length>200?"…":"")) : "+ Add note";
           const span = td.createSpan({ text: display });
           if (!preview) span.addClass("csv-table-notes-empty");
           td.title = "Click to open note";
@@ -1764,24 +1893,9 @@ export class CardView extends FileView {
         } else {
           const val = row[h] ?? "";
           td.setText(val);
-          // Long values get a hover-tooltip with the full text and a
-          // post-paint check for the line-clamp fade. The clamp itself
-          // lives in CSS (.csv-table td max-height) — this just flags
-          // cells whose content actually overflows so the fade gradient
-          // only appears when there's truly more to see.
           if (val.length > 80) td.title = val;
           this.makeEditable(td, row, h);
         }
-      });
-      // After the row paints, detect overflowing cells. requestAnimationFrame
-      // batches all reads (no layout thrash) before any subsequent writes.
-      requestAnimationFrame(() => {
-        tr.querySelectorAll<HTMLElement>("td").forEach(cell => {
-          if (cell.classList.contains("csv-table-notes-cell")) return;
-          if (cell.scrollHeight > cell.clientHeight + 1) {
-            cell.addClass("csv-cell--clipped");
-          }
-        });
       });
       const at = tr.createEl("td",{cls:"csv-table-action"});
       const hasFile = this.notesFileExists(row);
@@ -1790,6 +1904,16 @@ export class CardView extends FileView {
       at.createEl("button",{cls:"csv-table-del-btn",text:"✕",title:"Delete row (Undo available)"})
         .addEventListener("click",()=>this.deleteWithUndo(row));
     });
+    // Detect overflowing cells in one rAF instead of one per row. Single
+    // querySelectorAll, single forced-layout batch — orders of magnitude
+    // cheaper than per-row rAF on big files. Skipped entirely on touch.
+    if (!isTouch) {
+      requestAnimationFrame(() => {
+        tbody.querySelectorAll<HTMLElement>("td:not(.csv-table-notes-cell):not(.csv-table-action)").forEach(cell => {
+          if (cell.scrollHeight > cell.clientHeight + 1) cell.addClass("csv-cell--clipped");
+        });
+      });
+    }
   }
 
   private makeEditable(el: HTMLElement, row: CSVRow, h: string): void {
@@ -1814,7 +1938,7 @@ class CardViewSettingTab extends PluginSettingTab {
     const {containerEl}=this; containerEl.empty();
     containerEl.createEl("h2",{text:"XLSX Card View"});
     new Setting(containerEl).setName("Default view mode")
-      .addDropdown(d=>d.addOption("kanban-genre","By Genre").addOption("table","Table")
+      .addDropdown(d=>d.addOption("kanban-genre","Kanban").addOption("table","Table")
         .setValue(this.plugin.settings.defaultMode)
         .onChange(async v=>{ this.plugin.settings.defaultMode=v as ViewMode; await this.plugin.saveSettings(); }));
     new Setting(containerEl).setName("Status column name")

@@ -139,11 +139,39 @@ export class NoteExpanderModal extends Modal {
     this.modalEl.addClass("csv-note-expander-modal");
   }
 
+  // Bound handler so we can add/remove the same reference. Set in onOpen.
+  private vvHandler: (() => void) | null = null;
+
   onOpen(): void {
     this.renderComponent.load();
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("csv-note-expander");
+
+    // iOS keyboard handling. `dvh` should shrink the modal when the
+    // virtual keyboard appears, but iOS Obsidian's WKWebView doesn't
+    // always honour it. The visualViewport API is the reliable signal:
+    // it reports the actually-visible viewport (i.e. screen minus
+    // keyboard). Mirror it into a CSS variable on modalEl and let the
+    // stylesheet clamp max-height off of that. Px is the unit so the
+    // value is concrete; the clamp falls back to dvh/vh if the API
+    // isn't available.
+    const vv = (window as { visualViewport?: VisualViewport }).visualViewport;
+    if (vv) {
+      const update = () => {
+        // visualViewport.height = screen minus iOS keyboard when open.
+        // The CSS uses --csv-modal-vh to clamp the modal's max-height so
+        // the modal always fits above the keyboard. Horizontal centering
+        // is left to Obsidian's parent flex; the mobile media query
+        // top-anchors the modal via align-self + margin-top instead of
+        // overriding the transform (which would un-center it).
+        this.modalEl.style.setProperty("--csv-modal-vh", `${vv.height}px`);
+      };
+      update();
+      vv.addEventListener("resize", update);
+      vv.addEventListener("scroll", update);
+      this.vvHandler = update;
+    }
 
     // ── Header ──────────────────────────────────────────────────────────────
     const header = contentEl.createDiv({ cls: "csv-expander-header" });
@@ -280,6 +308,12 @@ export class NoteExpanderModal extends Modal {
   }
 
   onClose(): void {
+    const vv = (window as { visualViewport?: VisualViewport }).visualViewport;
+    if (vv && this.vvHandler) {
+      vv.removeEventListener("resize", this.vvHandler);
+      vv.removeEventListener("scroll", this.vvHandler);
+    }
+    this.vvHandler = null;
     this.renderComponent.unload();
     this.contentEl.empty();
   }
@@ -404,7 +438,7 @@ export class FileConfigModal extends Modal {
     const modeRow = form.createDiv({ cls: "csv-modal-row" });
     modeRow.createEl("label", { text: "Default view", cls: "csv-modal-label" });
     const modeSel = modeRow.createEl("select", { cls: "csv-modal-select" });
-    ([["— use global default —",""], ["Dashboard","dashboard"], ["By Genre","kanban-genre"], ["Table","table"]] as [string,string][]).forEach(([label, val]) => {
+    ([["— use global default —",""], ["Dashboard","dashboard"], ["Cards","library"], ["Kanban","kanban-genre"], ["Table","table"]] as [string,string][]).forEach(([label, val]) => {
       const opt = modeSel.createEl("option", { text: label, value: val });
       if ((this.current.defaultMode ?? "") === val) opt.selected = true;
     });
