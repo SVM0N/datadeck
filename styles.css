@@ -146,13 +146,18 @@
     flex: 1 1 auto;
     min-width: 0;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
   }
-  /* × is hidden on mobile — Done covers both "dismiss keyboard" (with
-     non-empty query) and "close search" (with empty query), so × is
-     redundant and previously caused Done to shift position the moment
-     the user started typing. */
-  .csv-search-clear { display: none !important; }
+  /* On mobile the input-wrap fills the available row width; the × stays
+     absolute inside it so Done never shifts position. */
+  .csv-toolbar--search-expanded .csv-search-input-wrap {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .csv-toolbar--search-expanded .csv-search-input {
+    width: 100% !important;
+    min-width: 0;
+  }
   /* Hide the in-content "Found X of Y" header on mobile while the search
      is open. The input itself + the underlying filtered view convey the
      same info; the header clips weirdly when iOS shrinks the WebView for
@@ -251,20 +256,49 @@
   color: var(--csv-text-muted);
 }
 
+/* Input is in its own relative wrapper so the × can absolute-position
+   inside it without affecting siblings (the Done button stays put
+   regardless of whether × is visible). */
+.csv-search-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+/* Make room on the right edge of the input for the × overlay so typed
+   text never runs into the button. */
+.csv-search-input-wrap .csv-search-input {
+  padding-right: 28px;
+}
+
 .csv-search-clear {
   position: absolute;
   right: 4px;
-  padding: 2px 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: none;
-  background: transparent;
+  background: var(--csv-surface-2);
   color: var(--csv-text-muted);
   cursor: pointer;
   font-size: 14px;
   line-height: 1;
+  border-radius: 50%;
+  /* Toggled via class so visibility changes don't shift any layout */
+  opacity: 0.85;
+  transition: opacity 0.1s ease, background 0.1s ease, color 0.1s ease;
 }
-
 .csv-search-clear:hover {
   color: var(--csv-text);
+  background: var(--csv-border);
+}
+.csv-search-clear.is-hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* "Done" button — dismisses iOS keyboard so the user can see the filtered

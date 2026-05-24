@@ -260,7 +260,9 @@ export class CardView extends FileView {
     if (idx < 0) return;
     this.rows.splice(idx, 1);
     this.scheduleSave();
-    this.renderView();
+    // In-place edit — the user deleted from where they are; keep them
+    // anchored there instead of yanking the view to (0,0).
+    this.renderViewPreservingScroll();
 
     const title = this.getTitle(row) || "entry";
     const frag = document.createDocumentFragment();
@@ -275,7 +277,7 @@ export class CardView extends FileView {
       const insertAt = Math.min(idx, this.rows.length);
       this.rows.splice(insertAt, 0, row);
       this.scheduleSave();
-      this.renderView();
+      this.renderViewPreservingScroll();
       notice.hide();
       new Notice(`Restored “${title}”`, 2500);
     });
@@ -302,7 +304,7 @@ export class CardView extends FileView {
         menu.addSeparator();
         statuses.forEach(s => {
           if (s === row[sc]) return;
-          menu.addItem(i => i.setTitle(`Mark as: ${s}`).onClick(() => { row[sc] = s; this.scheduleSave(); this.renderView(); }));
+          menu.addItem(i => i.setTitle(`Mark as: ${s}`).onClick(() => { row[sc] = s; this.scheduleSave(); this.renderViewPreservingScroll(); }));
         });
       }
     }
@@ -414,7 +416,9 @@ export class CardView extends FileView {
       (row) => {
         this.rows.push(row);
         this.scheduleSave();
-        this.renderView();
+        // Keep the user where they were — the new entry's discoverable via
+        // the Notice; yanking to (0,0) just disorients them.
+        this.renderViewPreservingScroll();
         new Notice(`Added: ${this.getTitle(row)}`);
       }
     ).open();
@@ -568,7 +572,13 @@ export class CardView extends FileView {
         title: "Search",
       });
       const searchWrap = ctrl.createDiv({ cls: "csv-search-wrap" });
-      const searchInput = searchWrap.createEl("input", {
+      // Input lives inside its own relative wrapper so the × clear button
+      // can absolute-position over the right edge of the input without
+      // moving any siblings (the Done button stays put even when × appears
+      // mid-typing). The toggle of × visibility uses opacity+pointer-events
+      // rather than display:none — same reason: no layout shift.
+      const inputWrap = searchWrap.createDiv({ cls: "csv-search-input-wrap" });
+      const searchInput = inputWrap.createEl("input", {
         cls: "csv-search-input",
         type: "text",
         placeholder: "Search...",
@@ -578,8 +588,8 @@ export class CardView extends FileView {
         // know pressing it dismisses the keyboard.
         attr: { inputmode: "search", enterkeyhint: "search", autocomplete: "off" },
       });
-      const clearBtn = searchWrap.createEl("button", { cls: "csv-search-clear", text: "×", title: "Clear and close" });
-      clearBtn.style.display = this.searchQuery ? "block" : "none";
+      const clearBtn = inputWrap.createEl("button", { cls: "csv-search-clear", text: "×", title: "Clear search" });
+      clearBtn.toggleClass("is-hidden", !this.searchQuery);
       // Mobile-only "Done" button — dismisses the keyboard so the WebView
       // returns to full height and the user can see the filtered view.
       // The keyboard otherwise can't be dismissed once focus is locked.
@@ -613,7 +623,7 @@ export class CardView extends FileView {
       let searchDebounce: number | null = null;
       searchInput.addEventListener("input", (e) => {
         this.searchQuery = (e.target as HTMLInputElement).value;
-        clearBtn.style.display = this.searchQuery ? "block" : "none";
+        clearBtn.toggleClass("is-hidden", !this.searchQuery);
         searchToggle.toggleClass("has-query", !!this.searchQuery);
         if (searchDebounce !== null) window.clearTimeout(searchDebounce);
         searchDebounce = window.setTimeout(() => {
@@ -629,13 +639,15 @@ export class CardView extends FileView {
           searchInput.blur();
         }
       });
-      // Clear AND collapse — the × is the primary dismiss control on mobile.
+      // × clears the query but keeps the search bar open so the user can
+      // type something new without re-opening it. Done (mobile) collapses
+      // the whole bar when input is already empty.
       clearBtn.addEventListener("click", () => {
         this.searchQuery = "";
         searchInput.value = "";
-        clearBtn.style.display = "none";
+        clearBtn.addClass("is-hidden");
         searchToggle.removeClass("has-query");
-        bar.removeClass("csv-toolbar--search-expanded");
+        searchInput.focus({ preventScroll: true });
         this.renderView(true);
       });
       // Active-filter indicator on the toggle (mobile only).
@@ -662,7 +674,10 @@ export class CardView extends FileView {
         const cfg = this.fileCfg;
         cfg.sortNewestFirst = !(cfg.sortNewestFirst ?? true);
         this.saveFileCfg(cfg);
-        this.renderView();
+        // Sort flips the row order but the user is still in roughly the
+        // same area — preserving scroll is less disorienting than yanking
+        // them back to the very newest / oldest entry.
+        this.renderViewPreservingScroll();
       });
     }
 
@@ -957,7 +972,10 @@ export class CardView extends FileView {
         checkbox.addEventListener("click", () => {
           currentRow![h] = isChecked ? "0" : "1";
           this.scheduleSave();
-          this.renderView();
+          // Toggling a habit on the current day shouldn't reset dashboard
+          // scroll — the user may have been looking at habit stats below
+          // the fold.
+          this.renderViewPreservingScroll();
         });
       });
 
