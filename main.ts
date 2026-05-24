@@ -391,6 +391,7 @@ export class CardView extends FileView {
       this.renderComponent = new Component(); this.renderComponent.load();
       this.renderToolbar(root);
       this.contentArea = root.createDiv({ cls: "csv-content-area" });
+      this.installTouchScrollGuard(this.contentArea);
     } else if (this.contentArea) {
       this.contentArea.empty();
     }
@@ -429,6 +430,46 @@ export class CardView extends FileView {
     else if (this.mode === "library") this.renderLibrary(content);
     else if (this.mode === "kanban-genre") this.renderKanbanGenre(content);
     else this.renderTable(content);
+  }
+
+  /**
+   * Stop a swipe from being read as a tap on touch devices.
+   *
+   * iOS Safari is mostly good at distinguishing the two natively, but with
+   * CSS scroll-snap between kanban columns + momentum scrolling inside a
+   * column, a touch that lands briefly on a card mid-scroll can still fire
+   * `click` (which opens the inline note editor / the expander modal /
+   * etc., and the user thinks "why did I just select that?").
+   *
+   * Strategy: track touchstart→touchmove distance. If the finger moved
+   * more than 10 px (iOS's own tap threshold) before touchend, swallow
+   * the subsequent click in capture phase before any descendant handler
+   * sees it. Programmatic scrolls (the scroll-restore after closeInlineEditor)
+   * don't fire touchmove, so they can't create false lockouts.
+   *
+   * Installed once per content-area creation; persists across mode changes
+   * (renderView only recreates the content area when `contentOnly=false`).
+   */
+  private installTouchScrollGuard(el: HTMLElement): void {
+    if (!matchMedia("(pointer: coarse)").matches) return;
+    let startX = 0, startY = 0, moved = false;
+    el.addEventListener("touchstart", (e) => {
+      if (e.touches.length !== 1) return;
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      moved = false;
+    }, { capture: true, passive: true });
+    el.addEventListener("touchmove", (e) => {
+      if (e.touches.length !== 1 || moved) return;
+      const dx = Math.abs(e.touches[0].clientX - startX);
+      const dy = Math.abs(e.touches[0].clientY - startY);
+      if (dx > 10 || dy > 10) moved = true;
+    }, { capture: true, passive: true });
+    el.addEventListener("click", (e) => {
+      if (!moved) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }, true);
   }
 
   private renderToolbar(root: HTMLElement): void {
@@ -1592,7 +1633,6 @@ export class CardView extends FileView {
       notesEditorEl.empty();
       const ta = notesEditorEl.createEl("textarea", {cls:"csv-notes-textarea"});
       ta.value = (notesCol ? row[notesCol] : "") ?? "";
-      ta.style.height = Math.max(120, ta.scrollHeight) + "px";
       ta.addEventListener("click", e => e.stopPropagation());
       ta.addEventListener("mousedown", e => e.stopPropagation());
       ta.addEventListener("input", () => { ta.style.height="auto"; ta.style.height=ta.scrollHeight+"px"; });
@@ -1600,6 +1640,20 @@ export class CardView extends FileView {
       ta.addEventListener("blur", () => closeInlineEditor(ta.value, contentArea, scrollLeft, scrollTop));
       // Use preventScroll to avoid browser auto-scrolling the content area
       ta.focus({ preventScroll: true });
+      // Cursor at the start of the text, not the end. Setting .value on a
+      // textarea then calling .focus() defaults to placing the caret at the
+      // end — on long notes that scrolls the textarea's internal viewport
+      // past all the content, so the user opens the editor and sees an
+      // empty area "much down" with no text visible.
+      ta.setSelectionRange(0, 0);
+      ta.scrollTop = 0;
+      // Size to content after a frame. Reading scrollHeight inline (before
+      // layout) returns ~0, which made the height clamp to the 120 px floor
+      // regardless of how long the note actually is.
+      requestAnimationFrame(() => {
+        ta.style.height = "auto";
+        ta.style.height = Math.max(120, ta.scrollHeight) + "px";
+      });
     };
 
     const closeInlineEditor = (newVal: string, contentArea: HTMLElement | null, scrollLeft: number, scrollTop: number) => {
