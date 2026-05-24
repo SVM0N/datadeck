@@ -1,0 +1,2736 @@
+/* ─── Root & Theme Variables ──────────────────────────────────────────────── */
+
+/* Apple-muted status palette: dialled-darker iOS systemGreen / systemBlue /
+   systemRed / systemOrange so they read as confident-but-quiet on both
+   light and dark themes, instead of the punchy Google Material set. The
+   *-bg companions are the same hue at low opacity for fills. */
+:root {
+  --csv-green:    #30A14E;
+  --csv-green-bg: rgba(52, 199, 89, 0.13);
+  --csv-blue:     #2E7CE6;
+  --csv-blue-bg:  rgba(0, 122, 255, 0.13);
+  --csv-red:      #D5443B;
+  --csv-red-bg:   rgba(255, 59, 48, 0.12);
+  --csv-amber:    #C18000;
+  --csv-amber-bg: rgba(255, 149, 0, 0.13);
+}
+
+.csv-card-view-root {
+  --csv-bg: var(--background-primary);
+  --csv-surface: var(--background-secondary);
+  --csv-surface-2: var(--background-modifier-border);
+  --csv-border: var(--background-modifier-border);
+  --csv-text: var(--text-normal);
+  --csv-text-muted: var(--text-muted);
+  --csv-text-faint: var(--text-faint);
+  --csv-accent: var(--interactive-accent);
+  --csv-accent-hover: var(--interactive-accent-hover);
+  --csv-radius: 8px;
+  --csv-radius-sm: 5px;
+  --csv-shadow: 0 1px 4px rgba(0,0,0,0.08), 0 0 0 1px var(--csv-border);
+  --csv-shadow-hover: 0 4px 16px rgba(0,0,0,0.12), 0 0 0 1px var(--csv-accent);
+  --csv-font-mono: var(--font-monospace);
+
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--csv-bg);
+}
+
+/* ─── Toolbar ─────────────────────────────────────────────────────────────── */
+
+.csv-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--csv-border);
+  background: var(--csv-surface);
+  flex-shrink: 0;
+  gap: 12px;
+  flex-wrap: wrap; /* Lets controls drop to a second row on narrow viewports instead of getting clipped off the right edge. */
+  row-gap: 8px;
+}
+
+.csv-toolbar-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--csv-text);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.csv-toolbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap; /* allow controls to wrap onto a second line on narrow viewports */
+  row-gap: 8px;
+}
+
+/* Overflow ⋯ button is mobile-only — hidden by default, shown via the
+   mobile media query below. Secondary buttons (⚙ / 📱 / 💾) flip the
+   other direction. Both buttons exist in the DOM at all times so the
+   layout responds to window resize / orientation flips without re-render. */
+.csv-cfg-btn-overflow { display: none; }
+
+/* Mobile: hide the filename title (already in the tab) and let the search
+   bar shrink so the action buttons don't get pushed off-screen. */
+@media (max-width: 600px) {
+  .csv-toolbar-title { display: none; }
+  .csv-toolbar { padding: 8px 12px; gap: 8px; }
+  .csv-toolbar-controls { gap: 6px; }
+  /* `!important` here defeats the desktop `.csv-search-input:focus { width:220px }`
+     rule which otherwise wins on specificity and forces the input wider than
+     its mobile wrap (overflowing the toolbar). On phones we want the input
+     to always fill the wrap, focused or not. */
+  .csv-search-input { width: 100% !important; min-width: 0; max-width: 100%; }
+  .csv-search-wrap { flex: 1 1 140px; min-width: 0; max-width: 100%; }
+  /* Toolbar buttons go icon-tight on mobile */
+  .csv-cfg-btn, .csv-add-btn { padding: 6px 10px; font-size: 12px; }
+  .csv-row-count { display: none; }
+  /* Collapse the three secondary actions into the ⋯ overflow menu. */
+  .csv-cfg-btn-secondary { display: none; }
+  .csv-cfg-btn-overflow {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    padding: 6px 10px;
+    font-size: 16px;
+    line-height: 1;
+    letter-spacing: 0;
+  }
+  /* Mode group: slightly tighter so all three modes fit comfortably on
+     iPhone widths without wrapping mid-row. */
+  .csv-mode-btn { padding: 4px 8px; font-size: 11px; }
+}
+
+.csv-row-count {
+  font-size: 11px;
+  color: var(--csv-text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.csv-mode-group {
+  display: flex;
+  gap: 2px;
+  background: var(--csv-surface-2);
+  padding: 2px;
+  border-radius: var(--csv-radius-sm);
+}
+
+.csv-mode-btn {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  border: none;
+  background: transparent;
+  color: var(--csv-text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-weight: 500;
+}
+
+.csv-mode-btn:hover {
+  color: var(--csv-text);
+  background: var(--csv-surface);
+}
+
+.csv-mode-btn.active {
+  background: var(--csv-bg);
+  color: var(--csv-text);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+/* ─── Search bar ──────────────────────────────────────────────────────────── */
+
+.csv-search-wrap {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.csv-search-input {
+  padding: 5px 10px;
+  border-radius: var(--csv-radius-sm);
+  font-size: 13px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--csv-text);
+  width: 180px;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s, width 0.2s;
+}
+
+.csv-search-input:focus {
+  border-color: var(--csv-accent);
+  width: 220px;
+}
+
+.csv-search-input::placeholder {
+  color: var(--csv-text-muted);
+}
+
+.csv-search-clear {
+  position: absolute;
+  right: 4px;
+  padding: 2px 6px;
+  border: none;
+  background: transparent;
+  color: var(--csv-text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.csv-search-clear:hover {
+  color: var(--csv-text);
+}
+
+.csv-search-results {
+  padding: 8px 0;
+  font-size: 13px;
+  color: var(--csv-text-muted);
+}
+
+.csv-add-btn {
+  padding: 5px 12px;
+  border-radius: var(--csv-radius-sm);
+  font-size: 12px;
+  border: none;
+  background: var(--csv-accent);
+  color: white;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.15s ease;
+  letter-spacing: 0.02em;
+}
+
+.csv-add-btn:hover {
+  background: var(--csv-accent-hover);
+}
+
+/* ─── Content area ────────────────────────────────────────────────────────── */
+
+.csv-content-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  min-height: 0; /* lets the flex child shrink so internal scroll works */
+}
+
+/* In kanban mode the columns scroll internally — outer y-scroll would
+   stack two scrollbars on the same content. */
+.csv-content-area--no-yscroll {
+  overflow-y: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.csv-empty-state {
+  color: var(--csv-text-muted);
+  font-size: 14px;
+  text-align: center;
+  padding: 40px 20px;
+}
+
+/* Bigger empty state for full-page conditions (no headers / no rows) —
+   centered, with a heading + optional CTA button. Quiet by default, so
+   the page reads as "nothing here yet" rather than "broken". */
+.csv-empty-state--big {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 80px 24px;
+  max-width: 460px;
+  margin: 0 auto;
+}
+.csv-empty-state--big h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--csv-text);
+  margin: 0;
+}
+.csv-empty-state--big p {
+  margin: 0;
+  color: var(--csv-text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.csv-empty-state-action {
+  margin-top: 6px;
+  padding: 8px 16px;
+  background: var(--csv-accent);
+  color: white;
+  border: none;
+  border-radius: var(--csv-radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.csv-empty-state-action:hover { background: var(--csv-accent-hover); }
+.csv-empty-state-hint {
+  font-size: 11px !important;
+  color: var(--csv-text-faint) !important;
+  margin-top: 4px !important;
+}
+
+/* ─── Grid View ───────────────────────────────────────────────────────────── */
+
+.csv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.csv-card {
+  background: var(--csv-surface);
+  border-radius: var(--csv-radius);
+  box-shadow: var(--csv-shadow);
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+  overflow: hidden;
+}
+
+.csv-card:hover {
+  box-shadow: 0 3px 12px rgba(0,0,0,0.1), 0 0 0 1px var(--csv-border);
+}
+
+.csv-card.expanded {
+  box-shadow: var(--csv-shadow-hover);
+  grid-column: span 1;
+}
+
+/* Card header */
+.csv-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.csv-card-header:hover {
+  background: var(--background-modifier-hover);
+}
+
+.csv-card-title-block {
+  flex: 1;
+  min-width: 0;
+}
+
+.csv-card-title {
+  /* 13px to match .csv-kanban-card-title — same semantic across views. */
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--csv-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.csv-card-subtitle {
+  font-size: 12px;
+  color: var(--csv-text-muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.csv-expand-btn {
+  font-size: 10px;
+  color: var(--csv-text-faint);
+  cursor: pointer;
+  padding: 2px 4px;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+
+.csv-expand-btn:hover {
+  color: var(--csv-text-muted);
+}
+
+/* Status badge */
+.csv-status-badge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 20px;
+  flex-shrink: 0;
+  background: var(--csv-surface-2);
+  color: var(--csv-text-muted);
+}
+
+/* Status badge color variants — Apple-muted palette */
+.csv-status-badge.status-read,
+.csv-status-badge.status-done,
+.csv-status-badge.status-watched,
+.csv-status-badge.status-finished,
+.csv-status-badge.status-completed {
+  background: var(--csv-green-bg);
+  color: var(--csv-green);
+}
+
+.csv-status-badge.status-reading,
+.csv-status-badge.status-watching,
+.csv-status-badge.status-in-progress,
+.csv-status-badge.status-ongoing {
+  background: var(--csv-blue-bg);
+  color: var(--csv-blue);
+}
+
+.csv-status-badge.status-to-read,
+.csv-status-badge.status-to-watch,
+.csv-status-badge.status-want,
+.csv-status-badge.status-backlog,
+.csv-status-badge.status-queued {
+  background: var(--csv-amber-bg);
+  color: var(--csv-amber);
+}
+
+.csv-status-badge.status-dropped,
+.csv-status-badge.status-abandoned,
+.csv-status-badge.status-dnf {
+  background: var(--csv-red-bg);
+  color: var(--csv-red);
+}
+
+/* Card body */
+.csv-card-body {
+  border-top: 1px solid var(--csv-border);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.csv-card-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.csv-field-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.csv-field-label {
+  /* Apple convention: row labels (vs section headers) are title case, not
+     uppercase. We just title-case at the JS layer (titleCase()) and let the
+     value sit in the column with its column heading already conveying scope. */
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--csv-text-muted);
+  min-width: 80px;
+  flex-shrink: 0;
+}
+
+.csv-field-value {
+  font-size: 13px;
+  color: var(--csv-text);
+  flex: 1;
+  cursor: text;
+  border-radius: 3px;
+  padding: 1px 4px;
+  margin: -1px -4px;
+  transition: background 0.15s;
+  word-break: break-word;
+}
+
+.csv-field-value:hover {
+  background: var(--background-modifier-hover);
+}
+
+.csv-inline-input {
+  width: 100%;
+  font-size: 13px;
+  background: var(--background-modifier-form-field);
+  border: 1px solid var(--csv-accent);
+  border-radius: 3px;
+  padding: 2px 6px;
+  color: var(--csv-text);
+  outline: none;
+}
+
+/* Notes section */
+.csv-notes-section {
+  border-top: 1px solid var(--csv-border);
+  padding-top: 12px;
+}
+
+.csv-notes-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--csv-text-faint);
+  margin-bottom: 8px;
+}
+
+.csv-notes-content {
+  font-size: 13px;
+  color: var(--csv-text);
+  cursor: text;
+  border-radius: var(--csv-radius-sm);
+  padding: 8px;
+  background: var(--background-primary);
+  border: 1px solid transparent;
+  transition: border-color 0.15s;
+  min-height: 40px;
+  line-height: 1.6;
+}
+
+.csv-notes-content:hover {
+  border-color: var(--csv-border);
+}
+
+/* Pass markdown rendered styles through */
+.csv-notes-content p { margin: 0 0 8px; }
+.csv-notes-content p:last-child { margin-bottom: 0; }
+.csv-notes-content ul, .csv-notes-content ol { margin: 4px 0 8px 18px; }
+.csv-notes-content li { margin: 2px 0; }
+.csv-notes-content h1,.csv-notes-content h2,.csv-notes-content h3 { margin: 10px 0 4px; }
+.csv-notes-content code { font-size: 12px; }
+.csv-notes-content blockquote { border-left: 3px solid var(--csv-accent); padding-left: 10px; margin: 6px 0; color: var(--csv-text-muted); }
+
+.csv-notes-empty {
+  color: var(--csv-text-faint);
+  font-size: 13px;
+}
+
+.csv-notes-textarea {
+  width: 100%;
+  min-height: 120px;
+  font-size: 13px;
+  font-family: var(--csv-font-mono);
+  background: var(--background-modifier-form-field);
+  border: 1px solid var(--csv-accent);
+  border-radius: var(--csv-radius-sm);
+  padding: 8px;
+  color: var(--csv-text);
+  outline: none;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+/* ─── Kanban View ─────────────────────────────────────────────────────────── */
+
+.csv-kanban-board {
+  display: flex;
+  gap: 16px;
+  align-items: stretch; /* columns share the board height instead of sizing to content */
+  flex: 1;
+  min-height: 0;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  /* Snap each column to viewport on touch — stops the awkward "1.5 columns
+     half-visible" state on phones. Desktop ignores when there's no horizontal
+     overflow. */
+  scroll-snap-type: x mandatory;
+  scroll-padding-left: 16px;
+}
+.csv-kanban-col {
+  scroll-snap-align: start;
+}
+
+/* Mobile: one column at a time, snap-scroll between them.
+   The desktop 260-300px range looks cramped on a 390px phone — a near-full
+   width column reads cleanly, swipe to the next. */
+@media (max-width: 600px) {
+  .csv-kanban-board { gap: 12px; }
+  .csv-kanban-col {
+    min-width: calc(100vw - 60px);
+    max-width: calc(100vw - 60px);
+  }
+}
+
+.csv-kanban-col {
+  background: var(--csv-surface);
+  border-radius: var(--csv-radius);
+  min-width: 260px;
+  max-width: 300px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--csv-shadow);
+  min-height: 0;        /* allows .csv-kanban-col-body to actually constrain */
+  max-height: 100%;
+}
+
+.csv-kanban-col-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--csv-border);
+}
+
+.csv-kanban-col-title {
+  /* Section header convention: uppercase + tracked, but muted (not accent) —
+     accent-colored headers shout. Muted lets card content do the talking. */
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--csv-text-muted);
+}
+
+.csv-kanban-col-count {
+  font-size: 11px;
+  color: var(--csv-text-faint);
+  background: var(--csv-surface-2);
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.csv-kanban-col-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto; /* internal scroll only — content area no longer y-scrolls in kanban */
+}
+
+.csv-kanban-card {
+  background: var(--csv-bg);
+  border-radius: var(--csv-radius-sm);
+  padding: 10px 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.07), 0 0 0 1px var(--csv-border);
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+.csv-kanban-card:hover {
+  box-shadow: 0 3px 10px rgba(0,0,0,0.12), 0 0 0 1px var(--csv-accent);
+  transform: translateY(-1px);
+}
+
+.csv-kanban-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--csv-text);
+  line-height: 1.3;
+  margin-bottom: 3px;
+}
+
+.csv-kanban-card-sub {
+  font-size: 11px;
+  color: var(--csv-text-muted);
+  margin-bottom: 8px;
+}
+
+.csv-kanban-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.csv-kanban-chip {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: var(--csv-surface);
+  border: 1px solid var(--csv-border);
+  white-space: nowrap;
+}
+
+.csv-chip-label {
+  color: var(--csv-text-faint);
+}
+
+.csv-chip-value {
+  color: var(--csv-text-muted);
+  font-weight: 500;
+}
+
+.csv-kanban-notes-indicator {
+  font-size: 10px;
+  color: var(--csv-text-faint);
+  margin-top: 8px;
+  letter-spacing: 0.02em;
+}
+
+.csv-kanban-add-card {
+  margin: 0 12px 12px;
+  padding: 7px;
+  border: 1px dashed var(--csv-border);
+  border-radius: var(--csv-radius-sm);
+  background: transparent;
+  color: var(--csv-text-faint);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  width: calc(100% - 24px);
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.csv-kanban-add-card:hover {
+  border-color: var(--csv-accent);
+  color: var(--csv-accent);
+  background: var(--background-modifier-hover);
+}
+
+/* ─── Table View ──────────────────────────────────────────────────────────── */
+
+.csv-table-wrapper {
+  overflow-x: auto;
+  border-radius: var(--csv-radius);
+  box-shadow: var(--csv-shadow);
+}
+
+.csv-table {
+  border-collapse: collapse;
+  width: 100%;
+  background: var(--csv-surface);
+  font-size: 13px;
+}
+
+.csv-table th {
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--csv-text-faint);
+  background: var(--csv-surface);
+  border-bottom: 1px solid var(--csv-border);
+  white-space: nowrap;
+}
+
+.csv-table td {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--csv-border);
+  color: var(--csv-text);
+  vertical-align: top;
+  cursor: text;
+  /* Reasonable readable column width; the wrapper x-scrolls if the table
+     can't fit. This stops the browser from squeezing every column to ~50px
+     when there are many headers. */
+  min-width: 160px;
+  max-width: 320px;
+  /* overflow-wrap (not word-break) keeps words intact and only breaks
+     unbreakable strings like URLs. `word-break: break-word` was causing
+     long titles to split character-by-character into vertical strips. */
+  overflow-wrap: break-word;
+  word-break: normal;
+  /* Clamp very long content to a few lines — full text is one click away
+     via the expander. Without this a single 200-char title makes the row
+     30 lines tall and pushes every other row off-screen. */
+  max-height: 7.5em;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Long-content fade-out hint: a soft gradient on the bottom of clamped
+   cells so the user sees there's more. Click opens the expander
+   (every row supports right-click → Open entry). */
+.csv-table td::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 14px;
+  background: linear-gradient(to bottom, transparent, var(--csv-surface));
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.csv-table tr:hover td { background: var(--background-modifier-hover); }
+.csv-table tr:hover td::after { background: linear-gradient(to bottom, transparent, var(--background-modifier-hover)); }
+/* Show the fade only when the content actually overflows. CSS alone can't
+   conditionally apply, so we leave the gradient transparent by default and
+   reveal it via a `.csv-cell--clipped` class added from JS when measured
+   scrollHeight > clientHeight. */
+.csv-table td.csv-cell--clipped::after { opacity: 1; }
+
+.csv-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* Higher specificity than `.csv-table td` so we can drop the !important
+   that the original rule used to win the cascade. */
+.csv-table td.csv-table-notes-cell {
+  color: var(--csv-text-muted);
+  font-style: italic;
+  font-size: 12px;
+  min-width: 200px;
+  max-width: 320px;
+  /* Notes preview is intentionally single-line — full text is in the
+     expander. The cell's own max-height inherits from .csv-table td. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-height: 2.4em; /* tighter than the default td clamp — notes never need wrapping */
+}
+.csv-table td.csv-table-notes-cell::after { display: none; } /* no fade — single line already ellipsises */
+
+.csv-table-action {
+  width: 40px;
+  text-align: center;
+}
+
+.csv-table-del-btn {
+  border: none;
+  background: transparent;
+  color: var(--csv-text-faint);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.csv-table tr:hover .csv-table-del-btn {
+  opacity: 1;
+}
+
+.csv-table-del-btn:hover {
+  color: var(--csv-red);
+  background: var(--csv-red-bg);
+}
+
+/* ─── Notes File Button ───────────────────────────────────────────────────── */
+
+.csv-notes-file-bar {
+  padding: 10px 0 0;
+}
+
+.csv-notes-file-btn {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: var(--csv-radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+.csv-notes-file-btn.new {
+  border: 1px dashed var(--csv-border);
+  background: transparent;
+  color: var(--csv-text-muted);
+}
+
+.csv-notes-file-btn.new:hover {
+  border-color: var(--csv-accent);
+  color: var(--csv-accent);
+  background: var(--background-modifier-hover);
+}
+
+.csv-notes-file-btn.exists {
+  border: 1px solid var(--csv-border);
+  background: var(--background-modifier-hover);
+  color: var(--csv-text);
+}
+
+.csv-notes-file-btn.exists:hover {
+  border-color: var(--csv-accent);
+  background: rgba(var(--interactive-accent-rgb), 0.08);
+}
+
+/* Kanban notes button (shows on hover) */
+.csv-kanban-notes-btn {
+  display: none;
+  margin-top: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border-radius: var(--csv-radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px dashed var(--csv-border);
+  background: transparent;
+  color: var(--csv-text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.csv-kanban-card:hover .csv-kanban-notes-btn {
+  display: block;
+}
+
+.csv-kanban-notes-btn:hover {
+  border-color: var(--csv-accent);
+  color: var(--csv-accent);
+}
+
+/* Table notes button */
+.csv-table-notes-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 5px;
+  border-radius: 3px;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+  margin-right: 4px;
+}
+
+.csv-table tr:hover .csv-table-notes-btn {
+  opacity: 1;
+}
+
+.csv-table-notes-btn.exists {
+  opacity: 0.8;
+}
+
+/* ─── Genre Kanban ────────────────────────────────────────────────────────── */
+
+.csv-kanban-genre-board {
+  align-items: flex-start;
+}
+
+.csv-kanban-status-group {
+  margin-bottom: 10px;
+}
+
+.csv-kanban-status-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 10px;
+  margin-bottom: 6px;
+  display: inline-block;
+  background: var(--csv-surface-2);
+  color: var(--csv-text-muted);
+}
+
+.csv-kanban-status-label.status-finished,
+.csv-kanban-status-label.status-read,
+.csv-kanban-status-label.status-watched,
+.csv-kanban-status-label.status-seen,
+.csv-kanban-status-label.status-done {
+  background: var(--csv-green-bg);
+  color: var(--csv-green);
+}
+
+.csv-kanban-status-label.status-in-progress,
+.csv-kanban-status-label.status-reading,
+.csv-kanban-status-label.status-watching {
+  background: var(--csv-blue-bg);
+  color: var(--csv-blue);
+}
+
+.csv-kanban-status-label.status-not-started,
+.csv-kanban-status-label.status-to-read,
+.csv-kanban-status-label.status-unwatched,
+.csv-kanban-status-label.status-unread,
+.csv-kanban-status-label.status-no,
+.csv-kanban-status-label.status-todo {
+  background: rgba(180,180,180,0.12);
+  color: var(--csv-text-faint);
+}
+
+/* ─── Resizable columns ───────────────────────────────────────────────────── */
+
+.csv-table th {
+  position: relative;
+  user-select: none;
+}
+
+.csv-col-resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.15s;
+  z-index: 1;
+}
+
+.csv-col-resize-handle:hover,
+.csv-col-resize-handle:active {
+  background: var(--csv-accent);
+  opacity: 0.5;
+}
+
+/* ─── Notes multiline fix ─────────────────────────────────────────────────── */
+
+.csv-notes-content {
+  /* ensure rendered markdown paragraphs show correctly */
+  white-space: normal;
+}
+
+.csv-notes-content p {
+  margin: 0 0 0.5em;
+}
+
+.csv-notes-content p:last-child {
+  margin-bottom: 0;
+}
+
+.csv-notes-content blockquote {
+  margin: 0.4em 0;
+  padding: 4px 10px;
+  border-left: 3px solid var(--csv-accent);
+  color: var(--csv-text-muted);
+  font-style: italic;
+}
+
+.csv-notes-content blockquote p {
+  margin: 0;
+}
+
+.csv-notes-textarea {
+  min-height: 160px;
+}
+
+/* ─── Select Picker ───────────────────────────────────────────────────────── */
+
+.csv-select-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--background-modifier-hover);
+  border: 1px solid var(--csv-border);
+  color: var(--csv-text);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.csv-select-chip:hover {
+  border-color: var(--csv-accent);
+  background: rgba(var(--interactive-accent-rgb, 99,102,241), 0.08);
+}
+
+.csv-select-chip.empty {
+  color: var(--csv-text-faint);
+  background: transparent;
+  border-style: dashed;
+}
+
+/* Status color tinting for status chips — Apple-muted palette */
+.csv-select-chip.status-chip-finished,
+.csv-select-chip.status-chip-read {
+  background: var(--csv-green-bg);
+  border-color: rgba(52, 199, 89, 0.3);
+  color: var(--csv-green);
+}
+.csv-select-chip.status-chip-in-progress,
+.csv-select-chip.status-chip-reading {
+  background: var(--csv-blue-bg);
+  border-color: rgba(0, 122, 255, 0.3);
+  color: var(--csv-blue);
+}
+.csv-select-chip.status-chip-not-started,
+.csv-select-chip.status-chip-to-read {
+  background: rgba(180,180,180,0.1);
+  border-color: rgba(180,180,180,0.2);
+  color: var(--csv-text-faint);
+}
+
+/* In table cells */
+td .csv-select-chip {
+  margin: 1px 0;
+}
+
+/* Inline select in kanban chips */
+.csv-chip-select {
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
+/* ─── Picker dropdown ─────────────────────────────────────────────────────── */
+
+.csv-select-picker {
+  background: var(--background-primary);
+  border: 1px solid var(--csv-border);
+  border-radius: var(--csv-radius);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.2), 0 2px 8px rgba(0,0,0,0.12);
+  min-width: 180px;
+  max-width: 280px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.csv-picker-search {
+  padding: 8px 12px;
+  border: none;
+  border-bottom: 1px solid var(--csv-border);
+  background: var(--background-modifier-form-field);
+  color: var(--csv-text);
+  font-size: 12px;
+  outline: none;
+  width: 100%;
+}
+
+.csv-picker-list {
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.csv-picker-item {
+  padding: 6px 10px;
+  border-radius: var(--csv-radius-sm);
+  font-size: 12px;
+  color: var(--csv-text);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.csv-picker-item:hover,
+.csv-picker-item--hover {
+  background: var(--background-modifier-hover);
+}
+
+.csv-picker-item.active {
+  background: rgba(var(--interactive-accent-rgb, 99,102,241), 0.12);
+  color: var(--interactive-accent);
+  font-weight: 600;
+}
+
+.csv-picker-item.csv-picker-add {
+  color: var(--csv-accent);
+  font-style: italic;
+}
+
+.csv-picker-item.csv-picker-clear {
+  color: var(--csv-text-faint);
+  font-size: 11px;
+}
+
+.csv-picker-empty {
+  padding: 8px 10px;
+  font-size: 11px;
+  color: var(--csv-text-faint);
+  font-style: italic;
+}
+
+/* field-row alignment for chips */
+.csv-field-row .csv-select-chip {
+  margin-top: 1px;
+}
+
+/* ─── Notes editing state ─────────────────────────────────────────────────── */
+.csv-notes-content.csv-notes-editing {
+  padding: 0;
+  border-color: var(--csv-accent);
+  background: var(--background-modifier-form-field);
+}
+
+/* ─── Kanban inline notes preview ────────────────────────────────────────── */
+
+.csv-kanban-notes-preview {
+  font-size: 11px;
+  color: var(--csv-text-muted);
+  font-style: italic;
+  margin-top: 6px;
+  line-height: 1.4;
+  border-left: 2px solid var(--csv-border);
+  padding-left: 7px;
+  cursor: text; /* hints "click to edit"; matches the textarea that opens */
+  border-radius: 2px;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.csv-kanban-notes-preview:hover {
+  background: var(--csv-surface-2);
+  border-left-color: var(--csv-accent);
+}
+
+/* Empty state doubles as the "+ Add note" affordance — quiet, only visible
+   on card hover so it doesn't compete with the title when nothing's there. */
+.csv-kanban-notes-preview--empty {
+  font-style: normal;
+  color: var(--csv-text-faint);
+  border-left-color: transparent;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.csv-kanban-card:hover .csv-kanban-notes-preview--empty {
+  opacity: 1;
+}
+
+/* Title is now the clickable nav element */
+.csv-kanban-card-title {
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
+.csv-kanban-card-title:hover {
+  color: var(--interactive-accent);
+  text-decoration: underline solid;
+}
+
+.csv-kanban-notes-editor {
+  margin-top: 8px;
+}
+
+.csv-kanban-notes-editor .csv-notes-textarea {
+  width: 100%;
+  min-height: 120px;
+  font-size: 12px;
+  font-family: var(--font-monospace);
+  background: var(--background-modifier-form-field);
+  border: 1px solid var(--csv-accent);
+  border-radius: var(--csv-radius-sm);
+  padding: 8px;
+  color: var(--csv-text);
+  outline: none;
+  resize: vertical;
+  line-height: 1.5;
+  box-sizing: border-box;
+}
+
+.csv-kanban-edit-btn {
+  margin-top: 4px;
+}
+
+.csv-kanban-card-title {
+  cursor: default;
+  text-decoration: none;
+}
+
+.csv-kanban-card-title:hover {
+  color: var(--csv-text);
+  text-decoration: none;
+}
+
+/* ─── Add Entry Modal ─────────────────────────────────────────────────────── */
+
+.csv-add-modal {
+  padding: 8px 4px;
+}
+
+.csv-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 20px;
+  color: var(--csv-text);
+}
+
+.csv-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 4px;
+  margin-bottom: 20px;
+}
+
+.csv-modal-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.csv-modal-label {
+  /* Apple convention: modal form row labels in title case. */
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--csv-text-muted);
+}
+
+.csv-modal-input {
+  padding: 7px 10px;
+  border-radius: var(--csv-radius-sm);
+  border: 1px solid var(--csv-border);
+  background: var(--background-modifier-form-field);
+  color: var(--csv-text);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.csv-modal-input:focus {
+  border-color: var(--csv-accent);
+}
+
+.csv-modal-textarea {
+  padding: 8px 10px;
+  border-radius: var(--csv-radius-sm);
+  border: 1px solid var(--csv-border);
+  background: var(--background-modifier-form-field);
+  color: var(--csv-text);
+  font-size: 13px;
+  font-family: var(--font-monospace);
+  outline: none;
+  resize: vertical;
+  min-height: 80px;
+  line-height: 1.5;
+  transition: border-color 0.15s;
+}
+
+.csv-modal-textarea:focus {
+  border-color: var(--csv-accent);
+}
+
+.csv-modal-select-wrap {
+  display: flex;
+}
+
+.csv-modal-select-wrap .csv-select-chip {
+  min-width: 140px;
+}
+
+.csv-modal-btns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--csv-border);
+}
+
+.csv-modal-cancel {
+  padding: 7px 16px;
+  border-radius: var(--csv-radius-sm);
+  border: 1px solid var(--csv-border);
+  background: transparent;
+  color: var(--csv-text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.csv-modal-cancel:hover {
+  background: var(--background-modifier-hover);
+  color: var(--csv-text);
+}
+
+.csv-modal-submit {
+  padding: 7px 20px;
+  border-radius: var(--csv-radius-sm);
+  border: none;
+  background: var(--csv-accent);
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.csv-modal-submit:hover {
+  background: var(--csv-accent-hover);
+}
+
+/* ─── Note Expander Modal ─────────────────────────────────────────────────── */
+
+.csv-note-expander-modal {
+  width: min(780px, 90vw) !important;
+  max-height: 85vh !important;
+}
+
+.csv-note-expander-modal .modal-content {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 85vh;
+}
+
+.csv-note-expander {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 400px;
+}
+
+.csv-expander-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 14px;
+  border-bottom: 1px solid var(--csv-border);
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.csv-expander-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--csv-text);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.csv-expander-header-btns {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.csv-expander-save-btn,
+.csv-expander-close-btn {
+  padding: 5px 12px;
+  border-radius: var(--csv-radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid var(--csv-border);
+}
+
+.csv-expander-save-btn {
+  background: var(--csv-accent);
+  color: white;
+  border-color: transparent;
+  font-weight: 600;
+}
+.csv-expander-save-btn:hover { background: var(--csv-accent-hover); }
+
+.csv-expander-close-btn {
+  background: transparent;
+  color: var(--csv-text-faint);
+}
+.csv-expander-close-btn:hover { color: var(--csv-text); background: var(--background-modifier-hover); }
+
+.csv-expander-rendered {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 28px;
+  font-size: 14px;
+  line-height: 1.7;
+  cursor: text; /* indicates click-to-edit; respects text-selection */
+  border-radius: 4px;
+  transition: background 0.12s ease;
+}
+
+.csv-expander-rendered:hover { background: var(--csv-surface-2); }
+/* Links/buttons inside the rendered note keep their own cursor and don't
+   pick up the hover-tint from the editable container. */
+.csv-expander-rendered a,
+.csv-expander-rendered button { cursor: pointer; }
+
+.csv-expander-rendered p { margin: 0 0 0.8em; }
+.csv-expander-rendered p:last-child { margin-bottom: 0; }
+.csv-expander-rendered blockquote {
+  border-left: 3px solid var(--csv-accent);
+  padding: 4px 12px;
+  margin: 8px 0;
+  color: var(--csv-text-muted);
+  font-style: italic;
+}
+.csv-expander-rendered h1,
+.csv-expander-rendered h2,
+.csv-expander-rendered h3 {
+  margin: 1em 0 0.4em;
+  font-weight: 700;
+}
+.csv-expander-rendered ul,
+.csv-expander-rendered ol { margin: 4px 0 10px 20px; }
+.csv-expander-rendered li { margin: 3px 0; }
+.csv-expander-rendered code {
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  background: var(--background-modifier-hover);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.csv-expander-rendered hr { border: none; border-top: 1px solid var(--csv-border); margin: 16px 0; }
+
+.csv-expander-editor {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 20px;
+}
+
+.csv-expander-textarea {
+  flex: 1;
+  width: 100%;
+  min-height: 320px;
+  font-family: var(--font-monospace);
+  font-size: 13px;
+  line-height: 1.6;
+  background: var(--background-modifier-form-field);
+  border: 1px solid var(--csv-border);
+  border-radius: var(--csv-radius-sm);
+  color: var(--csv-text);
+  padding: 12px;
+  outline: none;
+  resize: none;
+}
+
+.csv-expander-textarea:focus {
+  border-color: var(--csv-accent);
+}
+
+/* ─── Table notes cell — whole cell opens the expander ───────────────────── */
+
+.csv-table-notes-cell {
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.csv-table tr:hover .csv-table-notes-cell {
+  background: var(--csv-surface-2);
+}
+
+/* Empty-cell placeholder — only visible on row hover so unfilled notes
+   don't clutter the table at rest. */
+.csv-table-notes-empty {
+  color: var(--csv-text-faint);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.csv-table tr:hover .csv-table-notes-empty {
+  opacity: 1;
+}
+
+/* ─── Column config button & modal ────────────────────────────────────────── */
+
+.csv-cfg-btn {
+  padding: 5px 10px;
+  border-radius: var(--csv-radius-sm);
+  font-size: 12px;
+  border: 1px solid var(--csv-border);
+  background: transparent;
+  color: var(--csv-text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-weight: 500;
+}
+
+.csv-cfg-btn:hover {
+  color: var(--csv-text);
+  background: var(--background-modifier-hover);
+  border-color: var(--csv-accent);
+}
+
+.csv-modal-desc {
+  font-size: 12px;
+  color: var(--csv-text-muted);
+  margin: -12px 0 16px;
+  line-height: 1.5;
+}
+
+.csv-modal-select {
+  padding: 7px 10px;
+  border-radius: var(--csv-radius-sm);
+  border: 1px solid var(--csv-border);
+  background: var(--background-modifier-form-field);
+  color: var(--csv-text);
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  width: 100%;
+  transition: border-color 0.15s;
+}
+
+.csv-modal-select:focus {
+  border-color: var(--csv-accent);
+}
+
+/* Habit columns checkbox grid in config modal */
+.csv-modal-hint {
+  font-size: 11px;
+  color: var(--csv-text-faint);
+  margin: 0 0 8px;
+  line-height: 1.4;
+}
+
+.csv-modal-checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 6px;
+  padding: 8px;
+  background: var(--background-modifier-form-field);
+  border: 1px solid var(--csv-border);
+  border-radius: var(--csv-radius-sm);
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.csv-modal-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: var(--csv-radius-sm);
+  font-size: 12px;
+  color: var(--csv-text);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.csv-modal-checkbox-label:hover {
+  background: var(--background-modifier-hover);
+}
+
+.csv-modal-checkbox-label.auto-detected {
+  background: rgba(52, 168, 83, 0.08);
+  border: 1px solid rgba(52, 168, 83, 0.2);
+}
+
+.csv-modal-checkbox-label input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+/* ─── Expander fields & layout updates ───────────────────────────────────── */
+
+.csv-note-expander-modal .modal-content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.csv-note-expander {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100%;
+}
+
+.csv-expander-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--csv-border);
+  background: var(--csv-surface);
+}
+
+.csv-expander-field-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.csv-expander-field-label {
+  /* Apple convention: in-row labels in title case (titleCase() is applied
+     at the JS layer to the header name). Section headers stay uppercase
+     (see .csv-expander-notes-label, .csv-table th, .csv-kanban-col-title). */
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--csv-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.csv-expander-field-value {
+  font-size: 12px;
+  color: var(--csv-text);
+  cursor: text;
+  padding: 2px 5px;
+  border-radius: 3px;
+  border: 1px solid transparent;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.csv-expander-field-value:hover {
+  border-color: var(--csv-border);
+  background: var(--background-modifier-hover);
+}
+
+.csv-expander-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px 6px;
+  border-bottom: 1px solid var(--csv-border);
+  flex-shrink: 0;
+}
+
+.csv-expander-notes-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--csv-text-faint);
+  flex: 1;
+}
+
+.csv-expander-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--csv-border);
+  flex-shrink: 0;
+}
+
+.csv-expander-footer-right {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* Delete is destructive — muted red, ghost-style by default so it doesn't
+   compete with Save, then fills on hover so the user knows it'll fire. */
+.csv-expander-delete-btn {
+  padding: 8px 14px;
+  border: 1px solid rgba(213, 68, 59, 0.4);
+  background: transparent;
+  color: var(--csv-red);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.csv-expander-delete-btn:hover {
+  background: var(--csv-red);
+  border-color: var(--csv-red);
+  color: white;
+}
+
+/* Chip truncation in kanban */
+.csv-chip-value {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* ─── Dashboard View ───────────────────────────────────────────────────────── */
+
+.csv-dashboard {
+  padding: 16px 20px;
+}
+
+.csv-dash-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 32px;
+  padding: 0;
+  background: transparent;
+  flex-wrap: wrap;
+}
+
+.csv-dash-nav-btn {
+  padding: 8px 14px;
+  border: none;
+  background: transparent;
+  color: var(--csv-text-muted);
+  border-radius: var(--csv-radius-sm);
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.15s;
+}
+
+.csv-dash-nav-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--csv-text);
+}
+
+.csv-dash-date {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.csv-dash-today-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--csv-green);
+  flex-shrink: 0;
+}
+
+.csv-dash-date-select {
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+  color: var(--csv-text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  min-width: 100px;
+  text-align: center;
+}
+
+.csv-dash-today-btn {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: var(--csv-text-muted);
+  border-radius: var(--csv-radius-sm);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.csv-dash-today-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--csv-text);
+}
+
+.csv-dash-section-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--csv-text);
+  margin: 0 0 16px;
+}
+
+/* Add section for missing dates */
+.csv-dash-add-section {
+  padding: 20px 0;
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.csv-dash-add-section p {
+  color: var(--csv-text-muted);
+  margin: 0 0 12px;
+}
+
+.csv-dash-add-btn {
+  padding: 8px 20px;
+  border: none;
+  background: var(--csv-accent);
+  color: white;
+  border-radius: var(--csv-radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+
+.csv-dash-add-btn:hover {
+  background: var(--csv-accent-hover);
+}
+
+/* Habits grid */
+.csv-dash-habits {
+  padding: 0;
+  margin-bottom: 32px;
+}
+
+.csv-dash-habits-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.csv-dash-habit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: transparent;
+  border-radius: var(--csv-radius-sm);
+  border: 1px solid var(--csv-border);
+  transition: all 0.15s;
+}
+
+.csv-dash-habit:hover {
+  border-color: var(--csv-text-muted);
+}
+
+.csv-dash-habit.checked {
+  background: transparent;
+  border-color: var(--csv-green);
+}
+
+.csv-dash-habit-check {
+  border: none;
+  background: transparent;
+  font-size: 18px;
+  cursor: pointer;
+  color: var(--csv-text-faint);
+  padding: 0;
+  line-height: 1;
+  transition: color 0.15s, transform 0.1s;
+}
+
+.csv-dash-habit.checked .csv-dash-habit-check {
+  color: var(--csv-green);
+}
+
+.csv-dash-habit-check:hover {
+  transform: scale(1.1);
+}
+
+.csv-dash-habit-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--csv-text);
+}
+
+.csv-dash-habits-count {
+  font-size: 13px;
+  color: var(--csv-text-muted);
+  text-align: left;
+  margin-top: 12px;
+}
+
+.csv-dash-notes-preview {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--csv-bg);
+  border-radius: var(--csv-radius-sm);
+  border-left: 3px solid var(--csv-accent);
+  font-size: 12px;
+  color: var(--csv-text-muted);
+  line-height: 1.5;
+}
+
+/* Chart section */
+.csv-dash-chart-section {
+  padding: 0;
+  margin-bottom: 32px;
+}
+
+.csv-dash-chart-wrap {
+  height: 300px;
+  position: relative;
+}
+
+.csv-dash-chart {
+  width: 100%;
+  height: 100%;
+}
+
+/* Stats section */
+.csv-dash-stats-section {
+  padding: 0;
+  margin-bottom: 32px;
+}
+
+.csv-dash-stats-bar {
+  font-size: 14px;
+  color: var(--csv-text-muted);
+  line-height: 1.6;
+}
+
+.csv-dash-stats-bar strong {
+  color: var(--csv-text);
+  font-weight: 700;
+}
+
+/* Habit cards */
+.csv-dash-cards-section {
+  margin-bottom: 24px;
+}
+
+.csv-dash-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.csv-dash-habit-card {
+  padding: 14px 16px;
+  background: transparent;
+  border: 1px solid var(--csv-border);
+  border-radius: var(--csv-radius);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.csv-dash-habit-card:hover {
+  border-color: var(--csv-accent);
+  background: var(--background-modifier-hover);
+}
+
+.csv-dash-habit-card.selected {
+  border: 2px solid var(--csv-accent);
+  background: rgba(55, 138, 221, 0.05);
+}
+
+.csv-dash-habit-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.csv-dash-habit-icon {
+  font-size: 14px;
+  color: var(--csv-text-faint);
+  width: 18px;
+  text-align: center;
+}
+
+.csv-dash-habit-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--csv-text);
+}
+
+.csv-dash-habit-years {
+  font-size: 11px;
+  color: var(--csv-text-faint);
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.csv-dash-habit-card-thisyear {
+  font-size: 12px;
+  color: var(--csv-text);
+  margin-bottom: 2px;
+}
+
+.csv-dash-habit-card-alltime {
+  font-size: 11px;
+  color: var(--csv-accent);
+  margin-bottom: 4px;
+}
+
+.csv-dash-habit-card-last {
+  font-size: 11px;
+  color: var(--csv-text-faint);
+}
+
+.csv-dash-habit-progress {
+  margin-top: 10px;
+  height: 4px;
+  background: var(--csv-surface-2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.csv-dash-habit-progress-bar {
+  height: 100%;
+  background: var(--csv-accent);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+/* Per-habit timeline section */
+.csv-dash-timeline-section {
+  padding: 20px 0;
+  margin-bottom: 32px;
+  border-top: 1px solid var(--csv-border);
+}
+
+.csv-dash-timeline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.csv-dash-timeline-header .csv-dash-section-title {
+  margin: 0;
+}
+
+.csv-dash-timeline-close {
+  border: none;
+  background: transparent;
+  color: var(--csv-text-faint);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--csv-radius-sm);
+  transition: all 0.15s;
+}
+
+.csv-dash-timeline-close:hover {
+  background: var(--background-modifier-hover);
+  color: var(--csv-text);
+}
+
+.csv-dash-timeline-grid-wrap {
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.csv-dash-timeline-months {
+  display: flex;
+  padding-left: 24px;
+  margin-bottom: 4px;
+}
+
+.csv-dash-timeline-month-label {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--csv-text-faint);
+  text-align: center;
+}
+
+.csv-dash-timeline-calendar {
+  display: flex;
+  gap: 2px;
+}
+
+.csv-dash-timeline-day-labels {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 20px;
+  flex-shrink: 0;
+}
+
+.csv-dash-timeline-day-label {
+  height: 10px;
+  font-size: 9px;
+  color: var(--csv-text-faint);
+  text-align: right;
+  padding-right: 4px;
+  line-height: 10px;
+}
+
+.csv-dash-timeline-month-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.csv-dash-timeline-cell {
+  height: 10px;
+  border-radius: 2px;
+  background: var(--csv-border);
+  transition: transform 0.1s;
+}
+
+.csv-dash-timeline-cell:hover:not(.empty):not(.future) {
+  transform: scale(1.5);
+  z-index: 1;
+}
+
+.csv-dash-timeline-cell.empty {
+  background: transparent;
+}
+
+.csv-dash-timeline-cell.future {
+  background: transparent;
+}
+
+.csv-dash-timeline-cell.done {
+  background: var(--csv-green);
+}
+
+.csv-dash-timeline-cell.missed {
+  background: var(--csv-red);
+}
+
+.csv-dash-timeline-cell.no-entry {
+  background: var(--csv-border);
+  opacity: 0.3;
+}
+
+.csv-dash-year-select {
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+  color: var(--csv-text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  margin-left: auto;
+  margin-right: 12px;
+}
+
+.csv-dash-timeline-stats {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--csv-border);
+  font-size: 13px;
+  color: var(--csv-text-muted);
+}
+
+.csv-dash-timeline-stats strong {
+  color: var(--csv-text);
+  font-weight: 700;
+}
+
+/* Kanban button row */
+.csv-kanban-card-btns {
+  display: none;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.csv-kanban-card:hover .csv-kanban-card-btns {
+  display: flex;
+}
+
+.csv-kanban-card-btns .csv-kanban-notes-btn {
+  display: inline-block;
+  margin-top: 0;
+  width: auto;
+  flex: 1;
+  min-width: 80px;
+}
+
+.csv-kanban-create-btn {
+  border-style: dashed;
+}
+
+/* ─── Mobile Scrollable Table ─────────────────────────────────────────────── */
+
+.csv-mobile-table {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -12px;
+  padding: 0 12px;
+}
+
+.csv-mobile-table table {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.csv-mobile-table th,
+.csv-mobile-table td {
+  padding: 4px 8px !important;
+  font-size: 12px;
+}
+
+.csv-mobile-table th {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+/* ─── Mobile Add Form (csv-add code block) ────────────────────────────────────
+   One unified "menu" instead of a stack of disjoint prompts. Default state
+   is a discreet pill; tapping it expands a single rounded grouped card
+   (iOS-Settings style) with hairline-separated rows and one Add button. */
+
+.csv-add-error {
+  color: var(--csv-red);
+  padding: 8px 12px;
+  background: var(--csv-red-bg);
+  border-radius: var(--csv-radius-sm);
+  font-size: 13px;
+}
+
+.csv-add-form {
+  padding: 0;
+  background: transparent;
+  border: none;
+  margin: 0 0 16px 0;
+  max-width: 520px;
+}
+
+/* Collapsed trigger pill */
+.csv-add-trigger {
+  padding: 8px 14px;
+  border: none;
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.05s;
+}
+
+.csv-add-trigger:hover { background: var(--background-modifier-hover); }
+.csv-add-trigger:active { transform: scale(0.98); }
+
+/* Expanded card */
+.csv-add-card {
+  background: var(--background-secondary);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px transparent;
+  transition: box-shadow 0.15s;
+}
+
+/* Update mode (date matches an existing row): subtle accent ring + tinted
+   title so the user sees they're editing rather than creating. */
+.csv-add-card.is-updating {
+  box-shadow: inset 0 0 0 1px var(--csv-blue, var(--text-accent));
+}
+
+.csv-add-card.is-updating .csv-add-card-title {
+  color: var(--csv-blue, var(--text-accent));
+}
+
+.csv-add-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px 8px 14px;
+  background: transparent;
+}
+
+.csv-add-card-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.03em;
+}
+
+.csv-add-card-close {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 50%;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.csv-add-card-close:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+/* Grouped row list with hairline separators */
+.csv-add-rows {
+  background: var(--background-primary);
+  margin: 0 12px;
+  border-radius: 10px;
+}
+
+.csv-add-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 12px;
+  min-height: 34px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.csv-add-row:last-child { border-bottom: none; }
+
+.csv-add-row-label {
+  flex: 0 0 auto;
+  font-size: 13px;
+  color: var(--text-normal);
+  min-width: 72px;
+}
+
+.csv-add-row-control {
+  flex: 1 1 auto;
+  border: none;
+  background: transparent;
+  color: var(--text-normal);
+  font-size: 13px;
+  text-align: right;
+  outline: none;
+  padding: 0;
+  font-family: inherit;
+}
+
+.csv-add-row-control::placeholder {
+  color: var(--text-faint);
+}
+
+/* Selects need a chevron and right-aligned text */
+select.csv-add-row-control {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='none' stroke='gray' stroke-width='1.5' d='M1 1l4 4 4-4'/></svg>")
+    no-repeat right center;
+  padding-right: 14px;
+  cursor: pointer;
+}
+
+/* Notes row stacks vertically (label above, textarea full width) */
+.csv-add-row-notes {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 10px 14px 12px;
+}
+
+.csv-add-row-notes .csv-add-row-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.csv-add-row-textarea {
+  width: 100%;
+  min-height: 56px;
+  border: none;
+  background: transparent;
+  color: var(--text-normal);
+  font-size: 14px;
+  resize: vertical;
+  outline: none;
+  font-family: inherit;
+  padding: 0;
+}
+
+.csv-add-row-textarea::placeholder { color: var(--text-faint); }
+
+/* iOS-style switch for binary toggle rows — sized for the 34px-min row */
+.csv-add-switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 22px;
+  flex: 0 0 auto;
+  margin-left: auto;
+  cursor: pointer;
+}
+
+.csv-add-switch-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.csv-add-switch-track {
+  position: absolute;
+  inset: 0;
+  background: var(--background-modifier-border);
+  border-radius: 999px;
+  transition: background 0.18s;
+}
+
+.csv-add-switch-track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background: var(--background-primary);
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: transform 0.18s;
+}
+
+.csv-add-switch-input:checked + .csv-add-switch-track {
+  background: var(--csv-green, var(--text-accent));
+}
+
+.csv-add-switch-input:checked + .csv-add-switch-track::after {
+  transform: translateX(14px);
+}
+
+/* Submit button — full width inside the card footer */
+.csv-add-submit {
+  display: block;
+  width: calc(100% - 24px);
+  margin: 10px 12px 12px;
+  padding: 9px 18px;
+  border: none;
+  background: var(--text-accent);
+  color: white;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.05s;
+}
+
+.csv-add-submit:hover { opacity: 0.92; }
+.csv-add-submit:active { transform: scale(0.99); }
+
+.csv-refresh-btn {
+  padding: 4px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--text-faint);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.csv-refresh-btn:hover {
+  background: var(--background-secondary);
+  color: var(--text-muted);
+}
+
+/* ─── Library View ───────────────────────────────────────────────────────────── */
+
+.csv-library-filters {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.csv-library-filter-select {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: 13px;
+  cursor: pointer;
+  min-width: 100px;
+}
+
+.csv-library-filter-select:focus {
+  outline: none;
+  border-color: var(--text-accent);
+}
+
+.csv-library-search {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: 13px;
+  min-width: 180px;
+}
+
+.csv-library-search:focus {
+  outline: none;
+  border-color: var(--text-accent);
+}
+
+.csv-library-result-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+.csv-library-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.csv-library-section {
+  margin: 0;
+}
+
+.csv-library-section-header {
+  /* Borderless section header: lighter visual rhythm than a chip-in-chip,
+     and lets the grid sit closer underneath. Bold text + quiet chevron. */
+  list-style: none;
+  cursor: pointer;
+  padding: 6px 4px;
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  user-select: none;
+  color: var(--csv-text);
+  transition: color 0.15s;
+}
+
+.csv-library-section-header:hover {
+  color: var(--text-accent);
+}
+
+.csv-library-section-header::-webkit-details-marker {
+  display: none;
+}
+
+.csv-library-arrow {
+  font-size: 11px;
+  color: var(--csv-text-faint);
+  transition: transform 0.2s;
+  display: inline-block;
+  line-height: 1;
+}
+
+.csv-library-section[open] .csv-library-arrow {
+  transform: rotate(90deg);
+}
+
+.csv-library-count {
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--csv-text-faint);
+  margin-left: auto;
+}
+
+.csv-library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+  padding: 10px 0 4px;
+}
+
+.csv-library-card {
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: transparent;
+  border: 1px solid var(--background-modifier-border);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.csv-library-card:hover {
+  background: var(--background-secondary);
+  border-color: var(--background-modifier-border-hover);
+}
+
+.csv-library-card-title {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 4px;
+  color: var(--text-normal);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.csv-library-done-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--csv-green);
+  flex-shrink: 0;
+}
+
+.csv-library-card-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.csv-library-card-rating {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.csv-library-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.csv-library-card-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  color: var(--text-muted);
+  background: transparent;
+}
+
+/* Undo button in delete Notice — small, inline, looks like a link. */
+.csv-notice-undo {
+  margin-left: 6px;
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid var(--background-modifier-border);
+  color: var(--text-normal);
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.csv-notice-undo:hover { background: var(--background-modifier-hover); }
+.csv-notice-undo[disabled] { opacity: 0.4; cursor: default; }
+
+/* ─── Mobile compact density ──────────────────────────────────────────────────
+   On phone-width viewports the Library / Kanban / Table cards mirror the
+   mobile-md dashboard's compact card style: tighter padding, smaller type,
+   2-column Library grid. Pure CSS — no state to persist. If the user wants
+   a manual toggle later, layer a `.csv-density-compact` class on the root
+   and reuse these rules.
+   ────────────────────────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  /* Content area: tighter outer padding so cards have more room to breathe. */
+  .csv-content-area { padding: 12px; }
+
+  /* — Library: 2-col compact grid (matches mobile-md `compact` layout) — */
+  .csv-library-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 6px 0 2px;
+  }
+  .csv-library-card {
+    padding: 10px 12px;
+    border-radius: 10px;
+  }
+  .csv-library-card-title {
+    font-size: 13px;
+    line-height: 1.3;
+    margin-bottom: 3px;
+    /* Allow long titles to wrap cleanly inside the narrower card. */
+    word-break: break-word;
+  }
+  .csv-library-card-meta { font-size: 11px; margin-bottom: 4px; }
+  .csv-library-card-rating { font-size: 11px; margin-bottom: 4px; letter-spacing: 1px; }
+  .csv-library-card-tags { margin-top: 6px; gap: 3px; }
+  .csv-library-card-tag {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 999px;
+  }
+  .csv-library-filters { gap: 6px; flex-wrap: wrap; }
+  .csv-library-filter-select { flex: 1 1 110px; min-width: 0; font-size: 12px; }
+  .csv-library-search { flex: 1 1 100%; font-size: 12px; }
+  .csv-library-section-header { padding: 6px 4px; font-size: 12px; }
+
+  /* — Kanban: tighter cards inside each swipe-snap column — */
+  .csv-kanban-col-body { padding: 8px; gap: 6px; }
+  .csv-kanban-card { padding: 8px 10px; }
+  .csv-kanban-card-title { font-size: 13px; }
+  .csv-kanban-card-sub { font-size: 11px; margin-bottom: 6px; }
+  .csv-kanban-card-meta { gap: 4px; }
+  .csv-kanban-chip { font-size: 11px; padding: 1px 6px; }
+  /* Hide the per-card secondary buttons on touch — context menu (long-press
+     / right-click) already exposes Open notes / Expand. */
+  .csv-kanban-card-btns { display: none; }
+  /* Inline notes preview reads tighter inside the smaller card. */
+  .csv-kanban-notes-preview { font-size: 11px; -webkit-line-clamp: 2; }
+
+  /* — Table: comfortable on phone widths — */
+  .csv-table { font-size: 12px; }
+  .csv-table th {
+    padding: 6px 8px;
+    font-size: 10px;
+  }
+  .csv-table td {
+    padding: 6px 8px;
+    min-width: 110px;
+    max-width: 220px;
+  }
+  .csv-table td.csv-table-notes-cell {
+    min-width: 140px;
+    max-width: 220px;
+    font-size: 11px;
+  }
+}
