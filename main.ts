@@ -22,7 +22,7 @@ import type { Chart as ChartType } from "chart.js";
 // Import from src modules
 import { CSVRow, ViewMode, FileConfig, CardViewSettings, DEFAULT_SETTINGS, CARD_VIEW_TYPE } from "./src/types";
 import { sanitizeFilename, titleCase, formatRatingForDisplay, showSelectPicker, resolvePath, parseCSV, migrateFileConfigKey } from "./src/utils";
-import { AddEntryModal, NoteExpanderModal, FileConfigModal } from "./src/modals";
+import { AddEntryModal, NoteExpanderModal, FileConfigModal, SearchModal } from "./src/modals";
 import {
   generateHabitMobileDashboard as habitMobileTemplate,
   generateLibraryMobileDashboard as libraryMobileTemplate,
@@ -556,9 +556,11 @@ export class CardView extends FileView {
     });
 
     // Search bar (only for kanban/table views, not dashboard).
-    // On mobile the input collapses to a 🔍 toggle so the toolbar fits
-    // on one row; tapping the toggle expands the input + auto-focuses it.
-    // Empty-blur recollapses. CSS toggles which is visible per screen size.
+    // On mobile the input collapses to a 🔍 toggle so the toolbar fits on
+    // one row; tapping the toggle expands the input *in place of* the mode
+    // buttons (CSS hides the mode group + +Add + ⋯ while expanded so the
+    // input has the whole toolbar row). Underlying view filters live below.
+    // Closing returns the toolbar to its normal layout.
     if (this.mode !== "dashboard") {
       const searchToggle = ctrl.createEl("button", {
         cls: "csv-cfg-btn csv-search-toggle",
@@ -566,17 +568,43 @@ export class CardView extends FileView {
         title: "Search",
       });
       const searchWrap = ctrl.createDiv({ cls: "csv-search-wrap" });
-      // Active query keeps the input visible even on mobile so the user
-      // can see they have a filter applied; empty restores the collapsed icon.
-      if (this.searchQuery) bar.addClass("csv-toolbar--search-expanded");
       const searchInput = searchWrap.createEl("input", {
         cls: "csv-search-input",
         type: "text",
         placeholder: "Search...",
-        value: this.searchQuery
+        value: this.searchQuery,
+        // iOS keyboard hints: 'search' inputmode shows a search-style
+        // keyboard; enterkeyhint relabels Return as "Search" so users
+        // know pressing it dismisses the keyboard.
+        attr: { inputmode: "search", enterkeyhint: "search", autocomplete: "off" },
       });
-      const clearBtn = searchWrap.createEl("button", { cls: "csv-search-clear", text: "×" });
+      const clearBtn = searchWrap.createEl("button", { cls: "csv-search-clear", text: "×", title: "Clear and close" });
       clearBtn.style.display = this.searchQuery ? "block" : "none";
+      // Mobile-only "Done" button — dismisses the keyboard so the WebView
+      // returns to full height and the user can see the filtered view.
+      // The keyboard otherwise can't be dismissed once focus is locked.
+      // Hidden on desktop via CSS.
+      const doneBtn = searchWrap.createEl("button", {
+        cls: "csv-search-done",
+        text: "Done",
+        title: "Dismiss keyboard",
+      });
+      // Done does double duty on mobile: if the input is empty (user
+      // already cleared their query), collapse the search bar entirely
+      // and restore the normal toolbar. Otherwise just dismiss the
+      // keyboard so the user can see the filtered view. Lets Done be the
+      // single exit affordance — no separate × needed on mobile.
+      doneBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (!searchInput.value) {
+          bar.removeClass("csv-toolbar--search-expanded");
+          searchToggle.removeClass("has-query");
+          this.searchQuery = "";
+          this.renderView(true);
+          return;
+        }
+        searchInput.blur();
+      });
       // Debounce filter re-renders so typing doesn't trigger a full content
       // rebuild on every keystroke — on large tables (300+ rows) the empty-
       // then-refill flash reads as "the table disappeared while I'm typing."
@@ -586,36 +614,39 @@ export class CardView extends FileView {
       searchInput.addEventListener("input", (e) => {
         this.searchQuery = (e.target as HTMLInputElement).value;
         clearBtn.style.display = this.searchQuery ? "block" : "none";
+        searchToggle.toggleClass("has-query", !!this.searchQuery);
         if (searchDebounce !== null) window.clearTimeout(searchDebounce);
         searchDebounce = window.setTimeout(() => {
           searchDebounce = null;
           this.renderView(true); // Only re-render content, not toolbar
         }, 120);
       });
+      // Enter/Return commits the search by dismissing the keyboard so the
+      // WebView returns to full height. Filter stays applied.
+      searchInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          searchInput.blur();
+        }
+      });
+      // Clear AND collapse — the × is the primary dismiss control on mobile.
       clearBtn.addEventListener("click", () => {
         this.searchQuery = "";
         searchInput.value = "";
         clearBtn.style.display = "none";
+        searchToggle.removeClass("has-query");
         bar.removeClass("csv-toolbar--search-expanded");
         this.renderView(true);
       });
-      searchInput.addEventListener("blur", () => {
-        if (!searchInput.value) bar.removeClass("csv-toolbar--search-expanded");
-      });
+      // Active-filter indicator on the toggle (mobile only).
+      if (this.searchQuery) searchToggle.addClass("has-query");
       searchToggle.addEventListener("click", () => {
+        // Expand inline. CSS hides the other toolbar items while expanded
+        // so the input fills the row. The toolbar is in normal flow so
+        // iOS keyboard handling is whatever the WebView does — content
+        // area below shrinks to fit above the keyboard and filters live.
         bar.addClass("csv-toolbar--search-expanded");
-        // iOS WKWebView scrolls the document so the focused input sits
-        // just above the keyboard — even when the input is already
-        // visible. That pushes everything below the toolbar (i.e. the
-        // table) underneath the keyboard, and the user sees a blank
-        // view. preventScroll doesn't catch this; we have to manually
-        // reset scroll on every ancestor after focus has settled.
         searchInput.focus({ preventScroll: true });
-        requestAnimationFrame(() => {
-          window.scrollTo(0, 0);
-          let p: HTMLElement | null = bar;
-          while (p) { if (p.scrollTop) p.scrollTop = 0; p = p.parentElement; }
-        });
       });
     }
 
@@ -1146,10 +1177,13 @@ export class CardView extends FileView {
       const progressBar = progressWrap.createDiv({ cls: "csv-dash-habit-progress-bar" });
       progressBar.style.width = `${pct}%`;
 
-      // Click to show per-habit timeline
+      // Click to show per-habit timeline. Re-renders the whole dashboard,
+      // which without scroll-preservation would yank the user back to (0,0)
+      // — they'd have to scroll down to the same card again to see the
+      // timeline that just appeared.
       card.addEventListener("click", () => {
         this.selectedHabit = this.selectedHabit === habit ? null : habit;
-        this.renderView();
+        this.renderViewPreservingScroll();
       });
       if (this.selectedHabit === habit) {
         card.addClass("selected");
@@ -1183,13 +1217,13 @@ export class CardView extends FileView {
     });
     yearSelect.addEventListener("change", () => {
       this.timelineYear = parseInt(yearSelect.value);
-      this.renderView();
+      this.renderViewPreservingScroll();
     });
 
     const closeBtn = header.createEl("button", { cls: "csv-dash-timeline-close", text: "✕" });
     closeBtn.addEventListener("click", () => {
       this.selectedHabit = null;
-      this.renderView();
+      this.renderViewPreservingScroll();
     });
 
     // Build a map of date -> done status

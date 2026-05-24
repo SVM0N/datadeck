@@ -89,6 +89,23 @@
 }
 .csv-info-btn:hover { opacity: 1; }
 
+/* Active-filter indicator on the mobile 🔍 toggle. A small accent dot
+   pinned to the corner tells the user the underlying view is filtered
+   even though the input itself isn't visible. Tap to reopen the modal
+   with the current query. */
+.csv-search-toggle { position: relative; }
+.csv-search-toggle.has-query::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--csv-accent);
+  box-shadow: 0 0 0 1px var(--csv-surface);
+}
+
 /* Mobile: hide the filename title (already in the tab) and let the search
    bar shrink so the action buttons don't get pushed off-screen. */
 @media (max-width: 600px) {
@@ -108,26 +125,40 @@
   /* Prevent the buttons themselves from shrinking — they'd otherwise
      squish to unreadable widths instead of scrolling. */
   .csv-toolbar-controls > * { flex-shrink: 0; }
-    /* On mobile the search input is hidden until the user taps the 🔍 toggle.
-     When expanded the input OVERLAYS the toolbar (absolute position over
-     the controls row) instead of displacing the mode buttons sideways.
-     Without the overlay, expanding the search pushes [Cards|Kanban|Table]
-     off the visible toolbar area and the user reads that as "the view
-     disappeared". With the overlay the buttons stay put underneath and
-     reappear instantly when the search closes.
-     `!important` defeats the base `.csv-search-wrap { display: flex; }`
-     rule that wins on cascade order otherwise. */
-  .csv-toolbar { position: relative; }
+    /* On mobile the toolbar shows the 🔍 toggle by default. Tapping it
+     expands the input INLINE in place of the mode buttons — when the
+     `csv-toolbar--search-expanded` class is on the toolbar, the mode
+     group / + Add / ⋯ hide and the search wrap fills the row. Keeps the
+     toolbar in normal flow (no fixed positioning), so the WebView
+     shrinks naturally when iOS opens the keyboard and the content
+     area below filters live in whatever space is left above the keyboard.
+     Tapping × clears + collapses back to the default toolbar. */
   .csv-search-toggle { display: inline-flex !important; }
   .csv-search-wrap { display: none !important; }
-  .csv-toolbar--search-expanded .csv-search-toggle { display: none !important; }
+  .csv-toolbar--search-expanded .csv-mode-group,
+  .csv-toolbar--search-expanded .csv-add-btn,
+  .csv-toolbar--search-expanded .csv-cfg-btn-overflow,
+  .csv-toolbar--search-expanded .csv-search-toggle {
+    display: none !important;
+  }
   .csv-toolbar--search-expanded .csv-search-wrap {
     display: flex !important;
-    position: absolute;
-    inset: 0 12px 0 12px; /* match the toolbar's horizontal padding */
-    z-index: 5;
-    background: var(--csv-surface);
+    flex: 1 1 auto;
+    min-width: 0;
     align-items: center;
+    gap: 6px;
+  }
+  /* × is hidden on mobile — Done covers both "dismiss keyboard" (with
+     non-empty query) and "close search" (with empty query), so × is
+     redundant and previously caused Done to shift position the moment
+     the user started typing. */
+  .csv-search-clear { display: none !important; }
+  /* Hide the in-content "Found X of Y" header on mobile while the search
+     is open. The input itself + the underlying filtered view convey the
+     same info; the header clips weirdly when iOS shrinks the WebView for
+     the keyboard. */
+  .csv-card-view-root:has(.csv-toolbar--search-expanded) .csv-search-results {
+    display: none;
   }
   /* `!important` defeats the desktop `.csv-search-input:focus { width:220px }`
      rule which otherwise overflows the toolbar at mobile widths. */
@@ -234,6 +265,27 @@
 
 .csv-search-clear:hover {
   color: var(--csv-text);
+}
+
+/* "Done" button — dismisses iOS keyboard so the user can see the filtered
+   view at full WebView height. Mobile-only; hidden on desktop where the
+   user just clicks elsewhere or hits Enter. */
+.csv-search-done {
+  display: none;
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  margin-left: 6px;
+  border-radius: var(--csv-radius-sm);
+  border: 1px solid var(--csv-accent);
+  background: var(--csv-accent);
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.csv-search-done:hover { background: var(--csv-accent-hover); }
+@media (max-width: 600px) {
+  .csv-toolbar--search-expanded .csv-search-done { display: inline-flex; }
 }
 
 .csv-search-results {
@@ -770,11 +822,14 @@
   overflow-x: auto;
   border-radius: var(--csv-radius);
   box-shadow: var(--csv-shadow);
-  /* Hint to the compositor that this is a scroll container — promotes it
-     to its own layer on iOS, which smooths scroll on big tables. */
-  will-change: scroll-position;
   -webkit-overflow-scrolling: touch;
 }
+/* (Previously had `will-change: scroll-position` here to promote the
+   table to its own compositor layer on iOS. Removed — on iOS WebKit it
+   intermittently caused the table to render outside its parent bounds,
+   making the rows look invisible while the toolbar above them stayed
+   bright. Scroll smoothness was already adequate without it after the
+   ::after pseudo + position:relative cleanup.) */
 
 .csv-table {
   border-collapse: collapse;
@@ -1415,6 +1470,130 @@ td .csv-select-chip {
 
 .csv-modal-submit:hover {
   background: var(--csv-accent-hover);
+}
+
+/* ─── Search Modal (mobile) ───────────────────────────────────────────────── */
+
+/* Transparent backdrop for the SearchModal container. Obsidian's default
+   .modal-bg dims the page to near-black; the JS in SearchModal also clears
+   it, but this CSS rule wins the cascade in case anything restyles later. */
+.mod-csv-search-bg .modal-bg {
+  opacity: 0 !important;
+  background: transparent !important;
+}
+
+/* Slim top-anchored modal opened by the toolbar 🔍 button on touch. Reuses
+   the same visualViewport pinning as the note expander modal — the modal
+   docks to the top of the visible viewport via align-self, max-height
+   tracks visualViewport.height, so the iOS keyboard never covers it. */
+.csv-search-modal {
+  width: min(560px, 92vw) !important;
+  max-height: calc(var(--csv-modal-vh, 100dvh) - 20px) !important;
+}
+
+.csv-search-modal-content {
+  padding: 14px 16px !important;
+}
+
+.csv-search-modal-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.csv-search-modal-input {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: var(--csv-radius-sm);
+  border: 1px solid var(--csv-border);
+  background: var(--background-modifier-form-field);
+  color: var(--csv-text);
+  font-size: 14px;
+  outline: none;
+  min-width: 0;
+}
+.csv-search-modal-input:focus { border-color: var(--csv-accent); }
+
+.csv-search-modal-close {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--csv-radius-sm);
+  border: 1px solid var(--csv-border);
+  background: transparent;
+  color: var(--csv-text-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.csv-search-modal-close:hover { background: var(--background-modifier-hover); color: var(--csv-text); }
+
+.csv-search-modal-count {
+  font-size: 11px;
+  color: var(--csv-text-muted);
+  margin-top: 8px;
+  letter-spacing: 0.02em;
+}
+
+/* Live preview list of matching entries — iOS shrinks the underlying view
+   to nothing when the keyboard's open, so the preview is the only way
+   to see what's matching while typing. */
+.csv-search-modal-list {
+  margin-top: 10px;
+  max-height: calc(var(--csv-modal-vh, 100dvh) - 200px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.csv-search-modal-item {
+  padding: 9px 10px;
+  border-radius: var(--csv-radius-sm);
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+.csv-search-modal-item:hover,
+.csv-search-modal-item:active {
+  background: var(--background-modifier-hover);
+  border-color: var(--csv-border);
+}
+
+.csv-search-modal-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--csv-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.csv-search-modal-item-sub {
+  font-size: 11px;
+  color: var(--csv-text-muted);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.csv-search-modal-more {
+  padding: 8px 10px;
+  font-size: 11px;
+  color: var(--csv-text-faint);
+  font-style: italic;
+  text-align: center;
+}
+
+/* Same top-dock treatment as the note-expander modal so iOS keyboard
+   never covers the input. */
+@media (max-width: 600px) {
+  .csv-search-modal {
+    align-self: flex-start !important;
+    margin-top: 10px !important;
+  }
 }
 
 /* ─── Note Expander Modal ─────────────────────────────────────────────────── */

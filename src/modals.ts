@@ -319,6 +319,164 @@ export class NoteExpanderModal extends Modal {
   }
 }
 
+// ─── Search Modal (mobile) ────────────────────────────────────────────────────
+// On mobile, the toolbar 🔍 button opens this instead of expanding the search
+// inline. The modal owns its own viewport — iOS keyboard layout quirks don't
+// bleed into the kanban / table render underneath. Reuses the same
+// visualViewport top-pinning pattern as NoteExpanderModal so the input
+// sits above the keyboard.
+
+export class SearchModal extends Modal {
+  private initialQuery: string;
+  private onInput: (query: string) => void;
+  private resultCount: () => { matched: number; total: number };
+  private getMatches: () => Array<{ title: string; subtitle?: string; row: CSVRow }>;
+  private onPick: (row: CSVRow) => void;
+  private vvHandler: (() => void) | null = null;
+
+  constructor(
+    app: App,
+    initialQuery: string,
+    onInput: (query: string) => void,
+    resultCount: () => { matched: number; total: number },
+    getMatches: () => Array<{ title: string; subtitle?: string; row: CSVRow }>,
+    onPick: (row: CSVRow) => void,
+  ) {
+    super(app);
+    this.initialQuery = initialQuery;
+    this.onInput = onInput;
+    this.resultCount = resultCount;
+    this.getMatches = getMatches;
+    this.onPick = onPick;
+    this.modalEl.addClass("csv-search-modal");
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("csv-search-modal-content");
+
+    // Transparent backdrop. Obsidian's default modal-bg dims the page
+    // underneath to near-black, which hides the filter results — the
+    // user types but can't see the table updating. Tag the container so
+    // a CSS rule (`.mod-csv-search-bg .modal-bg`) zeroes out the dim.
+    // Also defensively clear the inline opacity/background in case the
+    // CSS rule loses the cascade to a later !important. Tap-outside still
+    // closes because the bg element retains its click handler.
+    this.containerEl.addClass("mod-csv-search-bg");
+    const clearBg = () => {
+      const bg = this.containerEl.querySelector<HTMLElement>(".modal-bg");
+      if (bg) {
+        bg.style.opacity = "0";
+        bg.style.background = "transparent";
+      }
+    };
+    clearBg();
+    // Obsidian sometimes restyles the bg after onOpen runs; redo it on
+    // the next frame and a tick later for good measure.
+    requestAnimationFrame(clearBg);
+    setTimeout(clearBg, 50);
+
+    // visualViewport pinning — same trick as NoteExpanderModal. Without
+    // it, Obsidian centers the modal in window.innerHeight and the iOS
+    // keyboard hides the bottom of it. We write visualViewport.height
+    // into --csv-modal-vh; the CSS uses align-self/margin-top on mobile
+    // to dock the modal at the top of the visible viewport.
+    const vv = (window as { visualViewport?: VisualViewport }).visualViewport;
+    if (vv) {
+      const update = () => {
+        this.modalEl.style.setProperty("--csv-modal-vh", `${vv.height}px`);
+      };
+      update();
+      vv.addEventListener("resize", update);
+      vv.addEventListener("scroll", update);
+      this.vvHandler = update;
+    }
+
+    const row = contentEl.createDiv({ cls: "csv-search-modal-row" });
+    const input = row.createEl("input", {
+      cls: "csv-search-modal-input",
+      type: "text",
+      placeholder: "Search…",
+      value: this.initialQuery,
+      attr: { inputmode: "search", enterkeyhint: "search", autocomplete: "off" },
+    });
+    const closeBtn = row.createEl("button", { cls: "csv-search-modal-close", text: "✕", title: "Close" });
+    closeBtn.addEventListener("click", () => this.close());
+
+    const countEl = contentEl.createDiv({ cls: "csv-search-modal-count" });
+
+    // Results preview list. iOS keyboard shrinks the underlying view to
+    // ~50px of content area, so the user can't see filter results on the
+    // page while typing. Render top matches inside the modal itself —
+    // tap a row to open its expander.
+    const listEl = contentEl.createDiv({ cls: "csv-search-modal-list" });
+    const PREVIEW_LIMIT = 40;
+
+    const refresh = () => {
+      const { matched, total } = this.resultCount();
+      countEl.setText(input.value.trim()
+        ? `${matched} of ${total} entries match`
+        : `${total} entries — start typing to search`);
+
+      listEl.empty();
+      if (!input.value.trim()) return;
+      const matches = this.getMatches().slice(0, PREVIEW_LIMIT);
+      matches.forEach(({ title, subtitle, row }) => {
+        const item = listEl.createDiv({ cls: "csv-search-modal-item" });
+        item.createDiv({ cls: "csv-search-modal-item-title", text: title || "—" });
+        if (subtitle) item.createDiv({ cls: "csv-search-modal-item-sub", text: subtitle });
+        item.addEventListener("click", () => {
+          this.close();
+          this.onPick(row);
+        });
+      });
+      if (matched > PREVIEW_LIMIT) {
+        listEl.createDiv({
+          cls: "csv-search-modal-more",
+          text: `+ ${matched - PREVIEW_LIMIT} more — close to see all in the view`,
+        });
+      }
+    };
+    refresh();
+
+    // Debounced apply — matches the inline-search behaviour so big tables
+    // don't re-render on every keystroke.
+    let debounce: number | null = null;
+    input.addEventListener("input", () => {
+      if (debounce !== null) window.clearTimeout(debounce);
+      debounce = window.setTimeout(() => {
+        debounce = null;
+        this.onInput(input.value);
+        refresh();
+      }, 120);
+    });
+    // Pressing Enter / Return on the on-screen keyboard closes the modal
+    // so the user can see the filtered list. Filter stays applied.
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") this.close();
+    });
+
+    // Autofocus after one frame so iOS reliably opens the keyboard
+    // (focus called synchronously sometimes gets dropped on modal-open).
+    requestAnimationFrame(() => {
+      input.focus();
+      // Caret at the end of existing query so user can extend or backspace.
+      input.setSelectionRange(input.value.length, input.value.length);
+    });
+  }
+
+  onClose(): void {
+    const vv = (window as { visualViewport?: VisualViewport }).visualViewport;
+    if (vv && this.vvHandler) {
+      vv.removeEventListener("resize", this.vvHandler);
+      vv.removeEventListener("scroll", this.vvHandler);
+    }
+    this.vvHandler = null;
+    this.contentEl.empty();
+  }
+}
+
 // ─── File Config Modal ────────────────────────────────────────────────────────
 // Per-file column mapping — which column is the kanban group, notes, status
 
