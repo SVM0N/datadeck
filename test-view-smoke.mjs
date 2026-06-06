@@ -22,12 +22,13 @@ function assert(cond, msg) { if (!cond) throw new Error(msg || "assertion failed
 
 const { document } = setupDom();
 const STUB = fileURLToPath(new URL("./test-support/obsidian-stub.mjs", import.meta.url));
+const CHART_STUB = fileURLToPath(new URL("./test-support/chartjs-stub.mjs", import.meta.url));
 
 /** Bundle a TS entry (obsidian aliased to the stub) and import a named export. */
 async function load(entryRel) {
   const entry = fileURLToPath(new URL(entryRel, import.meta.url));
   const out = path.join(os.tmpdir(), `smoke-${path.basename(entryRel)}.${process.pid}.mjs`);
-  await esbuild.build({ entryPoints: [entry], bundle: true, format: "esm", outfile: out, alias: { obsidian: STUB }, define: { __BUILD_TIME__: JSON.stringify("test") }, logLevel: "error" });
+  await esbuild.build({ entryPoints: [entry], bundle: true, format: "esm", outfile: out, alias: { obsidian: STUB, "chart.js": CHART_STUB }, define: { __BUILD_TIME__: JSON.stringify("test") }, logLevel: "error" });
   const mod = await import(pathToFileURL(out).href);
   fs.rmSync(out, { force: true });
   return mod;
@@ -208,6 +209,48 @@ await test("toolbar: renders mode buttons, search, row count, + Add", async () =
   assert(c.querySelector(".csv-search-wrap"), "search bar present for non-dashboard mode");
   assert(c.querySelector(".csv-add-btn"), "+ Add button present");
   assert(c.querySelector(".csv-row-count").textContent === "2 entries", "row count reflects rows");
+});
+
+// ── Dashboard view ───────────────────────────────────────────────────────────
+const { renderDashboard } = await load("./src/view/dashboard.ts");
+
+function dashView() {
+  const rows = [
+    { date: "2024-01-01", gym: "1", read: "0" },
+    { date: "2024-01-02", gym: "1", read: "1" },
+  ];
+  return {
+    rows, headers: ["date", "gym", "read"],
+    selectedDate: null, selectedHabit: null, chartInstance: null, timelineYear: 2024,
+    getDateCol: () => "date", getBooleanColumns: () => ["gym", "read"], getNotesCol: () => null,
+    formatDate: (d) => d.toISOString().slice(0, 10),
+    parseDate: (s) => (s ? new Date(s + "T00:00:00") : null),
+    isTruthy: (v) => v === "1" || v === "yes",
+    scheduleSave: () => {}, renderView: () => {}, renderViewPreservingScroll: () => {},
+  };
+}
+
+await test("dashboard: renders nav, chart canvas, stats and per-habit cards", async () => {
+  const c = document.body.createDiv();
+  await renderDashboard(dashView(), c);
+  assert(c.querySelector(".csv-dash-nav"), "date navigator present");
+  assert(c.querySelector("canvas.csv-dash-chart"), "chart canvas present");
+  assert(c.querySelector(".csv-dash-stats-bar"), "stats bar present (post chart-load path ran)");
+  assert(c.querySelectorAll(".csv-dash-habit-card").length === 2, "2 per-habit cards (gym, read)");
+});
+
+await test("dashboard: per-habit timeline renders when a habit is selected", async () => {
+  const v = dashView(); v.selectedHabit = "gym";
+  const c = document.body.createDiv();
+  await renderDashboard(v, c);
+  assert(c.querySelector(".csv-dash-timeline-section"), "timeline section present");
+  assert(c.querySelectorAll(".csv-dash-timeline-month-col").length === 12, "12 month columns");
+});
+
+await test("dashboard: no date column shows empty state", async () => {
+  const c = document.body.createDiv();
+  await renderDashboard({ getDateCol: () => null }, c);
+  assert(c.querySelector(".csv-empty-state"), "empty state present");
 });
 
 console.log(`\n${"=".repeat(50)}`);
