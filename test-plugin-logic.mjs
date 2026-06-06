@@ -848,6 +848,154 @@ test("migrateFileConfigKey: caller-set new entry wins, old still cleared", () =>
 });
 
 // ============================================================================
+// Travel view analysis (src/travel-data.ts)
+// ============================================================================
+// Guards the overlap/dedup rules behind the "travel" view against a synthetic
+// fixture (sample-data/travel_flat.csv — no personal data). Builds the real TS
+// module with esbuild so the assertions exercise shipping code, not a copy.
+{
+  const esbuild = (await import("esbuild")).default;
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const { fileURLToPath, pathToFileURL } = await import("node:url");
+
+  const entry = fileURLToPath(new URL("./src/travel-data.ts", import.meta.url));
+  const out = path.join(os.tmpdir(), `travel-data.${process.pid}.mjs`);
+  await esbuild.build({ entryPoints: [entry], bundle: true, format: "esm", outfile: out, logLevel: "error" });
+  const { analyzeTravel } = await import(pathToFileURL(out).href);
+  fs.rmSync(out, { force: true });
+
+  const csv = fs.readFileSync(fileURLToPath(new URL("./sample-data/travel_flat.csv", import.meta.url)), "utf8");
+  const rows = Papa.parse(csv, { header: true, skipEmptyLines: true }).data;
+  const m = analyzeTravel(rows);
+
+  test("travel: source filtering — confirmed/inferred/conflict row counts", () => {
+    assertEqual([m.confirmed.length, m.inferred.length, m.conflicts.length], [5, 3, 1]);
+  });
+  test("travel: confirmed country set (gold) size", () => {
+    assertEqual(m.confirmedCountries.size, 5);
+  });
+  test("travel: inferred-only (blue) excludes confirmed, keeps overlap-masked GB", () => {
+    // FR is confirmed → not blue. GB's only inferred row overlaps a confirmed
+    // US range (so it's masked from the timeline) but GB is still photo-only → blue.
+    assertEqual([...m.inferredOnlyCountries].sort(), ["GB", "IT"]);
+  });
+  test("travel: all countries = confirmed ∪ inferred", () => {
+    assertEqual(m.allCountries.size, 7);
+  });
+  test("travel: day totals — min-1 same-day, undated=0, partial-date=0", () => {
+    // FR 10 + JP 1 + US 92 + BR 0 (undated) + DE 0 (2019-05-?? partial) = 103
+    assertEqual([m.totalConfirmedDays, m.countryDays.find(c => c.iso === "US").days], [103, 92]);
+  });
+  test("travel: continents spanned (EU, AS, NA, SA)", () => {
+    assertEqual(m.visitedContinents.size, 4);
+  });
+  test("travel: inferredVisible masks inferred overlapping any confirmed range", () => {
+    // IT (2022, no overlap) kept; FR (overlaps confirmed FR) + GB (overlaps confirmed US) dropped.
+    assertEqual([m.inferredVisible.length, m.inferredVisible[0].country], [1, "IT"]);
+  });
+  test("travel: world percentage (5 / 195)", () => {
+    assertEqual(m.worldPct, 3);
+  });
+}
+
+// ============================================================================
+// Field-type heuristics (src/field-types.ts)
+// ============================================================================
+// Locks the column-name rules behind the modal date pickers + dropdowns —
+// especially that "date" matches as a whole word and NOT inside update/mandate.
+{
+  const esbuild = (await import("esbuild")).default;
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const fs = await import("node:fs");
+  const { fileURLToPath, pathToFileURL } = await import("node:url");
+
+  const entry = fileURLToPath(new URL("./src/field-types.ts", import.meta.url));
+  const out = path.join(os.tmpdir(), `field-types.${process.pid}.mjs`);
+  await esbuild.build({ entryPoints: [entry], bundle: true, format: "esm", outfile: out, logLevel: "error" });
+  const { isDateCol, suggestionsFor, ISO_DATE } = await import(pathToFileURL(out).href);
+  fs.rmSync(out, { force: true });
+
+  test("field-types: isDateCol matches date as a whole word", () => {
+    for (const h of ["date", "Date", "date_entered", "date_left", "Release Date", "Watched Date", "start-date", "date-start"]) {
+      assertEqual(isDateCol(h), true, `expected ${h} to be a date column`);
+    }
+  });
+  test("field-types: isDateCol rejects substrings & non-dates", () => {
+    for (const h of ["update", "update_at", "mandate", "candidate", "validate", "dateline", "Year", "country", "city"]) {
+      assertEqual(isDateCol(h), false, `expected ${h} NOT to be a date column`);
+    }
+  });
+  test("field-types: suggestionsFor is case-insensitive for known columns", () => {
+    assertEqual(suggestionsFor("source"), ["confirmed", "inferred", "conflict"]);
+    assertEqual(suggestionsFor("Source"), ["confirmed", "inferred", "conflict"]);
+    assertEqual(suggestionsFor("resolved"), ["yes", "no"]);
+  });
+  test("field-types: suggestionsFor returns null for plain columns", () => {
+    assertEqual([suggestionsFor("country"), suggestionsFor("notes")], [null, null]);
+  });
+  test("field-types: ISO_DATE guard accepts only clean yyyy-mm-dd", () => {
+    assertEqual([ISO_DATE.test("2024-01-15"), ISO_DATE.test("2024-06-??"), ISO_DATE.test("")], [true, false, false]);
+  });
+}
+
+// ============================================================================
+// Residency evaluation (src/residency.ts)
+// ============================================================================
+// Deterministic with a fixed `today` and synthetic trips (no personal data).
+// Covers calendar-year clamping, exemption, rolling lookback, all-time, status.
+{
+  const esbuild = (await import("esbuild")).default;
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const fs = await import("node:fs");
+  const { fileURLToPath, pathToFileURL } = await import("node:url");
+
+  const entry = fileURLToPath(new URL("./src/residency.ts", import.meta.url));
+  const out = path.join(os.tmpdir(), `residency.${process.pid}.mjs`);
+  await esbuild.build({ entryPoints: [entry], bundle: true, format: "esm", outfile: out, logLevel: "error" });
+  const { evaluateResidency } = await import(pathToFileURL(out).href);
+  fs.rmSync(out, { force: true });
+
+  const today = Date.UTC(2021, 5, 15); // 2021-06-15
+  const trip = (date_entered, date_left, country, visa_status = "") => ({ date_entered, date_left, country, visa_status });
+
+  test("residency: calendar-year clamps + counts left-exclusive (a year-spanning trip)", () => {
+    const rule = { label: "X", scope: { country: "XA" }, window: { type: "calendar-year" }, threshold: 183 };
+    // 2020-11-01 → 2021-03-01: only 2021-01-01..2021-03-01 counts = 59 days.
+    assertEqual(evaluateResidency(rule, [trip("2020-11-01", "2021-03-01", "XA")], today).used, 59);
+  });
+  test("residency: exempt visa rows contribute 0", () => {
+    const rule = { label: "X", scope: { country: "XA" }, window: { type: "calendar-year" }, threshold: 183, exempt: { visa_status: ["student"] } };
+    assertEqual(evaluateResidency(rule, [trip("2021-01-01", "2021-04-01", "XA", "student")], today).used, 0);
+  });
+  test("residency: scope can be a country set; out-of-scope ignored", () => {
+    const rule = { label: "X", scope: { countries: ["XA", "XB"] }, window: { type: "calendar-year" }, threshold: 183 };
+    const trips = [trip("2021-01-01", "2021-01-11", "XA"), trip("2021-02-01", "2021-02-11", "XB"), trip("2021-03-01", "2021-03-31", "ZZ")];
+    assertEqual(evaluateResidency(rule, trips, today).used, 20); // 10 + 10, ZZ excluded
+  });
+  test("residency: all-time sums every in-scope day", () => {
+    const rule = { label: "X", scope: { country: "XA" }, window: { type: "all-time" }, threshold: 1825 };
+    const trips = [trip("2019-01-01", "2019-02-01", "XA"), trip("2020-01-01", "2020-01-11", "XA")];
+    const r = evaluateResidency(rule, trips, today);
+    assertEqual([r.used, r.remaining, r.status], [41, 1784, "ok"]);
+  });
+  test("residency: rolling window excludes trips outside the lookback", () => {
+    const rule = { label: "X", scope: { country: "XA" }, window: { type: "rolling", days: 180 }, threshold: 90 };
+    const trips = [trip("2021-05-01", "2021-05-21", "XA"), trip("2019-01-01", "2019-02-01", "XA")];
+    assertEqual(evaluateResidency(rule, trips, today).used, 20);
+  });
+  test("residency: status warn at >=80% and over past threshold", () => {
+    const base = { label: "x", scope: { country: "XA" }, window: { type: "all-time" } };
+    const warn = evaluateResidency({ ...base, threshold: 10 }, [trip("2020-01-01", "2020-01-10", "XA")], today);
+    const over = evaluateResidency({ ...base, threshold: 10 }, [trip("2020-01-01", "2020-01-16", "XA")], today);
+    assertEqual([warn.status, over.status, over.remaining], ["warn", "over", -5]);
+  });
+}
+
+// ============================================================================
 // Summary
 // ============================================================================
 

@@ -1120,12 +1120,35 @@
   background: transparent;
   transition: background 0.15s;
   z-index: 1;
+  /* keep the drag gesture from being hijacked by the table's horizontal scroll */
+  touch-action: none;
 }
 
 .csv-col-resize-handle:hover,
 .csv-col-resize-handle:active {
   background: var(--csv-accent);
   opacity: 0.5;
+}
+
+/* Touch has no hover, and a 6px target is unhittable with a finger. Widen it
+   and show a persistent grip line so the affordance is discoverable. The
+   negative right offset keeps the visible grip flush with the column edge while
+   the hit area straddles it. */
+@media (pointer: coarse) {
+  .csv-col-resize-handle {
+    width: 22px;
+    right: -11px;
+  }
+  .csv-col-resize-handle::after {
+    content: "";
+    position: absolute;
+    right: 11px;
+    top: 25%;
+    height: 50%;
+    width: 2px;
+    background: var(--csv-border);
+    border-radius: 1px;
+  }
 }
 
 /* ─── Notes multiline fix ─────────────────────────────────────────────────── */
@@ -3059,4 +3082,214 @@ select.csv-add-row-control {
     max-width: 220px;
     font-size: 11px;
   }
+}
+
+/* ─── Travel view ─────────────────────────────────────────────────────────────
+   Map choropleth + stats + timeline + trip tables, rendered by
+   src/travel-view.ts from a flat travel CSV. Confirmed = amber (gold),
+   photo-inferred = blue, unvisited = faint surface. */
+.csv-tv {
+  --tv-gold: var(--csv-amber);
+  --tv-blue: var(--csv-blue);
+  padding: 4px 2px 40px;
+  font-size: 13px;
+  color: var(--csv-text);
+}
+
+/* Flex (not grid) so a lone last-row stat grows to fill the width instead of
+   leaving an empty track — 5 stats no longer orphan "Confirmed days". */
+.csv-tv-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  background: var(--csv-border);
+  border: 1px solid var(--csv-border);
+  border-radius: var(--csv-radius-sm);
+  overflow: hidden;
+  margin-bottom: 22px;
+}
+/* Content is centered both axes so grow-to-fill tiles never strand their
+   number in a corner — 5-across, 3+2, or a lone full-width last tile all read
+   as intentional. min-height keeps sub-less tiles (Trips/Days) the same height
+   as the 3-line ones when they share a row. */
+.csv-tv-stat {
+  background: var(--csv-surface); padding: 14px 16px; flex: 1 1 150px; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; min-height: 76px;
+}
+.csv-tv-stat-label {
+  color: var(--csv-text-muted);
+  font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.csv-tv-stat-value { font-size: 24px; font-weight: 600; color: var(--tv-gold); line-height: 1.1; }
+.csv-tv-stat-sub { color: var(--csv-text-muted); font-size: 10px; margin-top: 3px; }
+
+.csv-tv-mapwrap {
+  background: var(--csv-surface);
+  border: 1px solid var(--csv-border);
+  border-radius: var(--csv-radius-sm);
+  margin-bottom: 24px;
+}
+.csv-tv-map-loading { padding: 40px; text-align: center; color: var(--csv-text-muted); font-size: 12px; }
+.csv-tv-map svg { display: block; width: 100%; height: auto; }
+.csv-tv-map .country-path { stroke: var(--csv-bg); stroke-width: .4; transition: filter .12s; }
+.csv-tv-map .country-path.cp-confirmed { fill: var(--tv-gold); }
+.csv-tv-map .country-path.cp-inferred  { fill: var(--tv-blue); opacity: .65; }
+.csv-tv-map .country-path.cp-unvisited { fill: var(--csv-surface-2); }
+.csv-tv-map .country-path:hover { filter: brightness(1.3); cursor: pointer; }
+.csv-tv-map .country-path.cp-unvisited:hover { filter: brightness(1.6); }
+/* Micro-states: wide transparent stroke = invisible enlarged hit area.
+   pointer-events:all so the (unpainted) stroke region still catches hovers. */
+.csv-tv-map .country-path.cp-tiny { stroke: transparent; stroke-width: 3; pointer-events: all; }
+
+/* Instant cursor-following tooltip for map paths + timeline segments.
+   position:fixed on <body> so it escapes the map/timeline overflow clipping;
+   useful where a label can't fit — tiny countries, short trips. */
+.csv-tv-tooltip {
+  position: fixed; z-index: var(--layer-tooltip, 70);
+  max-width: 280px; padding: 5px 9px;
+  background: var(--csv-surface-1, var(--background-secondary));
+  color: var(--csv-text, var(--text-normal));
+  border: 1px solid var(--csv-border, var(--background-modifier-border));
+  border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.28);
+  font-size: 12px; line-height: 1.4; white-space: nowrap;
+  pointer-events: none; opacity: 0; transition: opacity .08s ease;
+}
+.csv-tv-tooltip.is-on { opacity: 1; }
+
+.csv-tv-map-legend {
+  display: flex; gap: 18px; flex-wrap: wrap;
+  padding: 9px 14px; border-top: 1px solid var(--csv-border);
+  font-size: 11px; color: var(--csv-text-muted);
+}
+.csv-tv-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+.csv-tv-dot.cp-confirmed { background: var(--tv-gold); }
+.csv-tv-dot.cp-inferred  { background: var(--tv-blue); }
+
+.csv-tv-sec-title {
+  color: var(--csv-text-muted);
+  font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+  margin: 26px 0 12px; padding-bottom: 7px;
+  border-bottom: 1px solid var(--csv-border);
+}
+
+/* Wrapper so wide tables scroll horizontally instead of overflowing the
+   viewport (the trips table has 8 columns — essential on phones). */
+.csv-tv-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 6px; }
+.csv-tv-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 6px; }
+.csv-tv-table th {
+  color: var(--csv-text-muted);
+  font-size: 10px; font-weight: 400; letter-spacing: .07em; text-transform: uppercase;
+  text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--csv-border);
+}
+.csv-tv-table td { padding: 7px 10px; border-bottom: 1px solid var(--csv-border); vertical-align: middle; }
+.csv-tv-table tr:hover td { background: var(--background-modifier-hover); }
+.csv-tv-table td.csv-tv-flag { font-size: 16px; width: 28px; text-align: center; }
+
+.csv-tv-photo-only { color: var(--csv-text-muted); font-size: 12px; margin: 8px 0 4px; line-height: 1.9; }
+
+.csv-tv-edit-hint { color: var(--csv-text-faint); font-size: 11px; margin: -6px 0 10px; }
+.csv-tv-table td.csv-tv-editable { cursor: text; }
+.csv-tv-table td.csv-tv-editable:hover { background: var(--background-modifier-hover); box-shadow: inset 0 0 0 1px var(--csv-border); }
+.csv-tv-table td.csv-tv-editable .csv-inline-input { width: 100%; box-sizing: border-box; }
+
+.csv-tv-timeline { margin-bottom: 8px; }
+.csv-tv-tl-year { margin-bottom: 10px; }
+.csv-tv-tl-label {
+  color: var(--csv-text-muted);
+  font-size: 9px; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 3px;
+}
+.csv-tv-month-row { display: flex; margin-bottom: 1px; }
+.csv-tv-month-tick {
+  flex: 1; font-size: 8px; color: var(--csv-text-faint);
+  padding-left: 2px; border-left: 1px solid var(--csv-border);
+}
+.csv-tv-track {
+  position: relative; height: 26px; width: 100%;
+  background: var(--csv-surface); border: 1px solid var(--csv-border);
+}
+.csv-tv-seg {
+  position: absolute; height: 100%; top: 0;
+  display: flex; align-items: center; overflow: hidden;
+  font-size: 10px; transition: filter .12s;
+}
+.csv-tv-seg:hover { filter: brightness(1.3); z-index: 2; }
+.csv-tv-seg-inf { background: transparent; border: 1px solid var(--tv-blue); }
+.csv-tv-seg-lbl {
+  padding: 0 4px; white-space: nowrap; font-weight: 600;
+  color: var(--csv-bg); pointer-events: none;
+}
+.csv-tv-seg-inf .csv-tv-seg-lbl { color: inherit; }
+.csv-tv-tl-legend { color: var(--csv-text-muted); font-size: 11px; margin-top: 10px; }
+
+.csv-tv-details { margin-top: 14px; border: 1px solid var(--csv-border); border-radius: var(--csv-radius-sm); }
+.csv-tv-details > summary {
+  cursor: pointer; padding: 10px 12px; font-size: 11px;
+  color: var(--csv-text-muted); list-style-position: inside;
+}
+.csv-tv-details[open] > summary { border-bottom: 1px solid var(--csv-border); }
+.csv-tv-details .csv-tv-table { margin: 0; }
+.csv-tv-details .csv-tv-table th:first-child,
+.csv-tv-details .csv-tv-table td:first-child { padding-left: 12px; }
+.csv-tv-details-warn { border-color: var(--csv-red); }
+.csv-tv-details-warn > summary { color: var(--csv-red); }
+
+/* Residency gauges */
+.csv-tv-res-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.csv-tv-res-card {
+  background: var(--csv-surface);
+  border: 1px solid var(--csv-border);
+  border-left: 3px solid var(--csv-text-faint);
+  border-radius: var(--csv-radius-sm);
+  padding: 12px 14px;
+}
+.csv-tv-res-ok   { border-left-color: var(--csv-green); }
+.csv-tv-res-warn { border-left-color: var(--csv-amber); }
+.csv-tv-res-over { border-left-color: var(--csv-red); }
+.csv-tv-res-label { font-size: 12px; font-weight: 600; color: var(--csv-text); margin-bottom: 7px; }
+.csv-tv-res-nums { font-size: 11px; margin-bottom: 7px; }
+.csv-tv-res-used { font-size: 18px; font-weight: 700; color: var(--csv-text); }
+.csv-tv-res-thresh { color: var(--csv-text-muted); }
+.csv-tv-res-window { color: var(--csv-text-faint); }
+.csv-tv-res-bar { height: 5px; background: var(--csv-surface-2); border-radius: 3px; overflow: hidden; }
+.csv-tv-res-fill { height: 100%; background: var(--csv-green); }
+.csv-tv-res-warn .csv-tv-res-fill { background: var(--csv-amber); }
+.csv-tv-res-over .csv-tv-res-fill { background: var(--csv-red); }
+.csv-tv-res-status { font-size: 11px; color: var(--csv-text-muted); margin-top: 6px; }
+.csv-tv-res-over .csv-tv-res-status { color: var(--csv-red); font-weight: 600; }
+.csv-tv-res-note { font-size: 10px; color: var(--csv-text-faint); margin-top: 4px; font-style: italic; }
+.csv-tv-res-disclaimer { font-size: 10px; color: var(--csv-text-faint); margin: 4px 0 2px; }
+
+/* Residency rule editor (settings tab) */
+.csv-rr-wrap { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.csv-rr-card { border: 1px solid var(--background-modifier-border); border-radius: 6px; padding: 10px 12px; background: var(--background-secondary); }
+.csv-rr-head { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.csv-rr-label { flex: 1; font-weight: 600; }
+.csv-rr-del { flex: 0 0 auto; cursor: pointer; color: var(--text-muted); background: transparent; border: 1px solid var(--background-modifier-border); border-radius: 4px; padding: 2px 8px; }
+.csv-rr-del:hover { color: var(--text-error); border-color: var(--text-error); }
+.csv-rr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 12px; }
+.csv-rr-field { display: flex; flex-direction: column; gap: 3px; }
+.csv-rr-field label { font-size: 11px; color: var(--text-muted); }
+.csv-rr-field input { width: 100%; }
+.csv-rr-btns { margin-top: 4px; }
+.csv-rr-add { cursor: pointer; }
+
+@media (max-width: 600px) {
+  .csv-tv { font-size: 12px; }
+  .csv-tv-res-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+  .csv-tv-stat { padding: 11px 10px; flex-basis: 104px; min-height: 64px; }
+  .csv-tv-stat-value { font-size: 20px; }
+  .csv-tv-sec-title { margin-top: 20px; }
+  .csv-tv-table { font-size: 11px; }
+  .csv-tv-table th, .csv-tv-table td { padding: 6px 7px; }
+  .csv-tv-table td.csv-tv-flag { font-size: 14px; width: 22px; }
+  .csv-tv-month-tick { font-size: 7px; padding-left: 1px; }
+  .csv-tv-track { height: 22px; }
+  .csv-tv-map-legend { gap: 12px; font-size: 10px; }
 }

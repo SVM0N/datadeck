@@ -7,6 +7,37 @@ import {
 } from "obsidian";
 import { CSVRow, FileConfig, ViewMode } from "./types";
 import { showSelectPicker, titleCase } from "./utils";
+import { suggestionsFor, isDateCol, ISO_DATE } from "./field-types";
+
+// ─── Shared field input ─────────────────────────────────────────────────────
+//
+// Used by both the Add-entry modal and the inline (note-expander) editor so a
+// given column type edits the same way everywhere. The name/value heuristics
+// live in field-types.ts (pure, unit-tested).
+
+/**
+ * Build the <input> for a non-notes, non-select cell:
+ *  - date-like columns get a native yyyy-mm-dd picker — but only when the
+ *    current value is empty or already clean ISO, so partial/blank values
+ *    like "2022-06-??" keep a plain text field and are never clobbered
+ *  - columns with known options get a non-strict <datalist> dropdown
+ *  - everything else is a plain text input
+ * Empty values stay allowed throughout (intentional for undated trips).
+ */
+export function makeFieldInput(parent: HTMLElement, header: string, initial: string, cls: string): HTMLInputElement {
+  const useDate = isDateCol(header) && (initial === "" || ISO_DATE.test(initial));
+  const input = parent.createEl("input", { cls, type: useDate ? "date" : "text", value: initial });
+  if (!useDate) input.placeholder = header;
+  const sugg = suggestionsFor(header);
+  if (sugg) {
+    const id = `csv-dl-${header.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Math.random().toString(36).slice(2, 7)}`;
+    const dl = parent.createEl("datalist");
+    dl.id = id;
+    sugg.forEach(opt => dl.createEl("option", { value: opt }));
+    input.setAttr("list", id);
+  }
+  return input;
+}
 
 // ─── Add Entry Modal ──────────────────────────────────────────────────────────
 
@@ -69,7 +100,7 @@ export class AddEntryModal extends Modal {
         });
 
       } else {
-        const input = row.createEl("input", { cls: "csv-modal-input", type: "text", placeholder: h });
+        const input = makeFieldInput(row, h, "", "csv-modal-input");
         input.addEventListener("input", () => { values[h] = input.value; });
         // Submit on Enter for non-textarea fields
         input.addEventListener("keydown", e => { if (e.key === "Enter") submit(); });
@@ -204,8 +235,8 @@ export class NoteExpanderModal extends Modal {
         const val = fieldRow.createDiv({ cls: "csv-expander-field-value", text: this.row[h] || "—" });
         val.addEventListener("click", () => {
           val.empty();
-          const input = val.createEl("input", { cls: "csv-inline-input", value: this.row[h] ?? "", type: "text" });
-          input.focus(); input.select();
+          const input = makeFieldInput(val, h, this.row[h] ?? "", "csv-inline-input");
+          input.focus(); if (input.type === "text") input.select();
           const commit = () => { this.row[h] = input.value; val.empty(); val.setText(input.value || "—"); };
           input.addEventListener("blur", commit);
           input.addEventListener("keydown", e => { if (e.key === "Enter") input.blur(); if (e.key === "Escape") { val.empty(); val.setText(this.row[h] || "—"); } });

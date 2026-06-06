@@ -23,6 +23,11 @@ import type { Chart as ChartType } from "chart.js";
 import { CSVRow, ViewMode, FileConfig, CardViewSettings, DEFAULT_SETTINGS, CARD_VIEW_TYPE } from "./src/types";
 import { sanitizeFilename, titleCase, formatRatingForDisplay, showSelectPicker, resolvePath, parseCSV, migrateFileConfigKey } from "./src/utils";
 import { AddEntryModal, NoteExpanderModal, FileConfigModal, SearchModal } from "./src/modals";
+import { renderTravel } from "./src/travel-view";
+
+// World-map SVG asset, loaded lazily from the plugin dir and cached for the
+// session (undefined = not yet read, null = read failed/missing).
+let worldMapSvgCache: string | null | undefined = undefined;
 import {
   generateHabitMobileDashboard as habitMobileTemplate,
   generateLibraryMobileDashboard as libraryMobileTemplate,
@@ -93,6 +98,10 @@ export class CardView extends FileView {
     // Apply per-file default mode if set, or auto-detect based on columns
     if (this.file && this.settings.fileConfigs[this.file.path]?.defaultMode) {
       this.mode = this.settings.fileConfigs[this.file.path].defaultMode!;
+    } else if (this.isTravelFile()) {
+      // Travel logs (country/date/source columns) get the map view by default.
+      // Checked before the date-column rule since they also have date columns.
+      this.mode = "travel";
     } else if (this.hasDateColumn()) {
       // Auto-default to dashboard if date column detected
       this.mode = "dashboard";
@@ -105,7 +114,8 @@ export class CardView extends FileView {
     // kanban-genre — without this it would render "No category column found".)
     const needsCategory = this.mode === "kanban-genre" || this.mode === "library";
     const needsDate = this.mode === "dashboard";
-    if ((needsCategory && !this.getCategoryCol()) || (needsDate && !this.hasDateColumn())) {
+    if ((needsCategory && !this.getCategoryCol()) || (needsDate && !this.hasDateColumn())
+        || (this.mode === "travel" && !this.isTravelFile())) {
       this.mode = "table";
     }
     this.selectedDate = null; // Reset selected date when loading new file
@@ -492,7 +502,10 @@ export class CardView extends FileView {
     // renderDashboard is async (lazy-loads Chart.js); no one awaits renderView,
     // so the fire-and-forget here is intentional — dashboard chrome paints
     // synchronously, the chart lands a tick later.
-    if (this.mode === "dashboard") void this.renderDashboard(content);
+    if (this.mode === "travel") void renderTravel(content, this.rows, () => this.loadMapSvg(), () => this.scheduleSave(),
+      this.settings.showResidency === false ? null : (this.settings.residencyRules ?? null),
+      (teardown) => this.renderComponent.register(teardown));
+    else if (this.mode === "dashboard") void this.renderDashboard(content);
     else if (this.mode === "library") this.renderLibrary(content);
     else if (this.mode === "kanban-genre") this.renderKanbanGenre(content);
     else this.renderTable(content);
@@ -547,6 +560,7 @@ export class CardView extends FileView {
 
     // Build view mode buttons based on detected columns
     const modes: {id: ViewMode, label: string}[] = [];
+    if (this.isTravelFile()) modes.push({id: "travel", label: "Travel"});
     if (this.hasDateColumn()) modes.push({id: "dashboard", label: "Dashboard"});
     if (this.getCategoryCol()) {
       modes.push({id: "library", label: "Cards"});
@@ -758,6 +772,35 @@ export class CardView extends FileView {
   private hasDateColumn(): boolean {
     const dateCol = this.getDateCol();
     return dateCol !== null;
+  }
+
+  // ── Travel-log detection + map asset ──────────────────────────────────────────
+
+  /**
+   * A file is a travel log if it carries the flat-CSV columns emitted by the
+   * travel-tracker's travel.py: country (ISO-2) + a date range + a `source`
+   * discriminator. Specific enough not to fire on movies/books/habits.
+   */
+  private isTravelFile(): boolean {
+    const have = new Set(this.headers.map(h => h.toLowerCase()));
+    return have.has("country") && have.has("date_entered")
+        && have.has("date_left") && have.has("source");
+  }
+
+  /**
+   * Load the world-map SVG shipped alongside the plugin. Cached at module
+   * level so it's read once per session (it's ~110 KB). Kept out of the JS
+   * bundle deliberately — see handoff. Returns null if the asset is missing.
+   */
+  private async loadMapSvg(): Promise<string | null> {
+    if (worldMapSvgCache !== undefined) return worldMapSvgCache;
+    const path = normalizePath(`${this.app.vault.configDir}/plugins/csv-card-view/world-map.svg`);
+    try {
+      worldMapSvgCache = await this.app.vault.adapter.read(path);
+    } catch (_e) {
+      worldMapSvgCache = null;
+    }
+    return worldMapSvgCache;
   }
 
   // ── Search filtering ─────────────────────────────────────────────────────────
@@ -1909,11 +1952,26 @@ export class CardView extends FileView {
       if (savedWidth) th.style.width = savedWidth + "px";
       const handle = th.createDiv({cls:"csv-col-resize-handle"});
       let startX = 0, startW = 0;
-      handle.addEventListener("mousedown", e => {
-        e.preventDefault(); startX=e.clientX; startW=th.offsetWidth;
-        const onMove = (ev: MouseEvent) => { th.style.width=Math.max(60,startW+ev.clientX-startX)+"px"; };
-        const onUp = (ev: MouseEvent) => { this.settings.columnWidths[h]=Math.max(60,startW+ev.clientX-startX); document.removeEventListener("mousemove",onMove); document.removeEventListener("mouseup",onUp); };
-        document.addEventListener("mousemove",onMove); document.addEventListener("mouseup",onUp);
+      // Pointer events (not mouse) so the handle works under touch as well as a
+      // cursor; setPointerCapture routes move/up to the handle even when the
+      // finger/cursor strays off the 6px strip, and lets us drop the
+      // document-level listeners. `touch-action:none` on the handle (CSS) stops
+      // the browser claiming the gesture for scrolling. Persist on release —
+      // the old mouseup only mutated in-memory settings, so resized widths were
+      // silently lost on reload.
+      handle.addEventListener("pointerdown", e => {
+        e.preventDefault(); e.stopPropagation();
+        handle.setPointerCapture(e.pointerId);
+        startX=e.clientX; startW=th.offsetWidth;
+        const onMove = (ev: PointerEvent) => { th.style.width=Math.max(60,startW+ev.clientX-startX)+"px"; };
+        const onUp = (ev: PointerEvent) => {
+          this.settings.columnWidths[h]=Math.max(60,startW+ev.clientX-startX);
+          handle.removeEventListener("pointermove",onMove);
+          handle.removeEventListener("pointerup",onUp);
+          void this.persistSettings();
+        };
+        handle.addEventListener("pointermove",onMove);
+        handle.addEventListener("pointerup",onUp);
       });
     });
     hr.createEl("th",{text:""});
@@ -2005,6 +2063,71 @@ class CardViewSettingTab extends PluginSettingTab {
       .addText(t=>t.setPlaceholder("Notes").setValue(this.plugin.settings.notesSubfolder).onChange(async v=>{ this.plugin.settings.notesSubfolder=v; await this.plugin.saveSettings(); }));
     new Setting(containerEl).setName("Reset column widths")
       .addButton(b=>b.setButtonText("Reset").onClick(async()=>{ this.plugin.settings.columnWidths={}; await this.plugin.saveSettings(); new Notice("Column widths reset."); }));
+    new Setting(containerEl).setName("Residency counters (travel view)")
+      .setDesc("Show residency / tax day-gauges in the travel view.")
+      .addToggle(t=>t.setValue(this.plugin.settings.showResidency!==false).onChange(async v=>{ this.plugin.settings.showResidency=v; await this.plugin.saveSettings(); }));
+
+    containerEl.createEl("h3",{text:"Residency rules"});
+    containerEl.createEl("p",{cls:"setting-item-description",text:"Each rule counts days in the listed countries within the window, minus exempt visa rows, against the threshold. Counts confirmed trips only. Indicators, not legal/tax advice."});
+    const rrWrap = containerEl.createDiv({cls:"csv-rr-wrap"});
+    this.renderResidencyRules(rrWrap);
+  }
+
+  private renderResidencyRules(wrap: HTMLElement): void {
+    wrap.empty();
+    const rules = this.plugin.settings.residencyRules ?? (this.plugin.settings.residencyRules = []);
+    const save = () => void this.plugin.saveSettings();
+
+    rules.forEach((rule, i) => {
+      const card = wrap.createDiv({ cls: "csv-rr-card" });
+      const head = card.createDiv({ cls: "csv-rr-head" });
+      const label = head.createEl("input", { cls: "csv-rr-label", type: "text", value: rule.label });
+      label.placeholder = "Label (e.g. 🇪🇺 Schengen 90/180)";
+      label.addEventListener("input", () => { rule.label = label.value; save(); });
+      const del = head.createEl("button", { cls: "csv-rr-del", text: "✕" });
+      del.setAttr("aria-label", "Remove rule");
+      del.addEventListener("click", async () => { rules.splice(i, 1); await this.plugin.saveSettings(); this.renderResidencyRules(wrap); });
+
+      const grid = card.createDiv({ cls: "csv-rr-grid" });
+      const field = (lbl: string, value: string, onChange: (v: string) => void, ph = "") => {
+        const f = grid.createDiv({ cls: "csv-rr-field" });
+        f.createEl("label", { text: lbl });
+        const inp = f.createEl("input", { type: "text", value });
+        if (ph) inp.placeholder = ph;
+        inp.addEventListener("input", () => { onChange(inp.value); save(); });
+      };
+
+      const countries = rule.scope.countries ?? (rule.scope.country ? [rule.scope.country] : []);
+      field("Countries (ISO-2, comma)", countries.join(", "), v => {
+        rule.scope = { countries: v.split(",").map(s => s.trim().toUpperCase()).filter(Boolean) };
+      }, "US, GB");
+
+      // Window type
+      const wf = grid.createDiv({ cls: "csv-rr-field" });
+      wf.createEl("label", { text: "Window" });
+      const sel = wf.createEl("select");
+      ([["calendar-year", "Calendar year"], ["rolling", "Rolling N days"], ["all-time", "All time"]] as const)
+        .forEach(([v, t]) => { const o = sel.createEl("option", { text: t, value: v }); if (rule.window.type === v) o.selected = true; });
+      sel.addEventListener("change", () => { rule.window = { type: sel.value as "calendar-year" | "rolling" | "all-time", days: rule.window.days }; save(); this.renderResidencyRules(wrap); });
+
+      if (rule.window.type === "rolling") {
+        field("Rolling days", String(rule.window.days ?? 180), v => { const n = parseInt(v, 10); rule.window.days = isNaN(n) ? undefined : n; }, "180");
+      }
+      field("Threshold (days)", String(rule.threshold), v => { const n = parseInt(v, 10); rule.threshold = isNaN(n) ? 0 : n; }, "183");
+      field("Exempt visas (comma)", (rule.exempt?.visa_status ?? []).join(", "), v => {
+        const list = v.split(",").map(s => s.trim()).filter(Boolean);
+        rule.exempt = list.length ? { visa_status: list } : undefined;
+      }, "F-1, J-1");
+      field("On-exceed label", rule.onExceed ?? "", v => { rule.onExceed = v || undefined; }, "tax resident");
+      field("Note", rule.note ?? "", v => { rule.note = v || undefined; }, "optional caveat");
+    });
+
+    const btns = wrap.createDiv({ cls: "csv-rr-btns" });
+    btns.createEl("button", { cls: "csv-rr-add", text: "+ Add rule" }).addEventListener("click", async () => {
+      rules.push({ label: "New rule", scope: { countries: [] }, window: { type: "calendar-year" }, threshold: 183 });
+      await this.plugin.saveSettings();
+      this.renderResidencyRules(wrap);
+    });
   }
 }
 
@@ -2436,6 +2559,11 @@ export default class CardViewPlugin extends Plugin {
     });
   }
 
-  async loadSettings(): Promise<void> { this.settings=Object.assign({},DEFAULT_SETTINGS,await this.loadData()); }
+  async loadSettings(): Promise<void> {
+    this.settings=Object.assign({},DEFAULT_SETTINGS,await this.loadData());
+    // Deep-clone so the in-app editor mutates this file's settings, not the
+    // shared DEFAULT_RESIDENCY_RULES constant (a reference when data.json has none).
+    this.settings.residencyRules = JSON.parse(JSON.stringify(this.settings.residencyRules ?? []));
+  }
   async saveSettings(): Promise<void> { await this.saveData(this.settings); }
 }
