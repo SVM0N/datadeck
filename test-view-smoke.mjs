@@ -123,6 +123,39 @@ await test("table: search count appears when a query is set", async () => {
   assert(c.querySelector(".csv-search-results"), "search result count shown");
 });
 
+// ── Library view ─────────────────────────────────────────────────────────────
+const { renderLibrary } = await load("./src/view/library.ts");
+
+await test("library: groups cards by category", async () => {
+  const rows = [
+    { Title: "Dune", Category: "SciFi", Status: "Read" },
+    { Title: "It", Category: "Horror", Status: "" },
+  ];
+  const view = {
+    headers: ["Title", "Category", "Status"], rows, searchQuery: "",
+    libraryStatusFilter: "all", libraryGenreFilter: "all", fileCfg: {},
+    getCategoryCol: () => "Category", getStatusCol: () => "Status",
+    titleKey: () => "Title", authorKey: () => undefined,
+    resolveCol: () => null, getNotesCol: () => null,
+    renderView: () => {}, openNoteExpander: () => {}, openRowContextMenu: () => {},
+  };
+  const c = document.body.createDiv();
+  renderLibrary(view, c);
+  assert(c.querySelector(".csv-library-sections"), "sections wrap present");
+  assert(c.querySelectorAll(".csv-library-section").length === 2, "2 genre sections (SciFi, Horror)");
+  assert(c.querySelectorAll(".csv-library-card").length === 2, "2 cards");
+});
+
+await test("library: no category column shows empty state", async () => {
+  const view = {
+    headers: [], rows: [], getCategoryCol: () => null, getStatusCol: () => null,
+    titleKey: () => undefined, authorKey: () => undefined,
+  };
+  const c = document.body.createDiv();
+  renderLibrary(view, c);
+  assert(c.querySelector(".csv-empty-state"), "empty state present");
+});
+
 console.log(`\n${"=".repeat(50)}`);
 console.log(`View smoke tests: ${passed} passed, ${failed} failed`);
 console.log(`${"=".repeat(50)}`);
