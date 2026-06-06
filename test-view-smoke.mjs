@@ -27,7 +27,7 @@ const STUB = fileURLToPath(new URL("./test-support/obsidian-stub.mjs", import.me
 async function load(entryRel) {
   const entry = fileURLToPath(new URL(entryRel, import.meta.url));
   const out = path.join(os.tmpdir(), `smoke-${path.basename(entryRel)}.${process.pid}.mjs`);
-  await esbuild.build({ entryPoints: [entry], bundle: true, format: "esm", outfile: out, alias: { obsidian: STUB }, logLevel: "error" });
+  await esbuild.build({ entryPoints: [entry], bundle: true, format: "esm", outfile: out, alias: { obsidian: STUB }, define: { __BUILD_TIME__: JSON.stringify("test") }, logLevel: "error" });
   const mod = await import(pathToFileURL(out).href);
   fs.rmSync(out, { force: true });
   return mod;
@@ -187,6 +187,27 @@ await test("kanban: no category column shows empty state", async () => {
   const c = document.body.createDiv();
   renderKanbanGenre(view, c);
   assert(c.querySelector(".csv-empty-state"), "empty state present");
+});
+
+// ── Toolbar ──────────────────────────────────────────────────────────────────
+const { renderToolbar } = await load("./src/view/toolbar.ts");
+
+await test("toolbar: renders mode buttons, search, row count, + Add", async () => {
+  const view = {
+    file: { basename: "movies", path: "movies.csv" },
+    rows: [{}, {}], mode: "table", searchQuery: "",
+    isTravelFile: () => false, hasDateColumn: () => false, getCategoryCol: () => "Category",
+    fileCfg: {}, app: {}, headers: ["Title", "Category"],
+    renderView: () => {}, renderViewPreservingScroll: () => {}, saveFileCfg: () => {},
+    autoDetectBooleanColumns: () => [], generateMobileFiles: () => {}, backupToArchive: () => {}, openAddModal: () => {},
+  };
+  const c = document.body.createDiv();
+  renderToolbar(view, c);
+  assert(c.querySelector(".csv-toolbar"), "toolbar present");
+  assert(c.querySelectorAll(".csv-mode-btn").length === 3, "Cards + Kanban + Table (no travel/dashboard)");
+  assert(c.querySelector(".csv-search-wrap"), "search bar present for non-dashboard mode");
+  assert(c.querySelector(".csv-add-btn"), "+ Add button present");
+  assert(c.querySelector(".csv-row-count").textContent === "2 entries", "row count reflects rows");
 });
 
 console.log(`\n${"=".repeat(50)}`);

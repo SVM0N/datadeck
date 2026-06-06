@@ -25,6 +25,7 @@ import { renderAddEntryForm } from "./src/add-entry-form";
 import { renderTable } from "./src/view/table";
 import { renderLibrary } from "./src/view/library";
 import { renderKanbanGenre } from "./src/view/kanban";
+import { renderToolbar } from "./src/view/toolbar";
 
 // World-map SVG asset, loaded lazily from the plugin dir and cached for the
 // session (undefined = not yet read, null = read failed/missing).
@@ -152,7 +153,7 @@ export class CardView extends FileView {
     return this.file ? (this.settings.fileConfigs[this.file.path] ?? {}) : {};
   }
 
-  private saveFileCfg(cfg: FileConfig): void {
+  saveFileCfg(cfg: FileConfig): void {
     if (!this.file) return;
     this.settings.fileConfigs[this.file.path] = cfg;
     // Fire-and-forget — saveSettings is debounce-safe inside Obsidian.
@@ -417,7 +418,7 @@ export class CardView extends FileView {
     setTimeout(restore, 50);
   }
 
-  private openAddModal(): void {
+  openAddModal(): void {
     new AddEntryModal(
       this.app,
       this.headers,
@@ -466,7 +467,7 @@ export class CardView extends FileView {
       root.empty(); root.addClass("csv-card-view-root");
       this.renderComponent.unload();
       this.renderComponent = new Component(); this.renderComponent.load();
-      this.renderToolbar(root);
+      renderToolbar(this, root);
       this.contentArea = root.createDiv({ cls: "csv-content-area" });
       this.installTouchScrollGuard(this.contentArea);
     } else if (this.contentArea) {
@@ -552,205 +553,10 @@ export class CardView extends FileView {
     }, true);
   }
 
-  private renderToolbar(root: HTMLElement): void {
-    const bar = root.createDiv({cls:"csv-toolbar"});
-    bar.createDiv({cls:"csv-toolbar-title", text: this.file?.basename??""});
-    const ctrl = bar.createDiv({cls:"csv-toolbar-controls"});
-    ctrl.createDiv({cls:"csv-row-count", text:`${this.rows.length} entries`});
-    const mg = ctrl.createDiv({cls:"csv-mode-group"});
-
-    // Build view mode buttons based on detected columns
-    const modes: {id: ViewMode, label: string}[] = [];
-    if (this.isTravelFile()) modes.push({id: "travel", label: "Travel"});
-    if (this.hasDateColumn()) modes.push({id: "dashboard", label: "Dashboard"});
-    if (this.getCategoryCol()) {
-      modes.push({id: "library", label: "Cards"});
-      modes.push({id: "kanban-genre", label: "Kanban"});
-    }
-    modes.push({id: "table", label: "Table"});
-
-    modes.forEach(({id, label}) => {
-      const btn = mg.createEl("button",{cls:`csv-mode-btn ${this.mode===id?"active":""}`, text:label});
-      btn.addEventListener("click",()=>{ this.mode=id; this.renderView(); });
-    });
-
-    // Search bar (only for kanban/table views, not dashboard).
-    // On mobile the input collapses to a 🔍 toggle so the toolbar fits on
-    // one row; tapping the toggle expands the input *in place of* the mode
-    // buttons (CSS hides the mode group + +Add + ⋯ while expanded so the
-    // input has the whole toolbar row). Underlying view filters live below.
-    // Closing returns the toolbar to its normal layout.
-    if (this.mode !== "dashboard") {
-      const searchToggle = ctrl.createEl("button", {
-        cls: "csv-cfg-btn csv-search-toggle",
-        text: "🔍",
-        title: "Search",
-      });
-      const searchWrap = ctrl.createDiv({ cls: "csv-search-wrap" });
-      // Input lives inside its own relative wrapper so the × clear button
-      // can absolute-position over the right edge of the input without
-      // moving any siblings (the Done button stays put even when × appears
-      // mid-typing). The toggle of × visibility uses opacity+pointer-events
-      // rather than display:none — same reason: no layout shift.
-      const inputWrap = searchWrap.createDiv({ cls: "csv-search-input-wrap" });
-      const searchInput = inputWrap.createEl("input", {
-        cls: "csv-search-input",
-        type: "text",
-        placeholder: "Search...",
-        value: this.searchQuery,
-        // iOS keyboard hints: 'search' inputmode shows a search-style
-        // keyboard; enterkeyhint relabels Return as "Search" so users
-        // know pressing it dismisses the keyboard.
-        attr: { inputmode: "search", enterkeyhint: "search", autocomplete: "off" },
-      });
-      const clearBtn = inputWrap.createEl("button", { cls: "csv-search-clear", text: "×", title: "Clear search" });
-      clearBtn.toggleClass("is-hidden", !this.searchQuery);
-      // Mobile-only "Done" button — dismisses the keyboard so the WebView
-      // returns to full height and the user can see the filtered view.
-      // The keyboard otherwise can't be dismissed once focus is locked.
-      // Hidden on desktop via CSS.
-      const doneBtn = searchWrap.createEl("button", {
-        cls: "csv-search-done",
-        text: "Done",
-        title: "Dismiss keyboard",
-      });
-      // Done does double duty on mobile: if the input is empty (user
-      // already cleared their query), collapse the search bar entirely
-      // and restore the normal toolbar. Otherwise just dismiss the
-      // keyboard so the user can see the filtered view. Lets Done be the
-      // single exit affordance — no separate × needed on mobile.
-      doneBtn.addEventListener("click", (e) => {
-        e.preventDefault();
-        if (!searchInput.value) {
-          bar.removeClass("csv-toolbar--search-expanded");
-          searchToggle.removeClass("has-query");
-          this.searchQuery = "";
-          this.renderView(true);
-          return;
-        }
-        searchInput.blur();
-      });
-      // Debounce filter re-renders so typing doesn't trigger a full content
-      // rebuild on every keystroke — on large tables (300+ rows) the empty-
-      // then-refill flash reads as "the table disappeared while I'm typing."
-      // 120ms is below human reaction latency but lets bursts collapse into
-      // a single render.
-      let searchDebounce: number | null = null;
-      searchInput.addEventListener("input", (e) => {
-        this.searchQuery = (e.target as HTMLInputElement).value;
-        clearBtn.toggleClass("is-hidden", !this.searchQuery);
-        searchToggle.toggleClass("has-query", !!this.searchQuery);
-        if (searchDebounce !== null) window.clearTimeout(searchDebounce);
-        searchDebounce = window.setTimeout(() => {
-          searchDebounce = null;
-          this.renderView(true); // Only re-render content, not toolbar
-        }, 120);
-      });
-      // Enter/Return commits the search by dismissing the keyboard so the
-      // WebView returns to full height. Filter stays applied.
-      searchInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          searchInput.blur();
-        }
-      });
-      // × clears the query but keeps the search bar open so the user can
-      // type something new without re-opening it. Done (mobile) collapses
-      // the whole bar when input is already empty.
-      clearBtn.addEventListener("click", () => {
-        this.searchQuery = "";
-        searchInput.value = "";
-        clearBtn.addClass("is-hidden");
-        searchToggle.removeClass("has-query");
-        searchInput.focus({ preventScroll: true });
-        this.renderView(true);
-      });
-      // Active-filter indicator on the toggle (mobile only).
-      if (this.searchQuery) searchToggle.addClass("has-query");
-      searchToggle.addEventListener("click", () => {
-        // Expand inline. CSS hides the other toolbar items while expanded
-        // so the input fills the row. The toolbar is in normal flow so
-        // iOS keyboard handling is whatever the WebView does — content
-        // area below shrinks to fit above the keyboard and filters live.
-        bar.addClass("csv-toolbar--search-expanded");
-        searchInput.focus({ preventScroll: true });
-      });
-    }
-
-    // Sort order toggle (only for table view with date column)
-    if (this.mode === "table" && this.hasDateColumn()) {
-      const sortNewest = this.fileCfg.sortNewestFirst ?? true;
-      const sortBtn = ctrl.createEl("button", {
-        cls: `csv-cfg-btn ${sortNewest ? "active" : ""}`,
-        text: sortNewest ? "↓ Newest" : "↑ Oldest",
-        title: "Toggle sort order"
-      });
-      sortBtn.addEventListener("click", () => {
-        const cfg = this.fileCfg;
-        cfg.sortNewestFirst = !(cfg.sortNewestFirst ?? true);
-        this.saveFileCfg(cfg);
-        // Sort flips the row order but the user is still in roughly the
-        // same area — preserving scroll is less disorienting than yanking
-        // them back to the very newest / oldest entry.
-        this.renderViewPreservingScroll();
-      });
-    }
-
-    // Secondary actions — rendered as three explicit buttons on desktop,
-    // collapsed into a single ⋯ overflow menu on phones (CSS toggles
-    // visibility via .csv-cfg-btn-secondary / .csv-cfg-btn-overflow).
-    // Handlers are defined once and reused by both surfaces so there's a
-    // single place to maintain behaviour.
-    const openColumns = () => {
-      new FileConfigModal(this.app, this.headers, this.file?.path ?? "", this.fileCfg, this.autoDetectBooleanColumns(), (cfg) => {
-        this.saveFileCfg(cfg);
-        if (cfg.defaultMode) this.mode = cfg.defaultMode;
-        this.renderView();
-      }).open();
-    };
-    const openMobile = () => this.generateMobileFiles();
-    const openBackup = () => this.backupToArchive();
-
-    ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-secondary", text: "⚙ Columns", title: "Configure columns for this file" })
-      .addEventListener("click", openColumns);
-    ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-secondary", text: "📱 Mobile", title: "Generate mobile dashboard with add form" })
-      .addEventListener("click", openMobile);
-    ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-secondary", text: "💾 Backup", title: "Copy this file to Archive/ with today's date" })
-      .addEventListener("click", openBackup);
-
-    ctrl.createEl("button",{cls:"csv-add-btn",text:"+ Add"}).addEventListener("click",()=>this.openAddModal());
-
-    // ⋯ overflow lives after + Add so on mobile (where the secondary buttons
-    // are hidden) the row reads `[modes] [search] [+ Add] [⋯]` — the primary
-    // action stays adjacent to the input, with the menu as the rightmost
-    // catch-all. On desktop this button is display:none, so + Add is last.
-    const overflowBtn = ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-overflow", text: "⋯", title: "More actions" });
-    overflowBtn.addEventListener("click", (e) => {
-      const menu = new Menu();
-      menu.addItem(i => i.setTitle("Columns").setIcon("settings").onClick(openColumns));
-      menu.addItem(i => i.setTitle("Mobile dashboard").setIcon("smartphone").onClick(openMobile));
-      menu.addItem(i => i.setTitle("Backup").setIcon("save").onClick(openBackup));
-      menu.addSeparator();
-      // Build timestamp baked in at compile time. Lets the user confirm on
-      // iPhone that iCloud has actually synced the latest deploy.
-      menu.addItem(i => i.setTitle(`Built ${__BUILD_TIME__}`).setIcon("info").setDisabled(true));
-      menu.showAtMouseEvent(e);
-    });
-
-    // Desktop: a tiny ⓘ button next to ⋯ that toasts the build time on
-    // click. On mobile it's hidden — the ⋯ menu already surfaces the same
-    // info, and toolbar real estate is precious.
-    const infoBtn = ctrl.createEl("button", {
-      cls: "csv-cfg-btn csv-cfg-btn-secondary csv-info-btn",
-      text: "ⓘ",
-      title: `Built ${__BUILD_TIME__} — click to confirm`,
-    });
-    infoBtn.addEventListener("click", () => new Notice(`csv-card-view — built ${__BUILD_TIME__}`, 4000));
-  }
 
   // ── Archive backup ──────────────────────────────────────────────────────────
 
-  private async backupToArchive(): Promise<void> {
+  async backupToArchive(): Promise<void> {
     if (!this.file) return;
     const folder = this.file.parent?.path ?? "";
     const archiveFolder = folder ? `${folder}/Archive` : "Archive";
@@ -770,7 +576,7 @@ export class CardView extends FileView {
 
   // ── Date detection ──────────────────────────────────────────────────────────
 
-  private hasDateColumn(): boolean {
+  hasDateColumn(): boolean {
     const dateCol = this.getDateCol();
     return dateCol !== null;
   }
@@ -782,7 +588,7 @@ export class CardView extends FileView {
    * travel-tracker's travel.py: country (ISO-2) + a date range + a `source`
    * discriminator. Specific enough not to fire on movies/books/habits.
    */
-  private isTravelFile(): boolean {
+  isTravelFile(): boolean {
     const have = new Set(this.headers.map(h => h.toLowerCase()));
     return have.has("country") && have.has("date_entered")
         && have.has("date_left") && have.has("source");
@@ -862,7 +668,7 @@ export class CardView extends FileView {
     return this.autoDetectBooleanColumns();
   }
 
-  private autoDetectBooleanColumns(): string[] {
+  autoDetectBooleanColumns(): string[] {
     // Detect columns that look like boolean/habit columns (values are 0/1, true/false, yes/no, or empty)
     const boolPatterns = ["0", "1", "true", "false", "yes", "no", ""];
     return this.headers.filter(h => {
@@ -1388,7 +1194,7 @@ export class CardView extends FileView {
 
   // ── Mobile Files Generation ─────────────────────────────────────────────────
 
-  private async generateMobileFiles(): Promise<void> {
+  async generateMobileFiles(): Promise<void> {
     if (!this.file) return;
 
     const csvFolder = this.file.parent?.path ?? "";
