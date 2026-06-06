@@ -156,6 +156,39 @@ await test("library: no category column shows empty state", async () => {
   assert(c.querySelector(".csv-empty-state"), "empty state present");
 });
 
+// ── Kanban view ──────────────────────────────────────────────────────────────
+const { renderKanbanGenre } = await load("./src/view/kanban.ts");
+
+await test("kanban: builds a column per genre with cards", async () => {
+  const rows = [
+    { Title: "Dune", Category: "SciFi", Status: "Finished" },
+    { Title: "It", Category: "Horror", Status: "Not started" },
+  ];
+  const view = {
+    headers: ["Title", "Category", "Status"], rows, searchQuery: "",
+    settings: { categoryColumn: "Category" },
+    getCategoryCol: () => "Category", getStatusCol: () => "Status",
+    getFilteredRows: () => rows, getNotesCol: () => null,
+    getTitle: (r) => r.Title, getSubtitle: () => "",
+    titleKey: () => "Title", authorKey: () => undefined,
+    isNotesCol: () => false, isSelectCol: () => false, getColumnValues: () => [],
+    notesFileExists: () => false, openOrCreateNotes: () => {}, openNoteExpander: () => {},
+    openRowContextMenu: () => {}, scheduleSave: () => {}, contentEl: document.body.createDiv(),
+  };
+  const c = document.body.createDiv();
+  renderKanbanGenre(view, c);
+  assert(c.querySelector(".csv-kanban-board"), "board present");
+  assert(c.querySelectorAll(".csv-kanban-col").length === 2, "2 genre columns");
+  assert(c.querySelectorAll(".csv-kanban-card").length === 2, "2 cards");
+});
+
+await test("kanban: no category column shows empty state", async () => {
+  const view = { getCategoryCol: () => null, getStatusCol: () => null, settings: { categoryColumn: "Category" } };
+  const c = document.body.createDiv();
+  renderKanbanGenre(view, c);
+  assert(c.querySelector(".csv-empty-state"), "empty state present");
+});
+
 console.log(`\n${"=".repeat(50)}`);
 console.log(`View smoke tests: ${passed} passed, ${failed} failed`);
 console.log(`${"=".repeat(50)}`);
