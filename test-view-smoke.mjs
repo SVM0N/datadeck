@@ -75,6 +75,54 @@ await test("travel: map SVG injects + colors confirmed gold, unknown grey", asyn
   assert(zz && zz.classList.contains("cp-unvisited"), "ZZ left unvisited (grey)");
 });
 
+// ── Table view ───────────────────────────────────────────────────────────────
+// Driven with a hand-built `view` stub (no CardView/FileView instance needed).
+const { renderTable } = await load("./src/view/table.ts");
+
+await test("table: renders headers + rows without throwing", async () => {
+  const rows = [
+    { Title: "Dune", Status: "Read", notes: "great" },
+    { Title: "Hyperion", Status: "", notes: "" },
+  ];
+  const view = {
+    headers: ["Title", "Status", "notes"],
+    rows,
+    searchQuery: "",
+    settings: { columnWidths: {} },
+    getFilteredRows: () => rows,
+    persistSettings: async () => {},
+    scheduleSave: () => {},
+    openRowContextMenu: () => {},
+    isNotesCol: (h) => h === "notes",
+    openNoteExpander: () => {},
+    isSelectCol: (h) => h === "Status",
+    renderSelectField: (td) => { td.setText("sel"); return td; },
+    notesFileExists: () => false,
+    openOrCreateNotes: () => {},
+    deleteWithUndo: () => {},
+  };
+  const c = document.body.createDiv();
+  renderTable(view, c);
+  assert(c.querySelector("table.csv-table"), "table present");
+  assert(c.querySelectorAll("tbody tr").length === 2, "2 data rows");
+  assert(c.querySelectorAll("thead th").length === 4, "3 headers + action column");
+  assert(c.querySelector(".csv-table-notes-cell"), "notes cell rendered for notes column");
+});
+
+await test("table: search count appears when a query is set", async () => {
+  const rows = [{ Title: "Dune" }];
+  const view = {
+    headers: ["Title"], rows, searchQuery: "du", settings: { columnWidths: {} },
+    getFilteredRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
+    openRowContextMenu: () => {}, isNotesCol: () => false, openNoteExpander: () => {},
+    isSelectCol: () => false, renderSelectField: (td) => td, notesFileExists: () => false,
+    openOrCreateNotes: () => {}, deleteWithUndo: () => {},
+  };
+  const c = document.body.createDiv();
+  renderTable(view, c);
+  assert(c.querySelector(".csv-search-results"), "search result count shown");
+});
+
 console.log(`\n${"=".repeat(50)}`);
 console.log(`View smoke tests: ${passed} passed, ${failed} failed`);
 console.log(`${"=".repeat(50)}`);

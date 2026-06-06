@@ -22,6 +22,7 @@ import { AddEntryModal, NoteExpanderModal, FileConfigModal, SearchModal } from "
 import { renderTravel } from "./src/travel-view";
 import { CardViewSettingTab } from "./src/settings-tab";
 import { renderAddEntryForm } from "./src/add-entry-form";
+import { renderTable } from "./src/view/table";
 
 // World-map SVG asset, loaded lazily from the plugin dir and cached for the
 // session (undefined = not yet read, null = read failed/missing).
@@ -59,12 +60,12 @@ export class CardView extends FileView {
   mode: ViewMode;
   private renderComponent: Component;
   private saveTimer: number | null = null;
-  private searchQuery: string = "";
+  searchQuery: string = "";
   // Callback into the plugin to persist `settings` to data.json.
   // Passed at construction time (see CardViewPlugin.onload) so the view
   // doesn't have to reach back through `(app as any).plugins.plugins[...]`
   // to find its own plugin instance.
-  private persistSettings: () => Promise<void>;
+  persistSettings: () => Promise<void>;
 
   constructor(leaf: WorkspaceLeaf, settings: CardViewSettings, persistSettings: () => Promise<void>) {
     super(leaf);
@@ -125,7 +126,7 @@ export class CardView extends FileView {
     this.headers = []; this.rows = []; this.contentEl.empty();
   }
 
-  private scheduleSave(): void {
+  scheduleSave(): void {
     if (this.saveTimer) window.clearTimeout(this.saveTimer);
     this.saveTimer = window.setTimeout(() => this.doSave(), 600);
   }
@@ -184,7 +185,7 @@ export class CardView extends FileView {
     ]);
   }
 
-  private isNotesCol(h: string): boolean {
+  isNotesCol(h: string): boolean {
     const notesCol = this.getNotesCol();
     // If we resolved a specific column, only that one qualifies
     if (notesCol) return h === notesCol;
@@ -192,7 +193,7 @@ export class CardView extends FileView {
     return this.settings.notesColumns.some(n => n.toLowerCase() === h.toLowerCase());
   }
 
-  private isSelectCol(h: string) { return this.settings.selectColumns.some(s => s.toLowerCase()===h.toLowerCase()); }
+  isSelectCol(h: string) { return this.settings.selectColumns.some(s => s.toLowerCase()===h.toLowerCase()); }
 
   private getStatusCol(): string | null {
     if (this.fileCfg.statusColumn) {
@@ -252,7 +253,7 @@ export class CardView extends FileView {
     return normalizePath(`${folder}/${title}.md`);
   }
 
-  private notesFileExists(row: CSVRow) { return !!this.app.vault.getAbstractFileByPath(this.notesFilePath(row)); }
+  notesFileExists(row: CSVRow) { return !!this.app.vault.getAbstractFileByPath(this.notesFilePath(row)); }
 
   /**
    * Remove a row, save, re-render — and offer Undo via a Notice. Restoring
@@ -263,7 +264,7 @@ export class CardView extends FileView {
    * Used by every delete path (expander modal, kanban right-click, table
    * row button) so deletes have one consistent escape hatch.
    */
-  private deleteWithUndo(row: CSVRow): void {
+  deleteWithUndo(row: CSVRow): void {
     const idx = this.rows.indexOf(row);
     if (idx < 0) return;
     this.rows.splice(idx, 1);
@@ -298,7 +299,7 @@ export class CardView extends FileView {
    * power-users in library/table had to use buttons for status changes
    * and the toolbar for delete.
    */
-  private openRowContextMenu(row: CSVRow, e: MouseEvent): void {
+  openRowContextMenu(row: CSVRow, e: MouseEvent): void {
     const menu = new Menu();
     menu.addItem(i => i.setTitle("Open / Create Notes file").setIcon("file-text").onClick(() => this.openOrCreateNotes(row)));
     const notesCol = this.getNotesCol();
@@ -321,7 +322,7 @@ export class CardView extends FileView {
     menu.showAtMouseEvent(e);
   }
 
-  private async openOrCreateNotes(row: CSVRow): Promise<void> {
+  async openOrCreateNotes(row: CSVRow): Promise<void> {
     const path = this.notesFilePath(row);
     let file = this.app.vault.getAbstractFileByPath(path) as TFile|null;
     if (!file) {
@@ -336,7 +337,7 @@ export class CardView extends FileView {
     await this.app.workspace.getLeaf("tab").openFile(file as TFile);
   }
 
-  private openNoteExpander(row: CSVRow, notesCol: string): void {
+  openNoteExpander(row: CSVRow, notesCol: string): void {
     new NoteExpanderModal(
       this.app,
       row,
@@ -434,7 +435,7 @@ export class CardView extends FileView {
 
   // ── Select field ───────────────────────────────────────────────────────────
 
-  private renderSelectField(container: HTMLElement, row: CSVRow, h: string): HTMLElement {
+  renderSelectField(container: HTMLElement, row: CSVRow, h: string): HTMLElement {
     const val = row[h] ?? "";
     const chip = container.createDiv({ cls: `csv-select-chip ${val ? "" : "empty"}` });
     chip.setText(val || "—");
@@ -506,7 +507,7 @@ export class CardView extends FileView {
     else if (this.mode === "dashboard") void this.renderDashboard(content);
     else if (this.mode === "library") this.renderLibrary(content);
     else if (this.mode === "kanban-genre") this.renderKanbanGenre(content);
-    else this.renderTable(content);
+    else renderTable(this, content);
   }
 
   /**
@@ -803,7 +804,7 @@ export class CardView extends FileView {
 
   // ── Search filtering ─────────────────────────────────────────────────────────
 
-  private getFilteredRows(): CSVRow[] {
+  getFilteredRows(): CSVRow[] {
     let result = this.rows;
 
     // Filter by search query
@@ -1927,111 +1928,6 @@ export class CardView extends FileView {
     // useful purpose. Removed; specific child elements stop propagation when
     // they need to.)
     card.addEventListener("contextmenu", e => this.openRowContextMenu(row, e));
-  }
-
-  // ── Table ──────────────────────────────────────────────────────────────────
-
-  private renderTable(container: HTMLElement): void {
-    const filteredRows = this.getFilteredRows();
-
-    // Show search result count if searching
-    if (this.searchQuery.trim()) {
-      container.createDiv({ cls: "csv-search-results", text: `Found ${filteredRows.length} of ${this.rows.length} entries` });
-    }
-
-    const wrap = container.createDiv({cls:"csv-table-wrapper"});
-    const table = wrap.createEl("table",{cls:"csv-table"});
-    const hr = table.createEl("thead").createEl("tr");
-
-    this.headers.forEach(h => {
-      const th = hr.createEl("th");
-      th.setText(h);
-      const savedWidth = this.settings.columnWidths[h];
-      if (savedWidth) th.style.width = savedWidth + "px";
-      const handle = th.createDiv({cls:"csv-col-resize-handle"});
-      let startX = 0, startW = 0;
-      // Pointer events (not mouse) so the handle works under touch as well as a
-      // cursor; setPointerCapture routes move/up to the handle even when the
-      // finger/cursor strays off the 6px strip, and lets us drop the
-      // document-level listeners. `touch-action:none` on the handle (CSS) stops
-      // the browser claiming the gesture for scrolling. Persist on release —
-      // the old mouseup only mutated in-memory settings, so resized widths were
-      // silently lost on reload.
-      handle.addEventListener("pointerdown", e => {
-        e.preventDefault(); e.stopPropagation();
-        handle.setPointerCapture(e.pointerId);
-        startX=e.clientX; startW=th.offsetWidth;
-        const onMove = (ev: PointerEvent) => { th.style.width=Math.max(60,startW+ev.clientX-startX)+"px"; };
-        const onUp = (ev: PointerEvent) => {
-          this.settings.columnWidths[h]=Math.max(60,startW+ev.clientX-startX);
-          handle.removeEventListener("pointermove",onMove);
-          handle.removeEventListener("pointerup",onUp);
-          void this.persistSettings();
-        };
-        handle.addEventListener("pointermove",onMove);
-        handle.addEventListener("pointerup",onUp);
-      });
-    });
-    hr.createEl("th",{text:""});
-
-    // Skip the clip-detection on touch — the fade gradient it triggers is
-    // a hover affordance and irrelevant without a cursor. Saves N rAFs × N
-    // forced reflows per render on phones (the prime cause of table-view lag
-    // on iPhone when the file has hundreds of rows).
-    const isTouch = matchMedia("(pointer: coarse)").matches;
-    const tbody = table.createEl("tbody");
-    filteredRows.forEach((row) => {
-      const tr = tbody.createEl("tr");
-      tr.addEventListener("contextmenu", e => this.openRowContextMenu(row, e));
-      this.headers.forEach(h => {
-        const td = tr.createEl("td");
-        if (this.isNotesCol(h)) {
-          td.addClass("csv-table-notes-cell");
-          const preview = (row[h]??"").replace(/#{1,6}\s/g,"").replace(/[*_>`]/g,"").split("\n").filter(l=>l.trim()).slice(0,3).join(" · ");
-          const display = preview ? (preview.slice(0,200)+(preview.length>200?"…":"")) : "+ Add note";
-          const span = td.createSpan({ text: display });
-          if (!preview) span.addClass("csv-table-notes-empty");
-          td.title = "Click to open note";
-          // Cell-click opens the expander. The "⤢" button used to live here
-          // too, but the cell is the obvious click target — the button was
-          // redundant noise.
-          td.addEventListener("click", (e) => { e.stopPropagation(); this.openNoteExpander(row, h); });
-        } else if (this.isSelectCol(h)) {
-          this.renderSelectField(td, row, h);
-        } else {
-          const val = row[h] ?? "";
-          td.setText(val);
-          if (val.length > 80) td.title = val;
-          this.makeEditable(td, row, h);
-        }
-      });
-      const at = tr.createEl("td",{cls:"csv-table-action"});
-      const hasFile = this.notesFileExists(row);
-      at.createEl("button",{cls:`csv-table-notes-btn ${hasFile?"exists":""}`,text:hasFile?"📄":"✚",title:hasFile?"Open notes":"Create notes"})
-        .addEventListener("click",()=>this.openOrCreateNotes(row));
-      at.createEl("button",{cls:"csv-table-del-btn",text:"✕",title:"Delete row (Undo available)"})
-        .addEventListener("click",()=>this.deleteWithUndo(row));
-    });
-    // Detect overflowing cells in one rAF instead of one per row. Single
-    // querySelectorAll, single forced-layout batch — orders of magnitude
-    // cheaper than per-row rAF on big files. Skipped entirely on touch.
-    if (!isTouch) {
-      requestAnimationFrame(() => {
-        tbody.querySelectorAll<HTMLElement>("td:not(.csv-table-notes-cell):not(.csv-table-action)").forEach(cell => {
-          if (cell.scrollHeight > cell.clientHeight + 1) cell.addClass("csv-cell--clipped");
-        });
-      });
-    }
-  }
-
-  private makeEditable(el: HTMLElement, row: CSVRow, h: string): void {
-    el.addEventListener("click", () => {
-      el.empty();
-      const input = el.createEl("input",{cls:"csv-inline-input",value:row[h]??"",type:"text"});
-      input.focus(); input.select();
-      input.addEventListener("blur",()=>{ row[h]=input.value; this.scheduleSave(); el.empty(); el.setText(input.value||"—"); });
-      input.addEventListener("keydown",e=>{ if(e.key==="Enter")input.blur(); if(e.key==="Escape"){el.empty();el.setText(row[h]||"—");} });
-    });
   }
 
   onunload(): void { this.renderComponent.unload(); if(this.saveTimer) window.clearTimeout(this.saveTimer); }
