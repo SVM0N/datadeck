@@ -7,6 +7,7 @@ import { Menu, Notice } from "obsidian";
 import type { CardView } from "../../main";
 import { ViewMode } from "../types";
 import { FileConfigModal } from "../modals";
+import { generateMobileFiles } from "./mobile";
 
 declare const __BUILD_TIME__: string;
 
@@ -166,7 +167,7 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
       view.renderView();
     }).open();
   };
-  const openMobile = () => view.generateMobileFiles();
+  const openMobile = () => generateMobileFiles(view);
   const openBackup = () => view.backupToArchive();
 
   ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-secondary", text: "⚙ Columns", title: "Configure columns for this file" })

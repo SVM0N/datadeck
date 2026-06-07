@@ -31,11 +31,6 @@ import { renderDashboard } from "./src/view/dashboard";
 // World-map SVG asset, loaded lazily from the plugin dir and cached for the
 // session (undefined = not yet read, null = read failed/missing).
 let worldMapSvgCache: string | null | undefined = undefined;
-import {
-  generateHabitMobileDashboard as habitMobileTemplate,
-  generateLibraryMobileDashboard as libraryMobileTemplate,
-  generateGenericMobileDashboard as genericMobileTemplate,
-} from "./src/mobile-templates";
 
 // Injected by esbuild at build time (see esbuild.config.mjs). Surfaced via
 // the ⋯ menu so the user can confirm which build is actually loaded —
@@ -695,91 +690,6 @@ export class CardView extends FileView {
   timelineYear: number = new Date().getFullYear();
 
 
-  // ── Mobile Files Generation ─────────────────────────────────────────────────
-
-  async generateMobileFiles(): Promise<void> {
-    if (!this.file) return;
-
-    const csvFolder = this.file.parent?.path ?? "";
-    // Dashboards live in a Mobile/ subfolder to keep the main folder uncluttered.
-    const mobileFolder = csvFolder ? `${csvFolder}/Mobile` : "Mobile";
-    if (!await this.app.vault.adapter.exists(mobileFolder)) {
-      await this.app.vault.adapter.mkdir(mobileFolder);
-    }
-    const dashboardPath = `${mobileFolder}/${this.file.basename}.md`;
-
-    // Single canonical CSV path — both csv-add (write) and dataviewjs (read)
-    // point at the same file. (Pre-migration the read path went through a
-    // _csv_helpers/ mirror because the source was xlsx; that's gone now.)
-    const csvPath = this.file.path;
-
-    // Determine file type (habit tracker vs library)
-    const dateCol = this.getDateCol();
-    const categoryCol = this.getCategoryCol();
-    // Note-relative path so `csv-add file:` still resolves if the parent
-    // folder is moved or renamed (the dashboard lives one folder deeper
-    // than the data file, under Mobile/).
-    const filePath = "../" + this.file.name;
-
-    let dashboardContent: string;
-
-    if (dateCol) {
-      // Habit tracker - use Dataview to query CSV
-      dashboardContent = habitMobileTemplate({
-        filePath,
-        csvPath,
-        habitCols: this.getBooleanColumns(),
-        dateCol,
-      });
-    } else if (categoryCol) {
-      // Library (books, movies) - cards grouped by category.
-      // titleKey falls back through Quote/Headline/Phrase for files like
-      // quotes/dictionary that have no Title/Name column.
-      const titleKey = this.titleKey()
-        ?? this.resolveCol(["Quote", "quote", "Headline", "headline", "Phrase", "phrase"])
-        ?? this.headers[0]
-        ?? "Title";
-      dashboardContent = libraryMobileTemplate({
-        filePath,
-        csvPath,
-        titleKey,
-        categoryCol,
-        statusCol: this.getStatusCol() ?? "Status",
-        authorKey: this.authorKey() ?? "",
-        yearCol: this.resolveCol(["Year", "year", "Released", "released"]) ?? "",
-        ratingCol: this.resolveCol(["Rating", "rating", "Score", "score", "Stars", "stars"]) ?? "",
-        themeCol: this.resolveCol(["Theme", "theme", "Subgenre", "subgenre", "Mood", "mood"]) ?? "",
-        // 2-col grid when the title is a short label (book/movie name); 1-col
-        // when titleKey fell back to Quote/Headline (long sentences).
-        compactGrid: this.titleKey() !== null,
-      });
-    } else {
-      // Generic - scrollable table over all headers
-      dashboardContent = genericMobileTemplate({
-        filePath,
-        csvPath,
-        headers: this.headers,
-      });
-    }
-
-    try {
-      const existingDashboard = this.app.vault.getAbstractFileByPath(dashboardPath);
-      if (existingDashboard && existingDashboard instanceof TFile) {
-        await this.app.vault.modify(existingDashboard, dashboardContent);
-        new Notice(`Updated: ${dashboardPath}`);
-      } else {
-        await this.app.vault.create(dashboardPath, dashboardContent);
-        new Notice(`Created: ${dashboardPath}`);
-      }
-    } catch {
-      // File exists but wasn't found - try modify
-      const f = this.app.vault.getAbstractFileByPath(dashboardPath);
-      if (f instanceof TFile) {
-        await this.app.vault.modify(f, dashboardContent);
-        new Notice(`Updated: ${dashboardPath}`);
-      }
-    }
-  }
 
 
   // ── Library View ────────────────────────────────────────────────────────────

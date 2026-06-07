@@ -253,6 +253,29 @@ await test("dashboard: no date column shows empty state", async () => {
   assert(c.querySelector(".csv-empty-state"), "empty state present");
 });
 
+// ── Mobile dashboard generation ──────────────────────────────────────────────
+const { generateMobileFiles } = await load("./src/view/mobile.ts");
+
+await test("mobile: writes a habit dashboard at Mobile/<file>.md", async () => {
+  const created = [];
+  const view = {
+    file: { name: "habits.csv", basename: "habits", path: "Data/habits.csv", parent: { path: "Data" } },
+    headers: ["date", "gym"],
+    getDateCol: () => "date", getCategoryCol: () => null, getBooleanColumns: () => ["gym"],
+    getStatusCol: () => null, titleKey: () => null, authorKey: () => null, resolveCol: () => null,
+    app: { vault: {
+      adapter: { exists: async () => true, mkdir: async () => {} },
+      getAbstractFileByPath: () => null,
+      create: async (p, c) => { created.push({ p, c }); },
+      modify: async () => {},
+    } },
+  };
+  await generateMobileFiles(view);
+  assert(created.length === 1, "one dashboard created");
+  assert(created[0].p === "Data/Mobile/habits.md", "dashboard path under Mobile/");
+  assert(created[0].c.length > 0, "non-empty dashboard content");
+});
+
 console.log(`\n${"=".repeat(50)}`);
 console.log(`View smoke tests: ${passed} passed, ${failed} failed`);
 console.log(`${"=".repeat(50)}`);
