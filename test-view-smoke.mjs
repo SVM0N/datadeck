@@ -76,6 +76,57 @@ await test("travel: map SVG injects + colors confirmed gold, unknown grey", asyn
   assert(zz && zz.classList.contains("cp-unvisited"), "ZZ left unvisited (grey)");
 });
 
+await test("travel: clicking a confirmed country opens the detail panel", async () => {
+  const svg = '<svg><path class="country-path" data-iso="FR"></path><path class="country-path" data-iso="ZZ"></path></svg>';
+  const c = document.body.createDiv();
+  await renderTravel(c, ROWS, async () => svg, () => {}, null, () => {});
+  const fr = c.querySelector('.country-path[data-iso="FR"]');
+  fr.dispatchEvent(new window.Event("click", { bubbles: true }));
+  assert(fr.classList.contains("cp-selected"), "FR highlighted on the map");
+  const detail = c.querySelector(".csv-tv-detail");
+  assert(detail, "detail panel opened");
+  assert(detail.querySelector(".csv-tv-detail-name").textContent === "France", "panel names the country");
+  assert(detail.querySelectorAll("tbody tr").length === 1, "one FR trip listed");
+  // Re-click toggles off.
+  fr.dispatchEvent(new window.Event("click", { bubbles: true }));
+  assert(!c.querySelector(".csv-tv-detail"), "re-click clears the panel");
+  assert(!fr.classList.contains("cp-selected"), "highlight cleared");
+});
+
+await test("travel: countries-table row click selects; unvisited map click clears", async () => {
+  const svg = '<svg><path class="country-path" data-iso="JP"></path><path class="country-path" data-iso="ZZ"></path></svg>';
+  const c = document.body.createDiv();
+  await renderTravel(c, ROWS, async () => svg, () => {}, null, () => {});
+  const row = c.querySelector('tr[data-iso="JP"]');
+  assert(row, "countries table rows carry data-iso");
+  row.dispatchEvent(new window.Event("click", { bubbles: true }));
+  assert(c.querySelector(".csv-tv-detail-name").textContent === "Japan", "row click opens Japan panel");
+  assert(row.classList.contains("is-selected"), "row highlighted");
+  c.querySelector('.country-path[data-iso="ZZ"]').dispatchEvent(new window.Event("click", { bubbles: true }));
+  assert(!c.querySelector(".csv-tv-detail"), "clicking an unvisited country dismisses");
+});
+
+await test("travel: timeline segments carry data-iso and years get summaries", async () => {
+  const c = document.body.createDiv();
+  await renderTravel(c, ROWS, async () => null, () => {}, null, () => {});
+  const seg = c.querySelector(".csv-tv-seg");
+  assert(seg && seg.getAttribute("data-iso"), "segment has data-iso");
+  const sub = c.querySelector(".csv-tv-tl-sub");
+  assert(sub, "year summary present");
+  // 2021 (top year, sorted desc) has only the inferred IT trip → countries only, no confirmed days.
+  assert(sub.textContent === "1 country", `2021 summary is countries-only (got "${sub.textContent}")`);
+});
+
+await test("travel: stats row includes Cities and Longest trip tiles", async () => {
+  const c = document.body.createDiv();
+  await renderTravel(c, ROWS, async () => null, () => {}, null, () => {});
+  const labels = Array.from(c.querySelectorAll(".csv-tv-stat-label")).map(e => e.textContent);
+  assert(labels.includes("Cities"), "Cities tile present");
+  assert(labels.includes("Longest trip"), "Longest trip tile present");
+  // No current-stay banner: fixture trips are all in the past.
+  assert(!c.querySelector(".csv-tv-now"), "no stale 'currently in' banner");
+});
+
 // ── Table view ───────────────────────────────────────────────────────────────
 // Driven with a hand-built `view` stub (no CardView/FileView instance needed).
 const { renderTable } = await load("./src/view/table.ts");

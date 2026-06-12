@@ -3503,3 +3503,82 @@ select.csv-add-row-control {
   border-color: var(--csv-accent);
   color: var(--text-accent);
 }
+
+/* ─── Travel view: country selection + detail panel ───────────────────────── */
+
+/* "Currently in …" banner under the stats row. Gold family — it's derived
+   from confirmed data, same trust level as the gold map fill. */
+.csv-tv-now {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+  margin: -12px 0 22px;
+  padding: 10px 14px;
+  background: var(--csv-amber-bg);
+  border: 1px solid var(--tv-gold);
+  border-radius: var(--csv-radius-sm);
+  font-size: 13px;
+}
+.csv-tv-now-loc { font-weight: 600; color: var(--csv-text); }
+.csv-tv-now-sub { color: var(--csv-text-muted); font-size: 12px; }
+
+/* Selected country on the map */
+.csv-tv-map .country-path.cp-selected {
+  stroke: var(--text-accent);
+  stroke-width: 1.4;
+  filter: brightness(1.2);
+}
+/* Tiny countries keep a visible (not transparent) selection stroke. */
+.csv-tv-map .country-path.cp-tiny.cp-selected { stroke: var(--text-accent); }
+
+/* Timeline dimming while a country is selected */
+.csv-tv-seg { cursor: pointer; }
+.csv-tv-seg.is-dim { opacity: 0.18; }
+
+/* Clickable Countries-table rows */
+.csv-tv-table tr.csv-tv-row-click { cursor: pointer; }
+.csv-tv-table tr.is-selected td { background: var(--csv-amber-bg); }
+
+/* Detail panel (under the map) */
+.csv-tv-detailwrap { scroll-margin-top: 12px; }
+.csv-tv-detail {
+  margin: -12px 0 24px;
+  background: var(--csv-surface);
+  border: 1px solid var(--tv-gold);
+  border-radius: var(--csv-radius-sm);
+  overflow: hidden;
+}
+.csv-tv-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--csv-border);
+}
+.csv-tv-detail-flag { font-size: 26px; line-height: 1; }
+.csv-tv-detail-titles { flex: 1; min-width: 0; }
+.csv-tv-detail-name { font-size: 15px; font-weight: 600; color: var(--csv-text); }
+.csv-tv-detail-sub { font-size: 11px; color: var(--csv-text-muted); margin-top: 2px; }
+.csv-tv-detail-close {
+  background: none;
+  border: none;
+  color: var(--csv-text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--csv-radius-sm);
+}
+.csv-tv-detail-close:hover { color: var(--csv-text); background: var(--background-modifier-hover); }
+.csv-tv-detail .csv-tv-table-wrap { margin-bottom: 0; }
+.csv-tv-detail .csv-tv-table { margin-bottom: 0; }
+.csv-tv-detail .csv-tv-table th:first-child,
+.csv-tv-detail .csv-tv-table td:first-child { padding-left: 14px; }
+
+/* Timeline year summary ("123d · 4 countries") */
+.csv-tv-tl-sub {
+  margin-left: 8px;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--csv-text-faint);
+}

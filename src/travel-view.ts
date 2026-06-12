@@ -10,8 +10,8 @@
 
 import { CSVRow, ResidencyRule } from "./types";
 import {
-  analyzeTravel, TravelModel, TravelRow, countryName, flag, tripDays,
-  CONT_NAMES, TOTAL_COUNTRIES,
+  analyzeTravel, TravelModel, TravelRow, countryName, flag, tripDays, pd,
+  currentStay, CONT_NAMES, TOTAL_COUNTRIES,
 } from "./travel-data";
 import { makeFieldInput } from "./modals";
 import { evaluateResidency } from "./residency";
@@ -128,20 +128,52 @@ export async function renderTravel(
   }
 
   register(attachTooltip(root));
+
+  // ── Country selection ─────────────────────────────────────────────────────
+  // One country can be "selected" at a time: map shape, Countries-table row,
+  // and timeline segments are all click targets. Selecting highlights the map
+  // shape, dims other countries' timeline segments, and opens a detail panel
+  // (all trips there) right under the map. Re-click or ✕ clears.
+  let selectedIso: string | null = null;
+  const applySelection = () => {
+    root.querySelectorAll<SVGPathElement>(".country-path").forEach(p => {
+      const iso = (p.getAttribute("data-iso") || "").toUpperCase();
+      p.classList.toggle("cp-selected", !!selectedIso && iso === selectedIso);
+    });
+    root.querySelectorAll<HTMLElement>(".csv-tv-seg").forEach(s => {
+      s.classList.toggle("is-dim", !!selectedIso && s.getAttribute("data-iso") !== selectedIso);
+    });
+    root.querySelectorAll<HTMLElement>("tr[data-iso]").forEach(tr => {
+      tr.classList.toggle("is-selected", !!selectedIso && tr.getAttribute("data-iso") === selectedIso);
+    });
+    detailWrap.empty();
+    if (selectedIso) {
+      renderCountryDetail(detailWrap, model, selectedIso, () => select(null));
+      // The panel lives under the map; a click that came from the Countries
+      // table or timeline further down would otherwise change nothing visible.
+      detailWrap.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  };
+  const select = (iso: string | null) => {
+    selectedIso = iso && iso !== selectedIso ? iso : null;
+    applySelection();
+  };
+
   renderStats(root, model);
   // Map wrapper is created synchronously (keeps document order); filled async.
   const mapWrap = root.createDiv({ cls: "csv-tv-mapwrap" });
   mapWrap.createDiv({ cls: "csv-tv-map-loading", text: "Loading map…" });
+  const detailWrap = root.createDiv({ cls: "csv-tv-detailwrap" });
   if (residencyRules && residencyRules.length) renderResidency(root, model.confirmed, residencyRules);
-  renderCountries(root, model);
-  renderTimeline(root, model);
+  renderCountries(root, model, select);
+  renderTimeline(root, model, select);
   renderTrips(root, model, onEdit);
 
   // Async: inject + color the SVG once loaded. Failure degrades gracefully.
   try {
     const svg = await loadMapSvg();
     mapWrap.empty();
-    if (svg) injectMap(mapWrap, svg, model);
+    if (svg) injectMap(mapWrap, svg, model, select);
     else mapWrap.createDiv({ cls: "csv-tv-map-loading", text: "World map asset not found (world-map.svg)." });
   } catch (_e) {
     mapWrap.empty();
@@ -164,9 +196,39 @@ function renderStats(root: HTMLElement, m: TravelModel): void {
     [...m.visitedContinents].map(c => CONT_NAMES[c] || c).sort().join(", "));
   stat("Confirmed trips", String(m.confirmed.length));
   stat("Confirmed days", String(m.totalConfirmedDays));
+
+  // Cities — distinct, case-insensitive, confirmed trips only.
+  const cities = new Set(m.confirmed.map(r => r.city.trim().toLowerCase()).filter(Boolean));
+  if (cities.size) stat("Cities", String(cities.size));
+
+  // Longest single confirmed trip.
+  let longest: TravelRow | null = null, longestDays = 0;
+  for (const r of m.confirmed) {
+    const d = tripDays(r);
+    if (d > longestDays) { longestDays = d; longest = r; }
+  }
+  if (longest) {
+    const year = longest.date_entered.slice(0, 4);
+    stat("Longest trip", `${longestDays}d`, `${flag(longest.country)} ${countryName(longest.country)}${year ? ` · ${year}` : ""}`);
+  }
+
+  // "Currently in …" banner — only when today falls inside a confirmed trip
+  // (or a trip with a blank date_left = still there). Silently absent for
+  // historic logs, so it never shows a stale location.
+  const stay = currentStay(m.confirmed);
+  if (stay) {
+    const entered = pd(stay.date_entered)!;
+    const days = Math.max(1, Math.round((Date.now() - entered.getTime()) / 86400000) + 1);
+    const banner = root.createDiv({ cls: "csv-tv-now" });
+    banner.createSpan({ cls: "csv-tv-now-loc", text: `📍 Currently in ${flag(stay.country)} ${countryName(stay.country)}` });
+    banner.createSpan({
+      cls: "csv-tv-now-sub",
+      text: ` — since ${stay.date_entered} (day ${days})${stay.city ? ` · ${stay.city}` : ""}`,
+    });
+  }
 }
 
-function injectMap(wrap: HTMLElement, svg: string, m: TravelModel): void {
+function injectMap(wrap: HTMLElement, svg: string, m: TravelModel, select: (iso: string | null) => void): void {
   const box = wrap.createDiv({ cls: "csv-tv-map" });
   box.innerHTML = svg;
   box.querySelectorAll<SVGPathElement>(".country-path").forEach(p => {
@@ -176,16 +238,24 @@ function injectMap(wrap: HTMLElement, svg: string, m: TravelModel): void {
       p.classList.add("cp-confirmed");
       const stat = m.countryDays.find(c => c.iso === iso);
       p.setAttr("aria-label", `${countryName(iso)} — ${stat && stat.days ? stat.days + "d confirmed" : "confirmed"}`);
-      p.setAttr("data-tip", `${countryName(iso)}${stat && stat.days ? "  ·  " + stat.days + "d" : ""}`);
+      p.setAttr("data-tip", `${countryName(iso)}${stat && stat.days ? "  ·  " + stat.days + "d" : ""}  ·  click for trips`);
     } else if (iso && m.inferredOnlyCountries.has(iso)) {
       p.classList.add("cp-inferred");
       p.setAttr("aria-label", `${countryName(iso)} — photo evidence`);
-      p.setAttr("data-tip", `${countryName(iso)}  ·  photo evidence`);
+      p.setAttr("data-tip", `${countryName(iso)}  ·  photo evidence  ·  click for trips`);
     } else if (iso) {
       p.classList.add("cp-unvisited");
       p.setAttr("data-tip", countryName(iso));
     } else {
       p.classList.add("cp-unvisited");
+    }
+    // Visited countries open the detail panel; clicking open water / an
+    // unvisited country clears the selection (a natural "dismiss").
+    if (iso) {
+      p.addEventListener("click", () => {
+        if (m.allCountries.has(iso)) select(iso);
+        else select(null);
+      });
     }
   });
   // Micro-states (Singapore, Malta, island nations…) render only a few pixels
@@ -201,6 +271,54 @@ function injectMap(wrap: HTMLElement, svg: string, m: TravelModel): void {
   const legend = wrap.createDiv({ cls: "csv-tv-map-legend" });
   legend.createSpan({ cls: "csv-tv-leg" }).innerHTML = `<span class="csv-tv-dot cp-confirmed"></span> Confirmed`;
   legend.createSpan({ cls: "csv-tv-leg" }).innerHTML = `<span class="csv-tv-dot cp-inferred"></span> Photo evidence`;
+}
+
+/**
+ * Per-country detail panel: header (flag, name, totals) + every trip there,
+ * confirmed and photo-inferred, newest first. Opened by clicking a map shape,
+ * a Countries-table row, or a timeline segment; closed via ✕ / re-click.
+ */
+function renderCountryDetail(wrap: HTMLElement, m: TravelModel, iso: string, onClose: () => void): void {
+  const card = wrap.createDiv({ cls: "csv-tv-detail" });
+  const head = card.createDiv({ cls: "csv-tv-detail-head" });
+  head.createSpan({ cls: "csv-tv-detail-flag", text: flag(iso) });
+  const titles = head.createDiv({ cls: "csv-tv-detail-titles" });
+  titles.createDiv({ cls: "csv-tv-detail-name", text: countryName(iso) });
+
+  const conf = m.confirmed.filter(r => r.country === iso);
+  const inf = m.inferred.filter(r => r.country === iso);
+  const days = m.countryDays.find(c => c.iso === iso)?.days ?? 0;
+  const cities = new Set([...conf, ...inf].map(r => r.city.trim()).filter(Boolean));
+  const bits: string[] = [];
+  if (conf.length) bits.push(`${conf.length} confirmed trip${conf.length === 1 ? "" : "s"}`);
+  if (days) bits.push(`${days}d total`);
+  if (inf.length) bits.push(`${inf.length} photo-inferred`);
+  if (cities.size) bits.push(`${cities.size} cit${cities.size === 1 ? "y" : "ies"}`);
+  titles.createDiv({ cls: "csv-tv-detail-sub", text: bits.join(" · ") });
+
+  head.createEl("button", { cls: "csv-tv-detail-close", text: "✕", title: "Close" })
+    .addEventListener("click", onClose);
+
+  type D = { r: TravelRow; inf: boolean };
+  const trips: D[] = sortByDateDesc([
+    ...conf.map(r => ({ r, inf: false, date_entered: r.date_entered })),
+    ...inf.map(r => ({ r, inf: true, date_entered: r.date_entered })),
+  ]);
+  if (!trips.length) return;
+
+  const table = tableIn(card);
+  const headRow = table.createEl("thead").createEl("tr");
+  ["", "Entered", "Left", "Days", "City", "Visa"].forEach(h => headRow.createEl("th", { text: h }));
+  const body = table.createEl("tbody");
+  for (const { r, inf: isInf } of trips) {
+    const tr = body.createEl("tr");
+    tr.createEl("td", { text: isInf ? "📷" : "", cls: "csv-tv-flag", attr: isInf ? { "data-tip": "Photo-inferred" } : {} });
+    tr.createEl("td", { text: dateLabel(r.date_entered) });
+    tr.createEl("td", { text: dateLabel(r.date_left) });
+    tr.createEl("td", { text: durLabel(r) });
+    tr.createEl("td", { text: r.city });
+    tr.createEl("td", { text: r.visa_status });
+  }
 }
 
 function renderResidency(root: HTMLElement, confirmed: TravelRow[], rules: ResidencyRule[]): void {
@@ -225,17 +343,18 @@ function renderResidency(root: HTMLElement, confirmed: TravelRow[], rules: Resid
   root.createDiv({ cls: "csv-tv-res-disclaimer", text: "Indicators only — not legal or tax advice. Based on confirmed trips." });
 }
 
-function renderCountries(root: HTMLElement, m: TravelModel): void {
+function renderCountries(root: HTMLElement, m: TravelModel, select: (iso: string | null) => void): void {
   root.createDiv({ cls: "csv-tv-sec-title", text: "Countries visited" });
   const table = tableIn(root);
   const thead = table.createEl("thead").createEl("tr");
   ["", "Country", "Total days"].forEach(h => thead.createEl("th", { text: h }));
   const tbody = table.createEl("tbody");
   for (const { iso, days } of m.countryDays) {
-    const tr = tbody.createEl("tr");
+    const tr = tbody.createEl("tr", { cls: "csv-tv-row-click", attr: { "data-iso": iso } });
     tr.createEl("td", { text: flag(iso), cls: "csv-tv-flag" });
     tr.createEl("td", { text: countryName(iso) });
     tr.createEl("td", { text: days ? `${days}d` : "—" });
+    tr.addEventListener("click", () => select(iso));
   }
   if (m.inferredOnlyCountries.size) {
     const photo = root.createDiv({ cls: "csv-tv-photo-only" });
@@ -244,7 +363,7 @@ function renderCountries(root: HTMLElement, m: TravelModel): void {
   }
 }
 
-function renderTimeline(root: HTMLElement, m: TravelModel): void {
+function renderTimeline(root: HTMLElement, m: TravelModel, select: (iso: string | null) => void): void {
   root.createDiv({ cls: "csv-tv-sec-title", text: "Timeline" });
   const colorOf = makeColorer();
 
@@ -270,7 +389,25 @@ function renderTimeline(root: HTMLElement, m: TravelModel): void {
     const yE = new Date(`${year}-12-31T12:00:00Z`).getTime();
     const span = yE - yS;
     const block = wrap.createDiv({ cls: "csv-tv-tl-year" });
-    block.createDiv({ cls: "csv-tv-tl-label", text: String(year) });
+
+    // Year summary: confirmed days clipped to this calendar year + distinct
+    // countries seen (confirmed or photo-inferred). Overlapping confirmed
+    // trips double-count, same as the totals elsewhere.
+    let yearDays = 0;
+    const yearIsos = new Set<string>();
+    for (const r of byYear.get(year)!) {
+      yearIsos.add(r.country);
+      if (r._inf) continue;
+      const a = Math.max(new Date(r.date_entered + "T12:00:00Z").getTime(), yS);
+      const b = Math.min(new Date(r.date_left + "T12:00:00Z").getTime(), yE);
+      if (a <= b) yearDays += Math.max(Math.round((b - a) / 86400000) + 1, 1);
+    }
+    const label = block.createDiv({ cls: "csv-tv-tl-label" });
+    label.createSpan({ text: String(year) });
+    label.createSpan({
+      cls: "csv-tv-tl-sub",
+      text: `${yearDays ? `${yearDays}d · ` : ""}${yearIsos.size} ${yearIsos.size === 1 ? "country" : "countries"}`,
+    });
     const mrow = block.createDiv({ cls: "csv-tv-month-row" });
     MONTHS.forEach(mo => mrow.createDiv({ cls: "csv-tv-month-tick", text: mo }));
     const track = block.createDiv({ cls: "csv-tv-track" });
@@ -286,7 +423,9 @@ function renderTimeline(root: HTMLElement, m: TravelModel): void {
       seg.style.width = `${width}%`;
       if (r._inf) { seg.style.borderColor = color; seg.style.background = color + "22"; seg.style.color = color; }
       else { seg.style.background = color; }
+      seg.setAttr("data-iso", r.country);
       seg.setAttr("data-tip", `${countryName(r.country)}  ${r.date_entered} → ${r.date_left}  (${tripDays(r)}d)${r.visa_status ? "  [" + r.visa_status + "]" : ""}${r._inf ? "  [photo]" : ""}`);
+      seg.addEventListener("click", () => select(r.country));
       if (width > 4) seg.createSpan({ cls: "csv-tv-seg-lbl", text: `${flag(r.country)} ${r.country}` });
       else if (width > 2) seg.createSpan({ cls: "csv-tv-seg-lbl", text: flag(r.country) });
     }

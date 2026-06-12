@@ -863,7 +863,7 @@ test("migrateFileConfigKey: caller-set new entry wins, old still cleared", () =>
   const entry = fileURLToPath(new URL("./src/travel-data.ts", import.meta.url));
   const out = path.join(os.tmpdir(), `travel-data.${process.pid}.mjs`);
   await esbuild.build({ entryPoints: [entry], bundle: true, format: "esm", outfile: out, logLevel: "error" });
-  const { analyzeTravel } = await import(pathToFileURL(out).href);
+  const { analyzeTravel, currentStay } = await import(pathToFileURL(out).href);
   fs.rmSync(out, { force: true });
 
   const csv = fs.readFileSync(fileURLToPath(new URL("./sample-data/travel_flat.csv", import.meta.url)), "utf8");
@@ -897,6 +897,33 @@ test("migrateFileConfigKey: caller-set new entry wins, old still cleared", () =>
   });
   test("travel: world percentage (5 / 195)", () => {
     assertEqual(m.worldPct, 3);
+  });
+
+  // currentStay — synthetic rows with a fixed "today" (2024-06-15)
+  const today = new Date("2024-06-15T12:00:00Z");
+  const trip = (entered, left, country = "XA") =>
+    ({ date_entered: entered, date_left: left, country, city: "", visa_status: "", notes: "", source: "confirmed", resolved: "", _src: {} });
+
+  test("travel: currentStay — inside a confirmed range", () => {
+    const stays = [trip("2024-06-01", "2024-07-01")];
+    assertEqual(currentStay(stays, today)?.country, "XA");
+  });
+  test("travel: currentStay — blank date_left counts as ongoing", () => {
+    const stays = [trip("2024-05-20", "")];
+    assertEqual(currentStay(stays, today)?.country, "XA");
+  });
+  test("travel: currentStay — partial date_left is NOT ongoing", () => {
+    // Historic visited-but-undated row must not read as "still there".
+    const stays = [trip("2022-06-01", "2022-06-??")];
+    assertEqual(currentStay(stays, today), null);
+  });
+  test("travel: currentStay — past and future trips don't match", () => {
+    const stays = [trip("2024-01-01", "2024-01-10"), trip("2024-08-01", "2024-08-10")];
+    assertEqual(currentStay(stays, today), null);
+  });
+  test("travel: currentStay — overlapping ranges pick the latest entry", () => {
+    const stays = [trip("2024-01-01", "2024-12-31", "XA"), trip("2024-06-10", "2024-06-20", "XB")];
+    assertEqual(currentStay(stays, today)?.country, "XB");
   });
 }
 

@@ -72,6 +72,32 @@ export function tripDays(r: TravelRow): number {
 
 export interface CountryStat { iso: string; days: number; }
 
+/**
+ * The confirmed trip the person is in *right now*, or null.
+ * A trip is current when date_entered ≤ today and either date_left ≥ today
+ * or date_left is truly blank (open-ended = "still here"). Partial dates
+ * (`2022-06-??`) do NOT count as open-ended — those are historic
+ * visited-but-undated rows, not an ongoing stay. Ties (nested/overlapping
+ * ranges) go to the latest entry date.
+ */
+export function currentStay(confirmed: TravelRow[], today: Date = new Date()): TravelRow | null {
+  const t = today.getTime();
+  let best: TravelRow | null = null;
+  let bestEntered = -Infinity;
+  for (const r of confirmed) {
+    const a = pd(r.date_entered);
+    if (!a || a.getTime() > t) continue;
+    if (r.date_left.trim() === "") {
+      // open-ended
+    } else {
+      const b = pd(r.date_left);
+      if (!b || b.getTime() < t) continue;
+    }
+    if (a.getTime() > bestEntered) { best = r; bestEntered = a.getTime(); }
+  }
+  return best;
+}
+
 export interface TravelModel {
   confirmed: TravelRow[];
   inferred: TravelRow[];
