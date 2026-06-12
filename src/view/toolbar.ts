@@ -8,6 +8,7 @@ import type { CardView } from "../../main";
 import { ViewMode } from "../types";
 import { FileConfigModal } from "../modals";
 import { generateMobileFiles } from "./mobile";
+import { hasStatsColumns } from "./stats";
 
 declare const __BUILD_TIME__: string;
 
@@ -20,13 +21,21 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
 
   // Build view mode buttons based on detected columns
   const modes: {id: ViewMode, label: string}[] = [];
-  if (view.isTravelFile()) modes.push({id: "travel", label: "Travel"});
-  if (view.hasDateColumn()) modes.push({id: "dashboard", label: "Dashboard"});
+  const isTravel = view.isTravelFile();
+  const isDateFile = view.hasDateColumn();
+  if (isTravel) modes.push({id: "travel", label: "Travel"});
+  if (isDateFile) modes.push({id: "dashboard", label: "Dashboard"});
   if (view.getCategoryCol()) {
     modes.push({id: "library", label: "Cards"});
     modes.push({id: "kanban-genre", label: "Kanban"});
   }
   modes.push({id: "table", label: "Table"});
+  // Focus (one entry at a time) and Stats (bar charts) apply to content
+  // files — travel has its own map view and date files have the dashboard.
+  if (!isTravel && !isDateFile && view.rows.length > 0) {
+    modes.push({id: "focus", label: "Focus"});
+    if (hasStatsColumns(view)) modes.push({id: "stats", label: "Stats"});
+  }
 
   modes.forEach(({id, label}) => {
     const btn = mg.createEl("button",{cls:`csv-mode-btn ${view.mode===id?"active":""}`, text:label});
@@ -148,6 +157,9 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
       const cfg = view.fileCfg;
       cfg.sortNewestFirst = !(cfg.sortNewestFirst ?? true);
       view.saveFileCfg(cfg);
+      // A manual header-click sort overrides this toggle; clicking the
+      // toggle is an explicit "go back to date order", so clear it.
+      view.tableSortCol = null;
       // Sort flips the row order but the user is still in roughly the
       // same area — preserving scroll is less disorienting than yanking
       // them back to the very newest / oldest entry.

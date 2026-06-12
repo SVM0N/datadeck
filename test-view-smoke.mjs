@@ -205,10 +205,25 @@ await test("toolbar: renders mode buttons, search, row count, + Add", async () =
   const c = document.body.createDiv();
   renderToolbar(view, c);
   assert(c.querySelector(".csv-toolbar"), "toolbar present");
-  assert(c.querySelectorAll(".csv-mode-btn").length === 3, "Cards + Kanban + Table (no travel/dashboard)");
+  assert(c.querySelectorAll(".csv-mode-btn").length === 5, "Cards + Kanban + Table + Focus + Stats (no travel/dashboard)");
   assert(c.querySelector(".csv-search-wrap"), "search bar present for non-dashboard mode");
   assert(c.querySelector(".csv-add-btn"), "+ Add button present");
   assert(c.querySelector(".csv-row-count").textContent === "2 entries", "row count reflects rows");
+});
+
+await test("toolbar: date files get Dashboard + Table, no Focus/Stats", async () => {
+  const view = {
+    file: { basename: "habits", path: "habits.csv" },
+    rows: [{}], mode: "dashboard", searchQuery: "",
+    isTravelFile: () => false, hasDateColumn: () => true, getCategoryCol: () => null,
+    fileCfg: {}, app: {}, headers: ["date", "gym"],
+    renderView: () => {}, renderViewPreservingScroll: () => {}, saveFileCfg: () => {},
+    autoDetectBooleanColumns: () => [], generateMobileFiles: () => {}, backupToArchive: () => {}, openAddModal: () => {},
+  };
+  const c = document.body.createDiv();
+  renderToolbar(view, c);
+  const labels = Array.from(c.querySelectorAll(".csv-mode-btn")).map(b => b.textContent);
+  assert(labels.join(",") === "Dashboard,Table", `dashboard files keep Dashboard + Table only (got ${labels})`);
 });
 
 // ── Dashboard view ───────────────────────────────────────────────────────────
@@ -251,6 +266,177 @@ await test("dashboard: no date column shows empty state", async () => {
   const c = document.body.createDiv();
   await renderDashboard({ getDateCol: () => null }, c);
   assert(c.querySelector(".csv-empty-state"), "empty state present");
+});
+
+// ── Stats view ───────────────────────────────────────────────────────────────
+const { renderStats, parseRating, hasStatsColumns } = await load("./src/view/stats.ts");
+
+function statsView(rows) {
+  return {
+    headers: Object.keys(rows[0] ?? {}), rows, searchQuery: "",
+    getFilteredRows: () => rows,
+    getCategoryCol: () => "Category", getStatusCol: () => "Status",
+    authorKey: () => "Author",
+    resolveCol: (cands) => {
+      const have = Object.keys(rows[0] ?? {});
+      return cands.find(c => have.includes(c)) ?? null;
+    },
+  };
+}
+
+await test("stats: renders overview chips and bar sections", async () => {
+  const rows = [
+    { Title: "Dune", Author: "Herbert", Category: "SciFi", Status: "Read", Rating: "5", Year: "2021" },
+    { Title: "Messiah", Author: "Herbert", Category: "SciFi", Status: "Read", Rating: "4", Year: "2022" },
+    { Title: "It", Author: "King", Category: "Horror, Classic", Status: "Reading", Rating: "", Year: "2022" },
+  ];
+  const c = document.body.createDiv();
+  renderStats(statsView(rows), c);
+  assert(c.querySelector(".csv-stats-overview"), "overview chips present");
+  assert(c.querySelector(".csv-stats-chip-value").textContent === "3", "entry count chip first");
+  const titles = Array.from(c.querySelectorAll(".csv-stats-section-title")).map(t => t.textContent);
+  assert(titles.includes("By status"), "status section present");
+  assert(titles.includes("By category"), "category section present");
+  assert(titles.includes("Ratings"), "ratings section present");
+  // Multi-genre row counts once per genre: SciFi 2, Horror 1, Classic 1.
+  const catSection = c.querySelectorAll(".csv-stats-section")[1];
+  assert(catSection.querySelectorAll(".csv-stats-bar-row").length === 3, "3 category bars");
+});
+
+await test("stats: status bars get semantic color classes", async () => {
+  const rows = [
+    { Title: "A", Author: "", Category: "X", Status: "Finished", Rating: "" },
+    { Title: "B", Author: "", Category: "X", Status: "In progress", Rating: "" },
+  ];
+  const c = document.body.createDiv();
+  renderStats(statsView(rows), c);
+  assert(c.querySelector(".csv-stats-bar-fill.is-done"), "done bar colored green");
+  assert(c.querySelector(".csv-stats-bar-fill.is-progress"), "in-progress bar colored blue");
+});
+
+await test("stats: parseRating handles numbers and star strings", async () => {
+  assert(parseRating("4") === 4, "numeric");
+  assert(parseRating("4.5") === 4.5, "decimal");
+  assert(parseRating("★★★☆☆") === 3, "stars counted");
+  assert(parseRating("") === null, "empty → null");
+  assert(parseRating("n/a") === null, "garbage → null");
+  assert(parseRating("9") === 5, "clamped to 5");
+});
+
+await test("stats: hasStatsColumns false when nothing chartable", async () => {
+  const view = { getCategoryCol: () => null, getStatusCol: () => null, authorKey: () => undefined, resolveCol: () => null };
+  assert(hasStatsColumns(view) === false, "no chartable columns");
+});
+
+// ── Focus view ───────────────────────────────────────────────────────────────
+const { renderFocus } = await load("./src/view/focus.ts");
+
+function focusView(rows, overrides = {}) {
+  const view = {
+    headers: Object.keys(rows[0] ?? {}), rows, searchQuery: "",
+    focusIndex: 0, focusNavPending: false,
+    getFilteredRows: () => rows,
+    titleKey: () => "Title", authorKey: () => "Author", getNotesCol: () => "Notes",
+    getTitle: (r) => r.Title ?? "—", getSubtitle: (r) => r.Author ?? "",
+    isSelectCol: () => false, getColumnValues: () => [],
+    renderMarkdownInto: (el, text) => el.setText(text),
+    scheduleSave: () => {}, renderView: () => {},
+    openNoteExpander: () => {}, openRowContextMenu: () => {},
+    contentEl: document.body.createDiv(),
+    ...overrides,
+  };
+  return view;
+}
+
+await test("focus: renders one card with title, notes, position, nav", async () => {
+  const rows = [
+    { Title: "Dune", Author: "Herbert", Notes: "A classic.", Status: "Read" },
+    { Title: "It", Author: "King", Notes: "", Status: "" },
+  ];
+  const c = document.body.createDiv();
+  renderFocus(focusView(rows), c);
+  assert(c.querySelectorAll(".csv-focus-card").length === 1, "exactly one card");
+  assert(c.querySelector(".csv-focus-title").textContent === "Dune", "first entry shown");
+  assert(c.querySelector(".csv-focus-position").textContent === "1 / 2", "position indicator");
+  assert(c.querySelector(".csv-focus-notes").textContent === "A classic.", "notes body rendered");
+  assert(c.querySelectorAll(".csv-focus-nav-btn").length === 3, "prev / random / next buttons");
+  // Status renders as a chip; Title/Author/Notes don't.
+  assert(c.querySelectorAll(".csv-kanban-chip").length === 1, "one meta chip (Status)");
+});
+
+await test("focus: next button advances and wraps", async () => {
+  const rows = [{ Title: "A", Author: "", Notes: "" }, { Title: "B", Author: "", Notes: "" }];
+  const view = focusView(rows);
+  const c = document.body.createDiv();
+  view.renderView = () => { c.empty(); renderFocus(view, c); };
+  renderFocus(view, c);
+  c.querySelectorAll(".csv-focus-nav-btn")[2].click(); // next
+  assert(view.focusIndex === 1, "advanced to second entry");
+  assert(c.querySelector(".csv-focus-title").textContent === "B", "card re-rendered");
+  c.querySelectorAll(".csv-focus-nav-btn")[2].click(); // next wraps
+  assert(view.focusIndex === 0, "wrapped back to first");
+});
+
+await test("focus: notes column same as title column isn't duplicated", async () => {
+  // Quote-style file: first column is both the title and the notes column.
+  const rows = [{ Quote: "To be or not to be", Author: "Shakespeare" }];
+  const view = focusView(rows, {
+    titleKey: () => undefined, getNotesCol: () => "Quote",
+    getTitle: (r) => r.Quote, getSubtitle: (r) => r.Author,
+  });
+  view.headers = ["Quote", "Author"];
+  const c = document.body.createDiv();
+  renderFocus(view, c);
+  assert(c.querySelector(".csv-focus-title").textContent === "To be or not to be", "quote as title");
+  assert(!c.querySelector(".csv-focus-notes"), "no duplicated notes body");
+});
+
+await test("focus: clamps index when the list shrinks", async () => {
+  const rows = [{ Title: "A", Author: "", Notes: "" }];
+  const view = focusView(rows, { focusIndex: 5 });
+  const c = document.body.createDiv();
+  renderFocus(view, c);
+  assert(view.focusIndex === 0, "index clamped");
+  assert(c.querySelector(".csv-focus-title").textContent === "A", "card rendered");
+});
+
+// ── Table sorting ────────────────────────────────────────────────────────────
+const { sortRowsByColumn } = await load("./src/utils.ts");
+
+await test("sortRowsByColumn: numeric-aware, empties last, input untouched", async () => {
+  const rows = [{ n: "10" }, { n: "" }, { n: "9" }, { n: "2" }];
+  const asc = sortRowsByColumn(rows, "n", "asc");
+  assert(asc.map(r => r.n).join(",") === "2,9,10,", "numeric asc with empty last");
+  const desc = sortRowsByColumn(rows, "n", "desc");
+  assert(desc.map(r => r.n).join(",") === "10,9,2,", "numeric desc with empty still last");
+  assert(rows.map(r => r.n).join(",") === "10,,9,2", "original order untouched");
+  const alpha = sortRowsByColumn([{ t: "banana" }, { t: "Apple" }], "t", "asc");
+  assert(alpha[0].t === "Apple", "case-insensitive string sort");
+});
+
+await test("table: clicking a header cycles sort asc → desc → off", async () => {
+  const rows = [{ Title: "B" }, { Title: "A" }];
+  const view = {
+    headers: ["Title"], rows, searchQuery: "", settings: { columnWidths: {} },
+    tableSortCol: null, tableSortDir: "asc",
+    getFilteredRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
+    openRowContextMenu: () => {}, isNotesCol: () => false, openNoteExpander: () => {},
+    isSelectCol: () => false, renderSelectField: (td) => td, notesFileExists: () => false,
+    openOrCreateNotes: () => {}, deleteWithUndo: () => {}, renderView: () => {},
+  };
+  const c = document.body.createDiv();
+  const render = () => { c.empty(); renderTable(view, c); };
+  view.renderView = render;
+  render();
+  const th = () => c.querySelector("th.csv-th-sortable");
+  assert(th(), "headers are sortable");
+  th().click();
+  assert(view.tableSortCol === "Title" && view.tableSortDir === "asc", "first click sorts asc");
+  assert(c.querySelector(".csv-th-sort-indicator").textContent.includes("▲"), "asc indicator");
+  th().click();
+  assert(view.tableSortDir === "desc", "second click flips to desc");
+  th().click();
+  assert(view.tableSortCol === null, "third click clears the sort");
 });
 
 // ── Mobile dashboard generation ──────────────────────────────────────────────

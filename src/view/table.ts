@@ -21,6 +21,23 @@ export function renderTable(view: CardView, container: HTMLElement): void {
   view.headers.forEach(h => {
     const th = hr.createEl("th");
     th.setText(h);
+    // Click-to-sort: asc → desc → off. The resize handle is a child of the
+    // th, so guard against clicks that originate from it; a drag-resize must
+    // not also flip the sort.
+    th.addClass("csv-th-sortable");
+    if (view.tableSortCol === h) {
+      th.createSpan({ cls: "csv-th-sort-indicator", text: view.tableSortDir === "asc" ? " ▲" : " ▼" });
+    }
+    th.title = "Click to sort";
+    th.addEventListener("click", (e) => {
+      if ((e.target as HTMLElement).closest(".csv-col-resize-handle")) return;
+      if (view.tableSortCol !== h) { view.tableSortCol = h; view.tableSortDir = "asc"; }
+      else if (view.tableSortDir === "asc") view.tableSortDir = "desc";
+      else view.tableSortCol = null;
+      // Full re-render so the toolbar's Newest/Oldest toggle can reflect
+      // whether the manual sort has overridden it.
+      view.renderView();
+    });
     const savedWidth = view.settings.columnWidths[h];
     if (savedWidth) th.style.width = savedWidth + "px";
     const handle = th.createDiv({cls:"csv-col-resize-handle"});

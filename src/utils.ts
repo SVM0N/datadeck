@@ -63,6 +63,28 @@ export function resolvePath(input: string, baseFolder: string): string {
   return stack.join("/");
 }
 
+/**
+ * Sort rows by a column for the table view's click-to-sort. Numeric-aware
+ * ("9" before "10"; works for years, ratings, scores) with a natural-order
+ * string fallback. Empty cells always sort last, regardless of direction —
+ * an ascending sort that leads with 50 blank rows reads as broken.
+ * Returns a new array; the caller's row order is untouched.
+ */
+export function sortRowsByColumn(rows: CSVRow[], col: string, dir: "asc" | "desc"): CSVRow[] {
+  const sign = dir === "asc" ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const va = (a[col] ?? "").trim();
+    const vb = (b[col] ?? "").trim();
+    if (!va && !vb) return 0;
+    if (!va) return 1;
+    if (!vb) return -1;
+    const na = parseFloat(va), nb = parseFloat(vb);
+    const bothNumeric = !isNaN(na) && !isNaN(nb) && /^-?[\d.]/.test(va) && /^-?[\d.]/.test(vb);
+    const cmp = bothNumeric ? na - nb : va.localeCompare(vb, undefined, { numeric: true, sensitivity: "base" });
+    return cmp * sign;
+  });
+}
+
 export function titleCase(str: string): string {
   return str.split(/[\s_-]+/).map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(" ");
 }

@@ -107,10 +107,12 @@ export function renderLibrary(view: CardView, container: HTMLElement): void {
       if (!rowGenres.includes(view.libraryGenreFilter.toLowerCase())) return false;
     }
 
-    // Search filter
+    // Search filter — match any field, consistent with getFilteredRows()
+    // in the other views (title-only matching here meant "search by author"
+    // worked in kanban/table but silently failed in the library).
     if (view.searchQuery.trim()) {
-      const title = (row[titleCol] ?? "").toLowerCase();
-      if (!title.includes(view.searchQuery.toLowerCase())) return false;
+      const q = view.searchQuery.toLowerCase().trim();
+      if (!view.headers.some(h => (row[h] ?? "").toLowerCase().includes(q))) return false;
     }
 
     return true;
@@ -242,6 +244,15 @@ export function renderLibrary(view: CardView, container: HTMLElement): void {
   });
 
   if (Object.keys(groups).length === 0) {
-    sectionsWrap.createEl("p", { text: "No entries match your filters.", cls: "csv-empty-state" });
+    const empty = sectionsWrap.createDiv({ cls: "csv-empty-state" });
+    empty.createEl("p", { text: "No entries match your filters." });
+    const clearBtn = empty.createEl("button", { cls: "csv-clear-filters-btn", text: "Clear filters" });
+    clearBtn.addEventListener("click", () => {
+      view.libraryStatusFilter = "all";
+      view.libraryGenreFilter = "all";
+      view.searchQuery = "";
+      // Full re-render — the toolbar search input needs to reset too.
+      view.renderView();
+    });
   }
 }

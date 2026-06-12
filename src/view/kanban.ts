@@ -22,7 +22,12 @@ export function renderKanbanGenre(view: CardView, container: HTMLElement): void 
   filteredRows.forEach(r => (r[cc]??"").split(",").map(s=>s.trim()).filter(Boolean).forEach(c=>genreSet.add(c)));
   const genres = Array.from(genreSet).sort();
   if (!genres.length) {
-    container.createEl("p",{text: view.searchQuery ? "No matching entries found." : "No genre values found.",cls:"csv-empty-state"});
+    const empty = container.createDiv({cls:"csv-empty-state"});
+    empty.createEl("p",{text: view.searchQuery ? "No matching entries found." : "No genre values found."});
+    if (view.searchQuery) {
+      empty.createEl("button", { cls: "csv-clear-filters-btn", text: "Clear search" })
+        .addEventListener("click", () => { view.searchQuery = ""; view.renderView(); });
+    }
     return;
   }
 

@@ -4,6 +4,7 @@ import {
   FileView,
   WorkspaceLeaf,
   Component,
+  MarkdownRenderer,
   Menu,
   Notice,
   TFile,
@@ -17,7 +18,7 @@ import type { Chart as ChartType } from "chart.js";
 
 // Import from src modules
 import { CSVRow, ViewMode, FileConfig, CardViewSettings, DEFAULT_SETTINGS, CARD_VIEW_TYPE } from "./src/types";
-import { sanitizeFilename, titleCase, formatRatingForDisplay, showSelectPicker, parseCSV, migrateFileConfigKey } from "./src/utils";
+import { sanitizeFilename, titleCase, formatRatingForDisplay, showSelectPicker, parseCSV, migrateFileConfigKey, sortRowsByColumn } from "./src/utils";
 import { AddEntryModal, NoteExpanderModal, FileConfigModal, SearchModal } from "./src/modals";
 import { renderTravel } from "./src/travel-view";
 import { CardViewSettingTab } from "./src/settings-tab";
@@ -27,6 +28,8 @@ import { renderLibrary } from "./src/view/library";
 import { renderKanbanGenre } from "./src/view/kanban";
 import { renderToolbar } from "./src/view/toolbar";
 import { renderDashboard } from "./src/view/dashboard";
+import { renderStats, hasStatsColumns } from "./src/view/stats";
+import { renderFocus } from "./src/view/focus";
 
 // World-map SVG asset, loaded lazily from the plugin dir and cached for the
 // session (undefined = not yet read, null = read failed/missing).
@@ -101,10 +104,13 @@ export class CardView extends FileView {
     const needsCategory = this.mode === "kanban-genre" || this.mode === "library";
     const needsDate = this.mode === "dashboard";
     if ((needsCategory && !this.getCategoryCol()) || (needsDate && !this.hasDateColumn())
-        || (this.mode === "travel" && !this.isTravelFile())) {
+        || (this.mode === "travel" && !this.isTravelFile())
+        || (this.mode === "stats" && !hasStatsColumns(this))) {
       this.mode = "table";
     }
     this.selectedDate = null; // Reset selected date when loading new file
+    this.focusIndex = 0;      // Focus view starts at the first entry per file
+    this.tableSortCol = null; // Manual column sort doesn't carry across files
     this.renderView();
   }
 
@@ -494,6 +500,8 @@ export class CardView extends FileView {
     else if (this.mode === "dashboard") void renderDashboard(this, content);
     else if (this.mode === "library") renderLibrary(this, content);
     else if (this.mode === "kanban-genre") renderKanbanGenre(this, content);
+    else if (this.mode === "stats") renderStats(this, content);
+    else if (this.mode === "focus") renderFocus(this, content);
     else renderTable(this, content);
   }
 
@@ -610,6 +618,11 @@ export class CardView extends FileView {
       });
     }
 
+    // Manual header-click sort takes precedence over the date default.
+    if (this.mode === "table" && this.tableSortCol && this.headers.includes(this.tableSortCol)) {
+      return sortRowsByColumn(result, this.tableSortCol, this.tableSortDir);
+    }
+
     // Sort by date if in table view and has date column
     const dateCol = this.getDateCol();
     if (this.mode === "table" && dateCol) {
@@ -696,6 +709,26 @@ export class CardView extends FileView {
 
   libraryStatusFilter: string = "all";
   libraryGenreFilter: string = "all";
+
+  // ── Focus view ───────────────────────────────────────────────────────────────
+
+  focusIndex: number = 0;
+  // Set by the focus renderer before a nav-triggered re-render so the rebuilt
+  // card can reclaim keyboard focus — but only then, so a search-driven
+  // re-render never steals focus from the toolbar input.
+  focusNavPending: boolean = false;
+
+  /** Render markdown text into an element, tied to this view's lifecycle. */
+  renderMarkdownInto(el: HTMLElement, text: string): void {
+    void MarkdownRenderer.render(this.app, text, el, this.file?.path ?? "", this.renderComponent);
+  }
+
+  // ── Table view ───────────────────────────────────────────────────────────────
+
+  // Click-to-sort state (session-only; the persisted per-file default stays
+  // the date-column newest/oldest toggle in fileCfg.sortNewestFirst).
+  tableSortCol: string | null = null;
+  tableSortDir: "asc" | "desc" = "asc";
 
 
   onunload(): void { this.renderComponent.unload(); if(this.saveTimer) window.clearTimeout(this.saveTimer); }

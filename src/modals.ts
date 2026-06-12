@@ -627,7 +627,7 @@ export class FileConfigModal extends Modal {
     const modeRow = form.createDiv({ cls: "csv-modal-row" });
     modeRow.createEl("label", { text: "Default view", cls: "csv-modal-label" });
     const modeSel = modeRow.createEl("select", { cls: "csv-modal-select" });
-    ([["— use global default —",""], ["Dashboard","dashboard"], ["Cards","library"], ["Kanban","kanban-genre"], ["Table","table"]] as [string,string][]).forEach(([label, val]) => {
+    ([["— use global default —",""], ["Dashboard","dashboard"], ["Cards","library"], ["Kanban","kanban-genre"], ["Table","table"], ["Focus","focus"], ["Stats","stats"]] as [string,string][]).forEach(([label, val]) => {
       const opt = modeSel.createEl("option", { text: label, value: val });
       if ((this.current.defaultMode ?? "") === val) opt.selected = true;
     });

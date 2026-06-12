@@ -3293,3 +3293,213 @@ select.csv-add-row-control {
   .csv-tv-track { height: 22px; }
   .csv-tv-map-legend { gap: 12px; font-size: 10px; }
 }
+
+/* ─── Stats view ──────────────────────────────────────────────────────────── */
+
+.csv-stats-wrap {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 8px 4px 40px;
+}
+
+/* Overview chips — same visual family as the travel-view stat tiles. */
+.csv-stats-overview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.csv-stats-chip {
+  flex: 1 1 110px;
+  min-height: 64px;
+  background: var(--csv-surface);
+  border-radius: var(--csv-radius);
+  box-shadow: var(--csv-shadow);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+.csv-stats-chip-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--csv-text);
+}
+.csv-stats-chip-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--csv-text-muted);
+}
+
+.csv-stats-section {
+  margin-top: 22px;
+}
+.csv-stats-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+}
+
+.csv-stats-bar-row {
+  display: grid;
+  grid-template-columns: minmax(80px, 160px) 1fr 64px;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0;
+  font-size: 13px;
+}
+.csv-stats-bar-label {
+  color: var(--csv-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+}
+.csv-stats-bar-track {
+  background: var(--csv-surface);
+  border-radius: 4px;
+  height: 16px;
+  overflow: hidden;
+}
+.csv-stats-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--csv-accent);
+  opacity: 0.75;
+  transition: width 0.25s ease;
+}
+.csv-stats-bar-fill.is-done { background: var(--csv-green); }
+.csv-stats-bar-fill.is-progress { background: var(--csv-blue); }
+.csv-stats-bar-fill.is-dropped { background: var(--csv-red); }
+.csv-stats-bar-fill.is-rating { background: var(--csv-amber); }
+.csv-stats-bar-count {
+  color: var(--csv-text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .csv-stats-bar-row { grid-template-columns: minmax(64px, 110px) 1fr 58px; gap: 7px; font-size: 12px; }
+  .csv-stats-chip-value { font-size: 17px; }
+}
+
+/* ─── Focus view ──────────────────────────────────────────────────────────── */
+
+.csv-focus-wrap {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px 8px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  outline: none; /* tabindex=0 for arrow keys; the card itself is the focus cue */
+}
+
+.csv-focus-card {
+  background: var(--csv-surface);
+  border-radius: var(--csv-radius);
+  box-shadow: var(--csv-shadow);
+  padding: 28px 28px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.csv-focus-position {
+  font-size: 11px;
+  color: var(--csv-text-faint);
+  letter-spacing: 0.06em;
+}
+
+.csv-focus-title {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--csv-text);
+  white-space: pre-wrap; /* quote files keep their line breaks */
+}
+.csv-focus-title.is-clickable { cursor: pointer; }
+.csv-focus-title.is-clickable:hover { color: var(--text-accent); }
+
+.csv-focus-sub {
+  font-size: 14px;
+  color: var(--csv-text-muted);
+}
+
+.csv-focus-notes {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--csv-text);
+  border-top: 1px solid var(--csv-border);
+  padding-top: 12px;
+}
+.csv-focus-notes > p:first-child { margin-top: 0; }
+.csv-focus-notes > p:last-child { margin-bottom: 0; }
+
+.csv-focus-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.csv-focus-nav {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+.csv-focus-nav-btn {
+  min-width: 56px;
+  padding: 8px 18px;
+  font-size: 18px;
+  line-height: 1;
+  background: var(--csv-surface);
+  color: var(--csv-text);
+  border: 1px solid var(--csv-border);
+  border-radius: var(--csv-radius);
+  cursor: pointer;
+}
+.csv-focus-nav-btn:hover {
+  border-color: var(--csv-accent);
+  color: var(--text-accent);
+}
+.csv-focus-nav-rand { font-size: 14px; }
+
+@media (max-width: 600px) {
+  .csv-focus-wrap { padding: 12px 4px 32px; }
+  .csv-focus-card { padding: 20px 18px 16px; }
+  .csv-focus-title { font-size: 17px; }
+  /* Bigger touch targets on phones */
+  .csv-focus-nav-btn { flex: 1 1 0; padding: 12px 0; }
+}
+
+/* ─── Table column sorting ────────────────────────────────────────────────── */
+
+.csv-table th.csv-th-sortable { cursor: pointer; }
+.csv-table th.csv-th-sortable:hover { color: var(--text-accent); }
+.csv-th-sort-indicator {
+  font-size: 9px;
+  color: var(--text-accent);
+}
+
+/* ─── Clear-filters button (library no-results state) ─────────────────────── */
+
+.csv-clear-filters-btn {
+  margin-top: 10px;
+  padding: 7px 14px;
+  background: var(--csv-surface);
+  color: var(--csv-text);
+  border: 1px solid var(--csv-border);
+  border-radius: var(--csv-radius-sm);
+  font-size: 12px;
+  cursor: pointer;
+}
+.csv-clear-filters-btn:hover {
+  border-color: var(--csv-accent);
+  color: var(--text-accent);
+}
