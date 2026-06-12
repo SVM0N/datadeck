@@ -39,7 +39,12 @@ export interface FileConfig {
                             // Empty array means "no extra fields, just title".
   defaultMode?: ViewMode;
   sortNewestFirst?: boolean;  // Sort by date column, newest first
+  kanbanGroupCol?: string;    // Kanban "Group by" column. Unset = category column.
+                              // Year-like columns bucket into decades.
+  librarySort?: LibrarySort;  // Card-view section ordering. Unset = "status".
 }
+
+export type LibrarySort = "status" | "title" | "rating" | "year";
 
 export interface CardViewSettings {
   defaultMode: ViewMode;

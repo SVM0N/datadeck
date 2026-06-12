@@ -658,6 +658,20 @@
 
 /* ─── Kanban View ─────────────────────────────────────────────────────────── */
 
+/* "Group by" selector row above the board. Fixed-height sibling of the
+   flex-1 board inside the no-yscroll content area. */
+.csv-kanban-groupbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+.csv-kanban-groupbar-label {
+  font-size: 12px;
+  color: var(--csv-text-muted);
+}
+
 .csv-kanban-board {
   display: flex;
   gap: 16px;
@@ -1920,6 +1934,15 @@ td .csv-select-chip {
   font-size: 11px;
   color: var(--csv-text-faint);
   margin: 0 0 8px;
+  line-height: 1.4;
+}
+
+/* Duplicate-title warning under the Add modal's title input. Informational
+   amber, not error red — submitting a duplicate is still allowed. */
+.csv-modal-dup-hint {
+  font-size: 12px;
+  color: var(--color-yellow, #b8860b);
+  margin-top: 4px;
   line-height: 1.4;
 }
 

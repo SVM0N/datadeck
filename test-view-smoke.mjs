@@ -208,16 +208,36 @@ await test("library: no category column shows empty state", async () => {
   assert(c.querySelector(".csv-empty-state"), "empty state present");
 });
 
+await test("library: sort selector orders cards by year, newest first, undated last", async () => {
+  const rows = [
+    { Title: "Old", Category: "SciFi", Status: "", Year: "1979" },
+    { Title: "Undated", Category: "SciFi", Status: "", Year: "" },
+    { Title: "New", Category: "SciFi", Status: "", Year: "2021" },
+  ];
+  const view = {
+    headers: ["Title", "Category", "Status", "Year"], rows, searchQuery: "",
+    libraryStatusFilter: "all", libraryGenreFilter: "all",
+    fileCfg: { librarySort: "year" }, saveFileCfg: () => {},
+    getCategoryCol: () => "Category", getStatusCol: () => "Status",
+    titleKey: () => "Title", authorKey: () => undefined,
+    resolveCol: (cands) => (cands.includes("Year") ? "Year" : null),
+    getNotesCol: () => null,
+    renderView: () => {}, openNoteExpander: () => {}, openRowContextMenu: () => {},
+  };
+  const c = document.body.createDiv();
+  renderLibrary(view, c);
+  const selects = c.querySelectorAll(".csv-library-filter-select");
+  assert(selects.length === 3, `status + genre + sort selects (got ${selects.length})`);
+  const titles = Array.from(c.querySelectorAll(".csv-library-card-title")).map(t => t.textContent);
+  assert(titles.join(",") === "New,Old,Undated", `newest first, undated last (got ${titles})`);
+});
+
 // ── Kanban view ──────────────────────────────────────────────────────────────
 const { renderKanbanGenre } = await load("./src/view/kanban.ts");
 
-await test("kanban: builds a column per genre with cards", async () => {
-  const rows = [
-    { Title: "Dune", Category: "SciFi", Status: "Finished" },
-    { Title: "It", Category: "Horror", Status: "Not started" },
-  ];
-  const view = {
-    headers: ["Title", "Category", "Status"], rows, searchQuery: "",
+function kanbanView(rows, overrides = {}) {
+  return {
+    headers: Object.keys(rows[0] ?? {}), rows, searchQuery: "", fileCfg: {},
     settings: { categoryColumn: "Category" },
     getCategoryCol: () => "Category", getStatusCol: () => "Status",
     getFilteredRows: () => rows, getNotesCol: () => null,
@@ -225,13 +245,23 @@ await test("kanban: builds a column per genre with cards", async () => {
     titleKey: () => "Title", authorKey: () => undefined,
     isNotesCol: () => false, isSelectCol: () => false, getColumnValues: () => [],
     notesFileExists: () => false, openOrCreateNotes: () => {}, openNoteExpander: () => {},
-    openRowContextMenu: () => {}, scheduleSave: () => {}, contentEl: document.body.createDiv(),
+    openRowContextMenu: () => {}, scheduleSave: () => {}, saveFileCfg: () => {},
+    renderView: () => {}, contentEl: document.body.createDiv(),
+    ...overrides,
   };
+}
+
+await test("kanban: builds a column per genre with cards", async () => {
+  const rows = [
+    { Title: "Dune", Category: "SciFi", Status: "Finished" },
+    { Title: "It", Category: "Horror", Status: "Not started" },
+  ];
   const c = document.body.createDiv();
-  renderKanbanGenre(view, c);
+  renderKanbanGenre(kanbanView(rows), c);
   assert(c.querySelector(".csv-kanban-board"), "board present");
   assert(c.querySelectorAll(".csv-kanban-col").length === 2, "2 genre columns");
   assert(c.querySelectorAll(".csv-kanban-card").length === 2, "2 cards");
+  assert(c.querySelector(".csv-kanban-groupbar select"), "group-by selector present");
 });
 
 await test("kanban: no category column shows empty state", async () => {
@@ -239,6 +269,46 @@ await test("kanban: no category column shows empty state", async () => {
   const c = document.body.createDiv();
   renderKanbanGenre(view, c);
   assert(c.querySelector(".csv-empty-state"), "empty state present");
+});
+
+await test("kanban: explicit group-by column groups rows, empties get a — bucket", async () => {
+  const rows = [
+    { Title: "Fargo", Category: "Crime", Director: "Coen", Status: "" },
+    { Title: "True Grit", Category: "Western", Director: "Coen", Status: "" },
+    { Title: "Heat", Category: "Crime", Director: "", Status: "" },
+  ];
+  const view = kanbanView(rows, { fileCfg: { kanbanGroupCol: "Director" } });
+  const c = document.body.createDiv();
+  renderKanbanGenre(view, c);
+  const titles = Array.from(c.querySelectorAll(".csv-kanban-col-title")).map(t => t.textContent);
+  assert(titles.join(",") === "Coen,—", `Coen column + — bucket for the empty Director (got ${titles})`);
+  const coenCol = c.querySelectorAll(".csv-kanban-col")[0];
+  assert(coenCol.querySelectorAll(".csv-kanban-card").length === 2, "both Coen films in one column");
+});
+
+await test("kanban: year-like group column buckets into decades", async () => {
+  const rows = [
+    { Title: "Goodfellas", Category: "Crime", Year: "1990", Status: "" },
+    { Title: "Fargo", Category: "Crime", Year: "1996", Status: "" },
+    { Title: "Heat", Category: "Crime", Year: "1995", Status: "" },
+    { Title: "Dune", Category: "SciFi", Year: "2021", Status: "" },
+  ];
+  const view = kanbanView(rows, { fileCfg: { kanbanGroupCol: "Year" } });
+  const c = document.body.createDiv();
+  renderKanbanGenre(view, c);
+  const titles = Array.from(c.querySelectorAll(".csv-kanban-col-title")).map(t => t.textContent);
+  assert(titles.join(",") === "1990s,2020s", `decade columns, not per-year (got ${titles})`);
+  const nineties = c.querySelectorAll(".csv-kanban-col")[0];
+  assert(nineties.querySelectorAll(".csv-kanban-card").length === 3, "three 90s films bucketed together");
+});
+
+await test("kanban: stale persisted group column falls back to category", async () => {
+  const rows = [{ Title: "Dune", Category: "SciFi", Status: "" }];
+  const view = kanbanView(rows, { fileCfg: { kanbanGroupCol: "Removed Column" } });
+  const c = document.body.createDiv();
+  renderKanbanGenre(view, c);
+  const titles = Array.from(c.querySelectorAll(".csv-kanban-col-title")).map(t => t.textContent);
+  assert(titles.join(",") === "SciFi", `falls back to Category grouping (got ${titles})`);
 });
 
 // ── Toolbar ──────────────────────────────────────────────────────────────────
@@ -621,6 +691,45 @@ await test("mobile: writes a habit dashboard at Mobile/<file>.md", async () => {
   assert(created.length === 1, "one dashboard created");
   assert(created[0].p === "Data/Mobile/habits.md", "dashboard path under Mobile/");
   assert(created[0].c.length > 0, "non-empty dashboard content");
+  // Labels are computed by the caller now (templates module is dependency-free).
+  assert(created[0].c.includes('labels = ["Gym"]'), "title-cased habit label baked into the dataviewjs block");
+});
+
+// ── Shared mobile templates (single .mjs source) ─────────────────────────────
+// The plugin (above) and regenerate-mobile-dashboards.mjs import the same
+// module — assert node can load it directly and the output is well-formed.
+const templates = await import("./src/mobile-templates.mjs");
+
+await test("mobile templates: node-importable, library template embeds its keys", async () => {
+  const md = templates.generateLibraryMobileDashboard({
+    filePath: "../books.csv", csvPath: "Lib/books.csv",
+    titleKey: "Title", categoryCol: "Category", statusCol: "Status",
+    authorKey: "Author", yearCol: "Year", ratingCol: "Rating", themeCol: "",
+    compactGrid: true,
+  });
+  assert(md.includes("file: ../books.csv"), "csv-add points at the data file");
+  assert(md.includes('dv.io.csv("Lib/books.csv")'), "dataviewjs reads the canonical csv");
+  assert(md.includes('const titleKey = "Title"'), "titleKey baked in");
+  assert(md.includes("const compactGrid = true"), "compact grid flag baked in");
+});
+
+// ── Grouping helpers (kanban group-by) ───────────────────────────────────────
+const { isYearLikeColumn, decadeLabel } = await load("./src/utils.ts");
+
+await test("utils: isYearLikeColumn by name and by values", async () => {
+  assert(isYearLikeColumn("Year", []), "name match wins regardless of values");
+  assert(isYearLikeColumn("Released", []), "Released counts as year-like");
+  assert(isYearLikeColumn("foo", ["1994", "2001", "1987", "2020"]), "value-shape detection");
+  assert(!isYearLikeColumn("foo", ["1994", "Drama", "Crime", "Noir"]), "mixed values rejected");
+  assert(!isYearLikeColumn("foo", ["1994", "2001"]), "too few values to trust the shape");
+});
+
+await test("utils: decadeLabel buckets years, tolerates dates, rejects junk", async () => {
+  assert(decadeLabel("1994") === "1990s", "plain year");
+  assert(decadeLabel("2021-03-01") === "2020s", "year inside a date");
+  assert(decadeLabel("1899") === "1890s", "19th century");
+  assert(decadeLabel("") === null, "empty → null");
+  assert(decadeLabel("unknown") === null, "non-year → null");
 });
 
 console.log(`\n${"=".repeat(50)}`);

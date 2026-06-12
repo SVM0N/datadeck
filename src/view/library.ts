@@ -3,8 +3,9 @@
 // Covered by test-view-smoke.mjs.
 
 import type { CardView } from "../../main";
-import { CSVRow } from "../types";
+import { CSVRow, LibrarySort } from "../types";
 import { formatRatingForDisplay } from "../utils";
+import { parseRating } from "./stats";
 
 export function renderLibrary(view: CardView, container: HTMLElement): void {
   const cc = view.getCategoryCol();
@@ -69,6 +70,31 @@ export function renderLibrary(view: CardView, container: HTMLElement): void {
     genreSelect.createEl("option", { text: g, value: g });
   });
   genreSelect.value = view.libraryGenreFilter;
+
+  // Card-detail columns, resolved once per render (used by the sort selector
+  // and by the per-card field rendering below).
+  const yearCol = view.resolveCol(["Year", "year", "Date", "date"]);
+  const ratingCol = view.resolveCol(["Rating", "rating", "Score", "score", "Score /5", "Stars", "stars"]);
+  const themeCol = view.resolveCol(["Theme", "theme", "Tags", "tags", "Tag", "tag", "Mood", "mood"]);
+
+  // Sort selector — persisted per file. "Status" is the historical default
+  // (consumed → in-progress → backlog); the others only appear when the
+  // file actually has the column to sort by.
+  const sortKey: LibrarySort = view.fileCfg.librarySort ?? "status";
+  const sortSelect = filtersBar.createEl("select", { cls: "csv-library-filter-select" });
+  const sortOptions: [LibrarySort, string][] = [["status", "Sort: Status"], ["title", "Sort: Title"]];
+  if (ratingCol) sortOptions.push(["rating", "Sort: Rating"]);
+  if (yearCol) sortOptions.push(["year", "Sort: Year"]);
+  sortOptions.forEach(([val, label]) => {
+    const opt = sortSelect.createEl("option", { text: label, value: val });
+    if (val === sortKey) opt.selected = true;
+  });
+  sortSelect.addEventListener("change", () => {
+    const cfg = view.fileCfg;
+    cfg.librarySort = sortSelect.value === "status" ? undefined : (sortSelect.value as LibrarySort);
+    view.saveFileCfg(cfg);
+    view.renderView(true);
+  });
 
   // Search lives in the toolbar (the 🔍 toggle on mobile, always-visible
   // input on desktop). Library used to render its own search input here,
@@ -152,11 +178,34 @@ export function renderLibrary(view: CardView, container: HTMLElement): void {
 
     const grid = section.createDiv({ cls: "csv-library-grid" });
 
-    // Sort: green-dotted (read/watched/finished) first, then in-progress,
-    // then everything else. Within each group, alphabetical by title.
-    // Rationale: surfacing what you've already done makes the section read
-    // as a library catalogue (consumed → backlog) rather than a todo list.
+    // Section ordering, driven by the sort selector:
+    //   status (default) — green-dotted (read/watched/finished) first, then
+    //     in-progress, then backlog; alphabetical within each band. Surfacing
+    //     what you've already done makes the section read as a library
+    //     catalogue (consumed → backlog) rather than a todo list.
+    //   title — plain alphabetical.
+    //   rating — best first; unrated last.
+    //   year — newest first; undated last.
+    const byTitle = (a: CSVRow, b: CSVRow) => (a[titleCol] ?? "").localeCompare(b[titleCol] ?? "");
+    // Descending compare where null (missing value) always sorts last.
+    const descNullsLast = (va: number | null, vb: number | null): number => {
+      if (va === null && vb === null) return 0;
+      if (va === null) return 1;
+      if (vb === null) return -1;
+      return vb - va;
+    };
     items.sort((a, b) => {
+      if (sortKey === "title") return byTitle(a, b);
+      if (sortKey === "rating" && ratingCol) {
+        return descNullsLast(parseRating(a[ratingCol] ?? ""), parseRating(b[ratingCol] ?? "")) || byTitle(a, b);
+      }
+      if (sortKey === "year" && yearCol) {
+        const yearOf = (r: CSVRow): number | null => {
+          const m = (r[yearCol] ?? "").match(/\d{4}/);
+          return m ? parseInt(m[0], 10) : null;
+        };
+        return descNullsLast(yearOf(a), yearOf(b)) || byTitle(a, b);
+      }
       if (sc) {
         const statusA = (a[sc] ?? "").toLowerCase();
         const statusB = (b[sc] ?? "").toLowerCase();
@@ -167,15 +216,12 @@ export function renderLibrary(view: CardView, container: HTMLElement): void {
         const inProgressB = commonInProgress.includes(statusB);
         if (inProgressA !== inProgressB) return inProgressA ? -1 : 1;
       }
-      return (a[titleCol] ?? "").localeCompare(b[titleCol] ?? "");
+      return byTitle(a, b);
     });
 
     // Resolve which extra columns to surface on each card.
     // If the user picked cardFields in the per-file Columns modal, use that list verbatim.
     // Otherwise auto-detect: author, year, rating, theme.
-    const yearCol = view.resolveCol(["Year", "year", "Date", "date"]);
-    const ratingCol = view.resolveCol(["Rating", "rating", "Score", "score", "Score /5", "Stars", "stars"]);
-    const themeCol = view.resolveCol(["Theme", "theme", "Tags", "tags", "Tag", "tag", "Mood", "mood"]);
     const autoFields = [authorCol, yearCol, ratingCol, themeCol].filter((c): c is string => !!c);
     const cardFields = view.fileCfg.cardFields ?? autoFields;
 

@@ -135,6 +135,30 @@ export function formatRating(value: string, columnName: string): string {
 }
 
 /**
+ * Heuristic for "this column holds years": either the name says so, or at
+ * least 80% of the non-empty values are 4-digit years. Used by the kanban
+ * group-by selector to bucket into decades instead of one column per year.
+ */
+export function isYearLikeColumn(col: string, values: string[]): boolean {
+  if (/^(year|released|decade)$/i.test((col ?? "").trim())) return true;
+  const nonEmpty = values.map(v => (v ?? "").trim()).filter(Boolean);
+  if (nonEmpty.length < 3) return false;
+  const yearish = nonEmpty.filter(v => /^(1[89]|20)\d{2}$/.test(v));
+  return yearish.length / nonEmpty.length >= 0.8;
+}
+
+/**
+ * Decade bucket label for a year-ish value: "1994" → "1990s". Picks the
+ * first 4-digit year found, so full dates ("1994-06-12") work too.
+ * Returns null when no year can be extracted.
+ */
+export function decadeLabel(value: string): string | null {
+  const m = (value ?? "").match(/\b(1[89]\d{2}|20\d{2})\b/);
+  if (!m) return null;
+  return `${Math.floor(parseInt(m[1], 10) / 10) * 10}s`;
+}
+
+/**
  * Columns whose value is a comma-separated *list* (genres, tags…) rather than
  * a single pick. Name-based on purpose: every picker call site knows the
  * header name, so no plumbing through view/modal constructors is needed.

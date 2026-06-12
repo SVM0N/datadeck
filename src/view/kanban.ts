@@ -4,12 +4,20 @@
 
 import type { CardView } from "../../main";
 import { CSVRow } from "../types";
-import { showSelectPicker, isMultiValueColName } from "../utils";
+import { showSelectPicker, isMultiValueColName, isYearLikeColumn, decadeLabel } from "../utils";
 
 export function renderKanbanGenre(view: CardView, container: HTMLElement): void {
-  const cc = view.getCategoryCol();
-  const sc = view.getStatusCol();
-  if (!cc) { container.createEl("p",{text:`No "${view.settings.categoryColumn}" column found.`,cls:"csv-empty-state"}); return; }
+  const defaultCc = view.getCategoryCol();
+  if (!defaultCc) { container.createEl("p",{text:`No "${view.settings.categoryColumn}" column found.`,cls:"csv-empty-state"}); return; }
+
+  // "Group by" column — per-file persisted; falls back to the category
+  // column when unset or stale (column renamed/removed since it was saved).
+  const cfgCol = view.fileCfg.kanbanGroupCol;
+  const cc = cfgCol && view.headers.includes(cfgCol) ? cfgCol : defaultCc;
+  // Grouping by the status column itself would subgroup every column by its
+  // own single value — pointless; drop the subgrouping in that case.
+  const scRaw = view.getStatusCol();
+  const sc = scRaw === cc ? null : scRaw;
 
   const filteredRows = view.getFilteredRows();
 
@@ -18,12 +26,50 @@ export function renderKanbanGenre(view: CardView, container: HTMLElement): void 
     container.createDiv({ cls: "csv-search-results", text: `Found ${filteredRows.length} of ${view.rows.length} entries` });
   }
 
+  // Group-by selector. Rendered before the empty-state check so a grouping
+  // that produced no columns can still be switched away from.
+  const groupBar = container.createDiv({ cls: "csv-kanban-groupbar" });
+  groupBar.createSpan({ cls: "csv-kanban-groupbar-label", text: "Group by" });
+  const groupSel = groupBar.createEl("select", { cls: "csv-library-filter-select" });
+  view.headers.filter(h => !view.isNotesCol(h)).forEach(h => {
+    const opt = groupSel.createEl("option", { text: h === defaultCc ? `${h} (default)` : h, value: h });
+    if (h === cc) opt.selected = true;
+  });
+  groupSel.addEventListener("change", () => {
+    const cfg = view.fileCfg;
+    cfg.kanbanGroupCol = groupSel.value === defaultCc ? undefined : groupSel.value;
+    view.saveFileCfg(cfg);
+    view.renderView(true);
+  });
+
+  // Year-like columns bucket into decades ("1990s") so a 200-movie file
+  // doesn't explode into 40 single-year columns. Everything else keeps the
+  // comma-split multi-value behavior the genre kanban always had.
+  const isYear = isYearLikeColumn(cc, filteredRows.map(r => r[cc] ?? ""));
+  // When the user explicitly grouped by a non-default column, rows with an
+  // empty value get a "—" bucket instead of silently vanishing (an explicit
+  // grouping should account for every row). The default genre view keeps
+  // its original drop-empties behavior.
+  const explicit = cc !== defaultCc;
+  const groupValues = (row: CSVRow): string[] => {
+    const raw = row[cc] ?? "";
+    let vals: string[];
+    if (isYear) {
+      const d = decadeLabel(raw);
+      vals = d ? [d] : [];
+    } else {
+      vals = raw.split(",").map(s=>s.trim()).filter(Boolean);
+    }
+    if (!vals.length && explicit) vals = ["—"];
+    return vals;
+  };
+
   const genreSet = new Set<string>();
-  filteredRows.forEach(r => (r[cc]??"").split(",").map(s=>s.trim()).filter(Boolean).forEach(c=>genreSet.add(c)));
+  filteredRows.forEach(r => groupValues(r).forEach(c=>genreSet.add(c)));
   const genres = Array.from(genreSet).sort();
   if (!genres.length) {
     const empty = container.createDiv({cls:"csv-empty-state"});
-    empty.createEl("p",{text: view.searchQuery ? "No matching entries found." : "No genre values found."});
+    empty.createEl("p",{text: view.searchQuery ? "No matching entries found." : `No "${cc}" values found.`});
     if (view.searchQuery) {
       empty.createEl("button", { cls: "csv-clear-filters-btn", text: "Clear search" })
         .addEventListener("click", () => { view.searchQuery = ""; view.renderView(); });
@@ -38,7 +84,7 @@ export function renderKanbanGenre(view: CardView, container: HTMLElement): void 
 
   const board = container.createDiv({cls:"csv-kanban-board"});
   genres.forEach(genre => {
-    const genreRows = filteredRows.filter(r=>(r[cc]??"").split(",").map(s=>s.trim()).includes(genre));
+    const genreRows = filteredRows.filter(r => groupValues(r).includes(genre));
     if (!genreRows.length) return;
     const col = board.createDiv({cls:"csv-kanban-col"});
     const ch = col.createDiv({cls:"csv-kanban-col-header"});
@@ -52,15 +98,15 @@ export function renderKanbanGenre(view: CardView, container: HTMLElement): void 
         if (!statusRows.length) return;
         const groupEl = cb.createDiv({cls:"csv-kanban-status-group"});
         groupEl.createDiv({cls:`csv-kanban-status-label status-${status.toLowerCase().replace(/\s+/g,"-")}`, text:status});
-        statusRows.forEach(row => renderKanbanCard(view, groupEl, row, statuses, sc));
+        statusRows.forEach(row => renderKanbanCard(view, groupEl, row, sc, cc));
       });
     } else {
-      genreRows.forEach(row => renderKanbanCard(view, cb, row, statuses, sc));
+      genreRows.forEach(row => renderKanbanCard(view, cb, row, sc, cc));
     }
   });
 }
 
-function renderKanbanCard(view: CardView, container: HTMLElement, row: CSVRow, statuses: string[], sc: string|null): void {
+function renderKanbanCard(view: CardView, container: HTMLElement, row: CSVRow, sc: string|null, groupCol: string): void {
   const card = container.createDiv({cls:"csv-kanban-card"});
   const notesColForCard = view.getNotesCol();
 
@@ -83,9 +129,12 @@ function renderKanbanCard(view: CardView, container: HTMLElement, row: CSVRow, s
   const sub = view.getSubtitle(row);
   if (sub) card.createDiv({cls:"csv-kanban-card-sub", text:sub});
 
-  // Meta chips for select fields (skip category, title, author, status)
-  const tk=view.titleKey(), ak=view.authorKey(), ccol=view.getCategoryCol();
-  const skipInCard = new Set([sc, tk, ak, ccol].filter(Boolean) as string[]);
+  // Meta chips for select fields (skip group column, title, author, status —
+  // they're already visible as the column header / card title / subtitle).
+  // When grouped by something other than the category column, the category
+  // chip comes back: it's real information again, not the column header.
+  const tk=view.titleKey(), ak=view.authorKey();
+  const skipInCard = new Set([sc, tk, ak, groupCol].filter(Boolean) as string[]);
   const metaEl = card.createDiv({cls:"csv-kanban-card-meta"});
   view.headers.forEach(h => {
     if (skipInCard.has(h) || view.isNotesCol(h) || !row[h]) return;

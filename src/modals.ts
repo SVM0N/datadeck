@@ -75,6 +75,18 @@ export class AddEntryModal extends Modal {
     const values: CSVRow = {};
     this.headers.forEach(h => values[h] = "");
 
+    // Duplicate check for the title field — typing a title that's already in
+    // the file shows a non-blocking hint (the user may genuinely want a
+    // duplicate, e.g. a rewatch row, so submission stays allowed).
+    const titleCol = this.headers.find(h => ["title", "name"].includes(h.toLowerCase()));
+    const existingTitles = new Map<string, string>(); // lowercase → original casing
+    if (titleCol) {
+      this.getColumnValues(titleCol).forEach(v => {
+        const key = v.trim().toLowerCase();
+        if (key && !existingTitles.has(key)) existingTitles.set(key, v.trim());
+      });
+    }
+
     this.headers.forEach(h => {
       const row = form.createDiv({ cls: "csv-modal-row" });
       // titleCase so the label reads "Author" / "Year" / "Notes" regardless of
@@ -104,6 +116,20 @@ export class AddEntryModal extends Modal {
         input.addEventListener("input", () => { values[h] = input.value; });
         // Submit on Enter for non-textarea fields
         input.addEventListener("keydown", e => { if (e.key === "Enter") submit(); });
+
+        if (h === titleCol && existingTitles.size) {
+          const hint = row.createDiv({ cls: "csv-modal-dup-hint" });
+          hint.hide();
+          input.addEventListener("input", () => {
+            const match = existingTitles.get(input.value.trim().toLowerCase());
+            if (match) {
+              hint.setText(`⚠ “${match}” is already in this file`);
+              hint.show();
+            } else {
+              hint.hide();
+            }
+          });
+        }
       }
     });
 
