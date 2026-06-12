@@ -6,15 +6,18 @@ import type { CardView } from "../../main";
 import { CSVRow, LibrarySort } from "../types";
 import { formatRatingForDisplay } from "../utils";
 import { parseRating } from "./stats";
+import { effectiveGroupCol } from "./kanban";
 
 export function renderLibrary(view: CardView, container: HTMLElement): void {
-  const cc = view.getCategoryCol();
+  // Same grouping column as the kanban (per-file pick → category → auto
+  // fallback), so Cards stays available on files without a category column.
+  const cc = effectiveGroupCol(view);
   const sc = view.getStatusCol();
   const titleCol = view.titleKey() ?? view.headers[0];
   const authorCol = view.authorKey();
 
   if (!cc) {
-    container.createEl("p", { text: `No category column found.`, cls: "csv-empty-state" });
+    container.createEl("p", { text: `No groupable column found.`, cls: "csv-empty-state" });
     return;
   }
 

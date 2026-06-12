@@ -25,7 +25,7 @@ import { CardViewSettingTab } from "./src/settings-tab";
 import { renderAddEntryForm } from "./src/add-entry-form";
 import { renderTable } from "./src/view/table";
 import { renderLibrary } from "./src/view/library";
-import { renderKanbanGenre } from "./src/view/kanban";
+import { renderKanbanGenre, effectiveGroupCol } from "./src/view/kanban";
 import { renderToolbar, availableModes } from "./src/view/toolbar";
 import { renderRandomCard } from "./src/random-block";
 import { renderDashboard } from "./src/view/dashboard";
@@ -100,11 +100,11 @@ export class CardView extends FileView {
     }
     // Guard: if the resolved mode requires a column this file doesn't have,
     // fall back to "table" so we never land on a broken empty-state screen.
-    // (e.g. data.xlsx has no Category col but the global default is
-    // kanban-genre — without this it would render "No category column found".)
+    // Cards/Kanban only need *some* groupable column (per-file pick →
+    // category → auto fallback; see effectiveGroupCol in view/kanban.ts).
     const needsCategory = this.mode === "kanban-genre" || this.mode === "library";
     const needsDate = this.mode === "dashboard";
-    if ((needsCategory && !this.getCategoryCol()) || (needsDate && !this.hasDateColumn())
+    if ((needsCategory && !effectiveGroupCol(this)) || (needsDate && !this.hasDateColumn())
         || (this.mode === "travel" && !this.isTravelFile())
         || (this.mode === "stats" && !hasStatsColumns(this))) {
       this.mode = "table";

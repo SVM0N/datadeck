@@ -4,16 +4,36 @@
 
 import type { CardView } from "../../main";
 import { CSVRow } from "../types";
-import { showSelectPicker, isMultiValueColName, isYearLikeColumn, decadeLabel } from "../utils";
+import { showSelectPicker, isMultiValueColName, isYearLikeColumn, decadeLabel, pickFallbackGroupCol } from "../utils";
+
+/**
+ * The column Cards/Kanban group by, resolved in priority order:
+ *   1. per-file "Group by" pick (if the column still exists),
+ *   2. the detected category column,
+ *   3. an auto-picked fallback (lowest-friction groupable column) so files
+ *      without a category column — travel logs, generic exports — still get
+ *      Cards/Kanban in the view dropdown instead of losing them entirely.
+ * Null only when nothing in the file is groupable. Shared by the renderers,
+ * availableModes, and the onLoadFile mode guard.
+ */
+export function effectiveGroupCol(view: CardView): string | null {
+  const cfg = view.fileCfg.kanbanGroupCol;
+  if (cfg && view.headers.includes(cfg)) return cfg;
+  const cat = view.getCategoryCol();
+  if (cat) return cat;
+  const exclude = new Set<string>();
+  view.headers.forEach(h => { if (view.isNotesCol(h)) exclude.add(h); });
+  const dateCol = view.getDateCol();
+  if (dateCol) exclude.add(dateCol);
+  const title = view.titleKey();
+  if (title) exclude.add(title);
+  return pickFallbackGroupCol(view.headers, view.rows, exclude);
+}
 
 export function renderKanbanGenre(view: CardView, container: HTMLElement): void {
+  const cc = effectiveGroupCol(view);
+  if (!cc) { container.createEl("p",{text:"No groupable column found.",cls:"csv-empty-state"}); return; }
   const defaultCc = view.getCategoryCol();
-  if (!defaultCc) { container.createEl("p",{text:`No "${view.settings.categoryColumn}" column found.`,cls:"csv-empty-state"}); return; }
-
-  // "Group by" column — per-file persisted; falls back to the category
-  // column when unset or stale (column renamed/removed since it was saved).
-  const cfgCol = view.fileCfg.kanbanGroupCol;
-  const cc = cfgCol && view.headers.includes(cfgCol) ? cfgCol : defaultCc;
   // Grouping by the status column itself would subgroup every column by its
   // own single value — pointless; drop the subgrouping in that case.
   const scRaw = view.getStatusCol();

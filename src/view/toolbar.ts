@@ -9,6 +9,7 @@ import { ViewMode } from "../types";
 import { FileConfigModal } from "../modals";
 import { generateMobileFiles } from "./mobile";
 import { hasStatsColumns } from "./stats";
+import { effectiveGroupCol } from "./kanban";
 
 declare const __BUILD_TIME__: string;
 
@@ -19,21 +20,22 @@ declare const __BUILD_TIME__: string;
  */
 export function availableModes(view: CardView): {id: ViewMode, label: string}[] {
   const modes: {id: ViewMode, label: string}[] = [];
-  const isTravel = view.isTravelFile();
-  const isDateFile = view.hasDateColumn();
-  if (isTravel) modes.push({id: "travel", label: "Travel"});
-  if (isDateFile) modes.push({id: "dashboard", label: "Dashboard"});
-  if (view.getCategoryCol()) {
+  if (view.isTravelFile()) modes.push({id: "travel", label: "Travel"});
+  if (view.hasDateColumn()) modes.push({id: "dashboard", label: "Dashboard"});
+  // Cards/Kanban work on any file with a groupable column — the per-file
+  // "Group by" pick, the category column, or an auto-picked fallback (see
+  // effectiveGroupCol). Travel/date files used to lose these entirely.
+  if (effectiveGroupCol(view)) {
     modes.push({id: "library", label: "Cards"});
     modes.push({id: "kanban-genre", label: "Kanban"});
   }
   modes.push({id: "table", label: "Table"});
-  // Focus (one entry at a time) and Stats (bar charts) apply to content
-  // files — travel has its own map view and date files have the dashboard.
-  if (!isTravel && !isDateFile && view.rows.length > 0) {
-    modes.push({id: "focus", label: "Focus"});
-    if (hasStatsColumns(view)) modes.push({id: "stats", label: "Stats"});
-  }
+  // Focus (one entry at a time) works on any non-empty file; Stats whenever
+  // there's a chartable column. (These were once gated off travel/date files
+  // on the theory that the map/dashboard covers them — but hiding modes that
+  // render fine just made the dropdown feel arbitrarily short.)
+  if (view.rows.length > 0) modes.push({id: "focus", label: "Focus"});
+  if (hasStatsColumns(view)) modes.push({id: "stats", label: "Stats"});
   return modes;
 }
 

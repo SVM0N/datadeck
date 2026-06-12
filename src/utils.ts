@@ -159,6 +159,32 @@ export function decadeLabel(value: string): string | null {
 }
 
 /**
+ * Pick a sensible grouping column for files with no category-like column,
+ * so Cards/Kanban stay available everywhere (the group-by selector lets the
+ * user switch immediately if the guess is off). Scores every non-excluded
+ * column by how close its distinct-value count lands to a "good board" size
+ * (~8 columns); columns that are all-unique (IDs, free text) or single-valued
+ * are skipped. Returns null when nothing groupable exists.
+ */
+export function pickFallbackGroupCol(headers: string[], rows: CSVRow[], exclude: Set<string>): string | null {
+  if (!rows.length) return null;
+  const maxGroups = Math.max(12, rows.length / 3);
+  let best: string | null = null;
+  let bestScore = Infinity;
+  for (const h of headers) {
+    if (exclude.has(h)) continue;
+    const values = new Set<string>();
+    for (const r of rows) {
+      (r[h] ?? "").split(",").forEach(v => { const t = v.trim(); if (t) values.add(t); });
+    }
+    if (values.size < 2 || values.size > maxGroups) continue;
+    const score = Math.abs(Math.log(values.size / 8));
+    if (score < bestScore) { bestScore = score; best = h; }
+  }
+  return best;
+}
+
+/**
  * Columns whose value is a comma-separated *list* (genres, tags…) rather than
  * a single pick. Name-based on purpose: every picker call site knows the
  * header name, so no plumbing through view/modal constructors is needed.

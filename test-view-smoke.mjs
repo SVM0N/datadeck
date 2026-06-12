@@ -198,9 +198,10 @@ await test("library: groups cards by category", async () => {
   assert(c.querySelectorAll(".csv-library-card").length === 2, "2 cards");
 });
 
-await test("library: no category column shows empty state", async () => {
+await test("library: nothing groupable shows empty state", async () => {
   const view = {
-    headers: [], rows: [], getCategoryCol: () => null, getStatusCol: () => null,
+    headers: [], rows: [], fileCfg: {}, getCategoryCol: () => null, getStatusCol: () => null,
+    getDateCol: () => null, isNotesCol: () => false,
     titleKey: () => undefined, authorKey: () => undefined,
   };
   const c = document.body.createDiv();
@@ -239,6 +240,7 @@ function kanbanView(rows, overrides = {}) {
   return {
     headers: Object.keys(rows[0] ?? {}), rows, searchQuery: "", fileCfg: {},
     settings: { categoryColumn: "Category" },
+    getDateCol: () => null,
     getCategoryCol: () => "Category", getStatusCol: () => "Status",
     getFilteredRows: () => rows, getNotesCol: () => null,
     getTitle: (r) => r.Title, getSubtitle: () => "",
@@ -264,11 +266,34 @@ await test("kanban: builds a column per genre with cards", async () => {
   assert(c.querySelector(".csv-kanban-groupbar select"), "group-by selector present");
 });
 
-await test("kanban: no category column shows empty state", async () => {
-  const view = { getCategoryCol: () => null, getStatusCol: () => null, settings: { categoryColumn: "Category" } };
+await test("kanban: nothing groupable shows empty state", async () => {
+  const view = {
+    headers: [], rows: [], fileCfg: {}, settings: { categoryColumn: "Category" },
+    getCategoryCol: () => null, getStatusCol: () => null, getDateCol: () => null,
+    isNotesCol: () => false, titleKey: () => undefined,
+  };
   const c = document.body.createDiv();
   renderKanbanGenre(view, c);
   assert(c.querySelector(".csv-empty-state"), "empty state present");
+});
+
+await test("kanban: no category column auto-picks a fallback group column", async () => {
+  // Travel-log shape: no Category, but `country` is nicely groupable.
+  const rows = [
+    { trip_id: "1", country: "FR", city: "Paris" },
+    { trip_id: "2", country: "FR", city: "Lyon" },
+    { trip_id: "3", country: "JP", city: "Tokyo" },
+  ];
+  const view = kanbanView(rows, {
+    getCategoryCol: () => null,
+    getTitle: (r) => r.trip_id, titleKey: () => "trip_id",
+  });
+  const c = document.body.createDiv();
+  renderKanbanGenre(view, c);
+  assert(c.querySelector(".csv-kanban-board"), "board renders without a category column");
+  assert(c.querySelectorAll(".csv-kanban-col").length >= 2, "grouped by the auto-picked column");
+  const sel = c.querySelector(".csv-kanban-groupbar select");
+  assert(sel, "group-by selector still offered for switching");
 });
 
 await test("kanban: explicit group-by column groups rows, empties get a — bucket", async () => {
@@ -314,15 +339,22 @@ await test("kanban: stale persisted group column falls back to category", async 
 // ── Toolbar ──────────────────────────────────────────────────────────────────
 const { renderToolbar } = await load("./src/view/toolbar.ts");
 
-await test("toolbar: renders mode dropdown, search, row count, + Add", async () => {
-  const view = {
+function toolbarView(overrides = {}) {
+  return {
     file: { basename: "movies", path: "movies.csv" },
     rows: [{}, {}], mode: "table", searchQuery: "",
     isTravelFile: () => false, hasDateColumn: () => false, getCategoryCol: () => "Category",
+    getStatusCol: () => null, authorKey: () => undefined, resolveCol: () => null,
+    isNotesCol: () => false, getDateCol: () => null, titleKey: () => "Title",
     fileCfg: {}, app: {}, headers: ["Title", "Category"],
     renderView: () => {}, renderViewPreservingScroll: () => {}, saveFileCfg: () => {},
     autoDetectBooleanColumns: () => [], generateMobileFiles: () => {}, backupToArchive: () => {}, openAddModal: () => {},
+    ...overrides,
   };
+}
+
+await test("toolbar: renders mode dropdown, search, row count, + Add", async () => {
+  const view = toolbarView();
   const c = document.body.createDiv();
   renderToolbar(view, c);
   assert(c.querySelector(".csv-toolbar"), "toolbar present");
@@ -335,31 +367,43 @@ await test("toolbar: renders mode dropdown, search, row count, + Add", async () 
   assert(c.querySelector(".csv-row-count").textContent === "2 entries", "row count reflects rows");
 });
 
-await test("toolbar: date files get Dashboard + Table, no Focus/Stats", async () => {
-  const view = {
+await test("toolbar: ungroupable date file gets Dashboard + Table + Focus", async () => {
+  const view = toolbarView({
     file: { basename: "habits", path: "habits.csv" },
-    rows: [{}], mode: "dashboard", searchQuery: "",
-    isTravelFile: () => false, hasDateColumn: () => true, getCategoryCol: () => null,
-    fileCfg: {}, app: {}, headers: ["date", "gym"],
-    renderView: () => {}, renderViewPreservingScroll: () => {}, saveFileCfg: () => {},
-    autoDetectBooleanColumns: () => [], generateMobileFiles: () => {}, backupToArchive: () => {}, openAddModal: () => {},
-  };
+    rows: [{}], mode: "dashboard",
+    hasDateColumn: () => true, getCategoryCol: () => null,
+    getDateCol: () => "date", titleKey: () => undefined,
+    headers: ["date", "gym"],
+  });
   const c = document.body.createDiv();
   renderToolbar(view, c);
   const labels = Array.from(c.querySelectorAll(".csv-mode-select option")).map(o => o.textContent);
-  assert(labels.join(",") === "Dashboard,Table", `dashboard files keep Dashboard + Table only (got ${labels})`);
+  assert(labels.join(",") === "Dashboard,Table,Focus", `no Cards/Kanban/Stats without groupable or chartable columns (got ${labels})`);
+});
+
+await test("toolbar: travel file with groupable columns gets the full dropdown", async () => {
+  const view = toolbarView({
+    file: { basename: "travel_flat", path: "travel_flat.csv" },
+    mode: "travel",
+    rows: [
+      { date_entered: "2020-01-01", country: "FR", city: "Paris", source: "confirmed" },
+      { date_entered: "2020-02-01", country: "JP", city: "Tokyo", source: "confirmed" },
+      { date_entered: "2021-03-01", country: "FR", city: "Lyon", source: "inferred" },
+    ],
+    isTravelFile: () => true, hasDateColumn: () => true, getCategoryCol: () => null,
+    getDateCol: () => "date_entered", titleKey: () => undefined,
+    headers: ["date_entered", "country", "city", "source"],
+  });
+  const c = document.body.createDiv();
+  renderToolbar(view, c);
+  const labels = Array.from(c.querySelectorAll(".csv-mode-select option")).map(o => o.textContent);
+  assert(labels.join(",") === "Travel,Dashboard,Cards,Kanban,Table,Focus",
+    `Cards/Kanban via fallback group col + Focus no longer gated off travel files (got ${labels})`);
 });
 
 await test("toolbar: changing the mode dropdown switches the view", async () => {
   let rendered = 0;
-  const view = {
-    file: { basename: "movies", path: "movies.csv" },
-    rows: [{}], mode: "table", searchQuery: "",
-    isTravelFile: () => false, hasDateColumn: () => false, getCategoryCol: () => "Category",
-    fileCfg: {}, app: {}, headers: ["Title", "Category"],
-    renderView: () => { rendered++; }, renderViewPreservingScroll: () => {}, saveFileCfg: () => {},
-    autoDetectBooleanColumns: () => [], generateMobileFiles: () => {}, backupToArchive: () => {}, openAddModal: () => {},
-  };
+  const view = toolbarView({ rows: [{}], renderView: () => { rendered++; } });
   const c = document.body.createDiv();
   renderToolbar(view, c);
   const sel = c.querySelector(".csv-mode-select");
@@ -661,8 +705,9 @@ const { availableModes } = await load("./src/view/toolbar.ts");
 
 await test("toolbar: availableModes is consistent with rendered buttons", async () => {
   const view = {
-    rows: [{}], isTravelFile: () => false, hasDateColumn: () => false,
+    rows: [{}], fileCfg: {}, headers: [], isTravelFile: () => false, hasDateColumn: () => false,
     getCategoryCol: () => "Category", getStatusCol: () => null, authorKey: () => undefined, resolveCol: () => null,
+    isNotesCol: () => false, getDateCol: () => null, titleKey: () => undefined,
   };
   const ids = availableModes(view).map(m => m.id);
   assert(ids.join(",") === "library,kanban-genre,table,focus,stats", `expected full content-file set (got ${ids})`);
@@ -736,7 +781,24 @@ await test("mobile templates: node-importable, library template embeds its keys"
 });
 
 // ── Grouping helpers (kanban group-by) ───────────────────────────────────────
-const { isYearLikeColumn, decadeLabel } = await load("./src/utils.ts");
+const { isYearLikeColumn, decadeLabel, pickFallbackGroupCol } = await load("./src/utils.ts");
+
+await test("utils: pickFallbackGroupCol prefers a board-sized column, skips IDs and constants", async () => {
+  const rows = [];
+  for (let i = 0; i < 30; i++) {
+    rows.push({
+      id: String(i),                        // all-unique → skipped
+      kind: "always-same",                  // single value → skipped
+      country: ["FR", "JP", "US", "DE", "IT", "ES"][i % 6],
+      flag: i % 2 ? "yes" : "no",           // groupable but tiny
+    });
+  }
+  const pick = pickFallbackGroupCol(Object.keys(rows[0]), rows, new Set());
+  assert(pick === "country", `country (6 groups) beats flag (2) and the degenerate columns (got ${pick})`);
+  assert(pickFallbackGroupCol(["id"], rows, new Set()) === null, "nothing groupable → null");
+  assert(pickFallbackGroupCol(["country"], [], new Set()) === null, "no rows → null");
+  assert(pickFallbackGroupCol(["country"], rows, new Set(["country"])) === null, "excluded columns are skipped");
+});
 
 await test("utils: isYearLikeColumn by name and by values", async () => {
   assert(isYearLikeColumn("Year", []), "name match wins regardless of values");
