@@ -6,7 +6,7 @@
 // Covered by test-view-smoke.mjs.
 
 import type { CardView } from "../../main";
-import { showSelectPicker } from "../utils";
+import { showSelectPicker, isMultiValueColName } from "../utils";
 
 export function renderFocus(view: CardView, container: HTMLElement): void {
   const rows = view.getFilteredRows();
@@ -79,7 +79,7 @@ export function renderFocus(view: CardView, container: HTMLElement): void {
           e.stopPropagation();
           showSelectPicker(valSpan, row[h], view.getColumnValues(h), (newVal) => {
             row[h] = newVal; valSpan.setText(newVal || "—"); view.scheduleSave();
-          }, view.contentEl);
+          }, view.contentEl, { multi: isMultiValueColName(h) });
         });
       } else {
         chip.createSpan({ cls: "csv-chip-value", text: row[h] });

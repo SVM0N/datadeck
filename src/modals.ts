@@ -6,7 +6,7 @@ import {
   Notice,
 } from "obsidian";
 import { CSVRow, FileConfig, ViewMode } from "./types";
-import { showSelectPicker, titleCase } from "./utils";
+import { showSelectPicker, titleCase, isMultiValueColName } from "./utils";
 import { suggestionsFor, isDateCol, ISO_DATE } from "./field-types";
 
 // ─── Shared field input ─────────────────────────────────────────────────────
@@ -96,7 +96,7 @@ export class AddEntryModal extends Modal {
             values[h] = newVal;
             chip.setText(newVal || "— click to select —");
             chip.toggleClass("empty", !newVal);
-          }, contentEl);
+          }, contentEl, { multi: isMultiValueColName(h) });
         });
 
       } else {
@@ -229,7 +229,7 @@ export class NoteExpanderModal extends Modal {
             this.row[h] = newVal;
             chip.setText(newVal || "—");
             chip.toggleClass("empty", !newVal);
-          }, contentEl);
+          }, contentEl, { multi: isMultiValueColName(h) });
         });
       } else {
         const val = fieldRow.createDiv({ cls: "csv-expander-field-value", text: this.row[h] || "—" });

@@ -41,6 +41,9 @@ export function setupDom() {
   HE.hasClass = function (c) { return this.classList.contains(c); };
   HE.setAttr = function (k, v) { this.setAttribute(k, String(v)); return this; };
   HE.getAttr = function (k) { return this.getAttribute(k); };
+  // jsdom doesn't implement scrollIntoView (used by the picker's keyboard
+  // cursor and the travel detail panel); a no-op is fine for structure tests.
+  if (!HE.scrollIntoView) HE.scrollIntoView = function () {};
 
   // Globals the view code resolves against the realm.
   globalThis.window = window;

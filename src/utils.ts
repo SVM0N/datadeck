@@ -134,12 +134,23 @@ export function formatRating(value: string, columnName: string): string {
   return ratingMap[val] ?? value;
 }
 
+/**
+ * Columns whose value is a comma-separated *list* (genres, tags…) rather than
+ * a single pick. Name-based on purpose: every picker call site knows the
+ * header name, so no plumbing through view/modal constructors is needed.
+ * The kanban/library views already comma-split these on the read side.
+ */
+export function isMultiValueColName(h: string): boolean {
+  return /^(categor(y|ies)|genres?|tags?|themes?|topics?)$/i.test((h ?? "").trim());
+}
+
 export function showSelectPicker(
   anchor: HTMLElement,
   currentValue: string,
   allValues: string[],
   onSelect: (val: string) => void,
-  _container: HTMLElement
+  _container: HTMLElement,
+  opts?: { multi?: boolean }
 ): void {
   // Always append to document.body so `position: fixed` is anchored to the
   // viewport. If we nested inside the caller's container, any ancestor with
@@ -185,7 +196,19 @@ export function showSelectPicker(
   const search = picker.createEl("input", { cls: "csv-picker-search", type: "text", placeholder: "Search or add…" });
   search.focus();
   const listEl = picker.createDiv({ cls: "csv-picker-list" });
-  const unique = Array.from(new Set(allValues.filter(Boolean)));
+
+  // Multi mode: the cell value is a comma-separated list; items toggle in/out
+  // of a Set and every toggle live-commits the joined string via onSelect
+  // (so the chip + debounced save track each click). The picker stays open
+  // until Done / Esc / outside-click. Existing multi-values in the data are
+  // themselves comma-joined, so split them into individual options.
+  const multi = !!opts?.multi;
+  const splitVals = (s: string) => s.split(",").map(v => v.trim()).filter(Boolean);
+  const selected = new Set(multi ? splitVals(currentValue) : []);
+  const emit = () => onSelect([...selected].join(", "));
+  const unique = multi
+    ? Array.from(new Set(allValues.flatMap(splitVals)))
+    : Array.from(new Set(allValues.filter(Boolean)));
 
   // Keyboard nav state — tracks which list item is "focused" via the
   // arrow keys. Selectable items get a numeric data-idx; the highlighted
@@ -200,32 +223,51 @@ export function showSelectPicker(
     });
   };
 
-  const commit = (item: { value: string; isClear?: boolean }) => {
-    onSelect(item.isClear ? "" : item.value);
-    dismiss();
+  const commit = (item: { value: string; isClear?: boolean; isAdd?: boolean }) => {
+    if (!multi) {
+      onSelect(item.isClear ? "" : item.value);
+      dismiss();
+      return;
+    }
+    // Multi: toggle and stay open.
+    if (item.isClear) {
+      selected.clear();
+    } else {
+      if (selected.has(item.value)) selected.delete(item.value);
+      else selected.add(item.value);
+      // A just-created value must stay visible in the list after the search
+      // box clears, or un-toggling it again would be impossible.
+      if (item.isAdd && !unique.includes(item.value)) unique.push(item.value);
+    }
+    emit();
+    if (item.isAdd) { search.value = ""; renderList(""); }
+    else renderList(search.value);
   };
+
+  const isActive = (val: string) => multi ? selected.has(val) : val === currentValue;
+  const hasValue = () => multi ? selected.size > 0 : !!currentValue;
 
   const renderList = (filter: string) => {
     listEl.empty();
     selectableValues = [];
     const filtered = filter ? unique.filter(v => v.toLowerCase().includes(filter.toLowerCase())) : unique;
-    if (currentValue) {
+    if (hasValue()) {
       selectableValues.push({ value: "", isClear: true });
       const clearItem = listEl.createDiv({ cls: "csv-picker-item csv-picker-clear" });
-      clearItem.setText("✕ Clear");
+      clearItem.setText(multi ? "✕ Clear all" : "✕ Clear");
       clearItem.addEventListener("mousedown", e => { e.preventDefault(); commit({ value: "", isClear: true }); });
     }
     filtered.forEach(val => {
       selectableValues.push({ value: val });
-      const item = listEl.createDiv({ cls: `csv-picker-item ${val === currentValue ? "active" : ""}` });
-      item.setText(val);
+      const item = listEl.createDiv({ cls: `csv-picker-item ${isActive(val) ? "active" : ""}` });
+      item.setText(multi ? `${selected.has(val) ? "✓ " : ""}${val}` : val);
       item.addEventListener("mousedown", e => { e.preventDefault(); commit({ value: val }); });
     });
     if (filter && !unique.some(v => v.toLowerCase() === filter.toLowerCase())) {
       selectableValues.push({ value: filter, isAdd: true });
       const addItem = listEl.createDiv({ cls: "csv-picker-item csv-picker-add" });
       addItem.setText(`+ Add "${filter}"`);
-      addItem.addEventListener("mousedown", e => { e.preventDefault(); commit({ value: filter }); });
+      addItem.addEventListener("mousedown", e => { e.preventDefault(); commit({ value: filter, isAdd: true }); });
     }
     if (!filtered.length && !filter) {
       listEl.createDiv({ cls: "csv-picker-empty", text: "No options yet. Type to add." });
@@ -235,6 +277,13 @@ export function showSelectPicker(
     cursor = Math.min(cursor, Math.max(selectableValues.length - 1, 0));
     paintCursor();
   };
+
+  // Multi pickers don't dismiss on item click, so they need an explicit
+  // close affordance (especially on touch, where Esc doesn't exist).
+  if (multi) {
+    picker.createEl("button", { cls: "csv-picker-done", text: "Done" })
+      .addEventListener("mousedown", e => { e.preventDefault(); dismiss(); });
+  }
 
   renderList("");
   // After first render the picker has its real height — recompute so the

@@ -12,14 +12,12 @@ import { hasStatsColumns } from "./stats";
 
 declare const __BUILD_TIME__: string;
 
-export function renderToolbar(view: CardView, root: HTMLElement): void {
-  const bar = root.createDiv({cls:"csv-toolbar"});
-  bar.createDiv({cls:"csv-toolbar-title", text: view.file?.basename??""});
-  const ctrl = bar.createDiv({cls:"csv-toolbar-controls"});
-  ctrl.createDiv({cls:"csv-row-count", text:`${view.rows.length} entries`});
-  const mg = ctrl.createDiv({cls:"csv-mode-group"});
-
-  // Build view mode buttons based on detected columns
+/**
+ * The view modes valid for the current file's columns, in toolbar order.
+ * Single source of truth for the toolbar buttons and the "Cycle view mode"
+ * palette command.
+ */
+export function availableModes(view: CardView): {id: ViewMode, label: string}[] {
   const modes: {id: ViewMode, label: string}[] = [];
   const isTravel = view.isTravelFile();
   const isDateFile = view.hasDateColumn();
@@ -36,6 +34,17 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
     modes.push({id: "focus", label: "Focus"});
     if (hasStatsColumns(view)) modes.push({id: "stats", label: "Stats"});
   }
+  return modes;
+}
+
+export function renderToolbar(view: CardView, root: HTMLElement): void {
+  const bar = root.createDiv({cls:"csv-toolbar"});
+  bar.createDiv({cls:"csv-toolbar-title", text: view.file?.basename??""});
+  const ctrl = bar.createDiv({cls:"csv-toolbar-controls"});
+  ctrl.createDiv({cls:"csv-row-count", text:`${view.rows.length} entries`});
+  const mg = ctrl.createDiv({cls:"csv-mode-group"});
+
+  const modes = availableModes(view);
 
   modes.forEach(({id, label}) => {
     const btn = mg.createEl("button",{cls:`csv-mode-btn ${view.mode===id?"active":""}`, text:label});

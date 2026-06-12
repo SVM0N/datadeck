@@ -4,7 +4,7 @@
 
 import type { CardView } from "../../main";
 import { CSVRow } from "../types";
-import { showSelectPicker } from "../utils";
+import { showSelectPicker, isMultiValueColName } from "../utils";
 
 export function renderKanbanGenre(view: CardView, container: HTMLElement): void {
   const cc = view.getCategoryCol();
@@ -97,7 +97,7 @@ function renderKanbanCard(view: CardView, container: HTMLElement, row: CSVRow, s
         e.stopPropagation();
         showSelectPicker(valSpan, row[h], view.getColumnValues(h), (newVal) => {
           row[h]=newVal; valSpan.setText(newVal||"—"); view.scheduleSave();
-        }, view.contentEl);
+        }, view.contentEl, { multi: isMultiValueColName(h) });
       });
     } else {
       const display = row[h].length > 40 ? row[h].slice(0, 38) + "…" : row[h];

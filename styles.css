@@ -3582,3 +3582,92 @@ select.csv-add-row-control {
   text-transform: none;
   color: var(--csv-text-faint);
 }
+
+/* ─── Sticky table header ─────────────────────────────────────────────────── */
+
+/* In table mode the content area stops y-scrolling (--no-yscroll) and the
+   wrapper becomes the scroller for both axes — that gives the sticky header
+   a scrollport to stick to. flex:1 + min-height:0 = fill the content area. */
+.csv-content-area--no-yscroll .csv-table-wrapper {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.csv-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  /* border-collapse drops sticky cell borders while scrolled — draw the
+     header's bottom rule as a shadow instead so it travels with it. */
+  box-shadow: 0 1px 0 var(--csv-border);
+}
+
+/* ─── Multi-select picker (category / tags columns) ───────────────────────── */
+
+/* Raw Obsidian vars: the picker mounts on document.body, outside
+   .csv-card-view-root where the --csv-* vars are defined. */
+.csv-picker-done {
+  display: block;
+  width: calc(100% - 12px);
+  margin: 2px 6px 6px;
+  padding: 6px 0;
+  background: var(--interactive-accent);
+  color: white;
+  border: none;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.csv-picker-done:hover { background: var(--interactive-accent-hover); }
+
+/* ─── csv-random code block (quote / word of the day) ─────────────────────── */
+
+.csv-random-card {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 18px 20px 12px;
+  margin: 8px 0;
+}
+.csv-random-text {
+  font-size: 16px;
+  line-height: 1.55;
+  font-weight: 500;
+  white-space: pre-wrap;
+}
+.csv-random-sub {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.csv-random-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+.csv-random-src {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+.csv-random-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 15px;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 5px;
+}
+.csv-random-btn:hover { color: var(--text-normal); background: var(--background-modifier-hover); }
+
+/* ─── Clickable stats bars ────────────────────────────────────────────────── */
+
+.csv-stats-bar-row.is-clickable { cursor: pointer; border-radius: 4px; }
+.csv-stats-bar-row.is-clickable:hover { background: var(--background-modifier-hover); }
+.csv-stats-bar-row.is-clickable:hover .csv-stats-bar-label { color: var(--text-accent); }

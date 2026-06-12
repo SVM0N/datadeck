@@ -490,6 +490,116 @@ await test("table: clicking a header cycles sort asc → desc → off", async ()
   assert(view.tableSortCol === null, "third click clears the sort");
 });
 
+// ── Multi-select picker ──────────────────────────────────────────────────────
+const { showSelectPicker, isMultiValueColName } = await load("./src/utils.ts");
+
+await test("picker: isMultiValueColName matches list-shaped headers only", async () => {
+  for (const h of ["Category", "categories", "Genre", "Genres", "Tags", "tag", "Theme", "Topics"]) {
+    assert(isMultiValueColName(h), `${h} should be multi`);
+  }
+  for (const h of ["Status", "Rating", "Title", "Type", "category notes"]) {
+    assert(!isMultiValueColName(h), `${h} should NOT be multi`);
+  }
+});
+
+await test("picker: multi mode toggles values and live-commits the joined string", async () => {
+  const anchor = document.body.createDiv();
+  let committed = null;
+  showSelectPicker(anchor, "Fiction", ["Fiction", "Classic", "Sci-Fi"], v => { committed = v; }, document.body, { multi: true });
+  const picker = document.body.querySelector(".csv-select-picker");
+  assert(picker, "picker mounted");
+  assert(picker.querySelector(".csv-picker-done"), "multi picker has a Done button");
+  const items = () => Array.from(picker.querySelectorAll(".csv-picker-item:not(.csv-picker-clear):not(.csv-picker-add)"));
+  assert(items()[0].textContent === "✓ Fiction", "current value pre-checked");
+  // Toggle Classic on → "Fiction, Classic", picker stays open.
+  items().find(i => i.textContent.includes("Classic")).dispatchEvent(new window.Event("mousedown", { bubbles: true }));
+  assert(committed === "Fiction, Classic", `toggle on commits joined string (got "${committed}")`);
+  assert(document.body.querySelector(".csv-select-picker"), "picker stays open after toggle");
+  // Toggle Fiction off → "Classic".
+  items().find(i => i.textContent.includes("Fiction")).dispatchEvent(new window.Event("mousedown", { bubbles: true }));
+  assert(committed === "Classic", `toggle off removes value (got "${committed}")`);
+  // Clear all.
+  picker.querySelector(".csv-picker-clear").dispatchEvent(new window.Event("mousedown", { bubbles: true }));
+  assert(committed === "", "clear-all commits empty string");
+  picker.querySelector(".csv-picker-done").dispatchEvent(new window.Event("mousedown", { bubbles: true }));
+  assert(!document.body.querySelector(".csv-select-picker"), "Done dismisses");
+});
+
+await test("picker: multi mode splits comma-joined data values into options", async () => {
+  const anchor = document.body.createDiv();
+  showSelectPicker(anchor, "", ["Fiction, Classic", "Sci-Fi"], () => {}, document.body, { multi: true });
+  const picker = document.body.querySelector(".csv-select-picker");
+  const labels = Array.from(picker.querySelectorAll(".csv-picker-item")).map(i => i.textContent);
+  assert(labels.includes("Fiction") && labels.includes("Classic") && labels.includes("Sci-Fi"),
+    `joined values split into separate options (got ${labels})`);
+  picker.remove();
+});
+
+await test("picker: single mode still commits and dismisses on pick", async () => {
+  const anchor = document.body.createDiv();
+  let committed = null;
+  showSelectPicker(anchor, "", ["Read", "Reading"], v => { committed = v; }, document.body);
+  const picker = document.body.querySelector(".csv-select-picker");
+  picker.querySelector(".csv-picker-item").dispatchEvent(new window.Event("mousedown", { bubbles: true }));
+  assert(committed === "Read", "single pick commits the value");
+  assert(!document.body.querySelector(".csv-select-picker"), "single pick dismisses");
+});
+
+// ── Stats → library cross-link ───────────────────────────────────────────────
+
+await test("stats: clicking a category bar jumps to the filtered library", async () => {
+  const rows = [
+    { Title: "Dune", Author: "", Category: "SciFi", Status: "Read", Rating: "" },
+    { Title: "It", Author: "", Category: "Horror", Status: "Reading", Rating: "" },
+  ];
+  const view = { ...statsView(rows), mode: "stats", libraryStatusFilter: "all", libraryGenreFilter: "all", renderView: () => {} };
+  const c = document.body.createDiv();
+  renderStats(view, c);
+  const bar = Array.from(c.querySelectorAll(".csv-stats-bar-row.is-clickable"))
+    .find(r => r.querySelector(".csv-stats-bar-label").textContent === "SciFi");
+  assert(bar, "category bar is clickable");
+  bar.dispatchEvent(new window.Event("click", { bubbles: true }));
+  assert(view.mode === "library", "switched to library mode");
+  assert(view.libraryGenreFilter === "SciFi", "genre filter applied");
+  assert(view.libraryStatusFilter === "all", "status filter untouched");
+});
+
+// ── availableModes / cycle source of truth ───────────────────────────────────
+const { availableModes } = await load("./src/view/toolbar.ts");
+
+await test("toolbar: availableModes is consistent with rendered buttons", async () => {
+  const view = {
+    rows: [{}], isTravelFile: () => false, hasDateColumn: () => false,
+    getCategoryCol: () => "Category", getStatusCol: () => null, authorKey: () => undefined, resolveCol: () => null,
+  };
+  const ids = availableModes(view).map(m => m.id);
+  assert(ids.join(",") === "library,kanban-genre,table,focus,stats", `expected full content-file set (got ${ids})`);
+});
+
+// ── csv-random block ─────────────────────────────────────────────────────────
+const { renderRandomCard } = await load("./src/random-block.ts");
+
+await test("csv-random: renders a quote card and ↻ re-rolls", async () => {
+  const csv = "Quote,Author\nFirst quote,Alice\nSecond quote,Bob\n";
+  const file = { basename: "quotes", extension: "csv", parent: { path: "Data" } };
+  const app = { vault: { getAbstractFileByPath: (p) => (p === "Data/quotes.csv" || p === "Data/note.md" ? file : null), read: async () => csv } };
+  const el = document.body.createDiv();
+  await renderRandomCard(app, "file: quotes.csv", el, { sourcePath: "Data/note.md" });
+  const text = el.querySelector(".csv-random-text");
+  assert(text && text.textContent.includes("quote"), "quote text rendered");
+  assert(el.querySelector(".csv-random-sub").textContent.startsWith("—"), "attribution rendered");
+  el.querySelector(".csv-random-btn").dispatchEvent(new window.Event("click", { bubbles: true }));
+  assert(el.querySelector(".csv-random-text"), "re-roll re-renders a card");
+});
+
+await test("csv-random: missing file shows an error, no card", async () => {
+  const app = { vault: { getAbstractFileByPath: () => null, read: async () => "" } };
+  const el = document.body.createDiv();
+  await renderRandomCard(app, "file: nope.csv", el, { sourcePath: "note.md" });
+  assert(el.querySelector(".csv-add-error"), "error message shown");
+  assert(!el.querySelector(".csv-random-card"), "no card rendered");
+});
+
 // ── Mobile dashboard generation ──────────────────────────────────────────────
 const { generateMobileFiles } = await load("./src/view/mobile.ts");
 

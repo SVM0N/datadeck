@@ -51,7 +51,7 @@ function tally(rows: CSVRow[], key: (row: CSVRow) => string[]): Map<string, numb
   return counts;
 }
 
-interface BarSpec { label: string; count: number; cls?: string; }
+interface BarSpec { label: string; count: number; cls?: string; onClick?: () => void; }
 
 function renderBarSection(container: HTMLElement, title: string, bars: BarSpec[], total: number): void {
   if (!bars.length) return;
@@ -66,6 +66,11 @@ function renderBarSection(container: HTMLElement, title: string, bars: BarSpec[]
     fill.style.width = `${Math.max(2, Math.round((b.count / max) * 100))}%`;
     const pct = total > 0 ? Math.round((b.count / total) * 100) : 0;
     row.createDiv({ cls: "csv-stats-bar-count", text: `${b.count} · ${pct}%` });
+    if (b.onClick) {
+      row.addClass("is-clickable");
+      row.title = `Show "${b.label}" in the library`;
+      row.addEventListener("click", b.onClick);
+    }
   });
 }
 
@@ -113,12 +118,25 @@ export function renderStats(view: CardView, container: HTMLElement): void {
     }
   }
 
+  // Status/category bars double as filters: clicking one jumps to the
+  // library pre-filtered to that value. Only wired when the library mode is
+  // actually available for this file (it needs a category column).
+  const jumpToLibrary = (status: string | null, genre: string | null) => {
+    view.libraryStatusFilter = status ?? "all";
+    view.libraryGenreFilter = genre ?? "all";
+    view.mode = "library";
+    view.renderView();
+  };
+
   // ── By status ───────────────────────────────────────────────────────────
   if (sc) {
     const counts = tally(rows, r => { const s = (r[sc] ?? "").trim(); return s ? [s] : []; });
     const bars: BarSpec[] = Array.from(counts.entries())
       .sort((a, b) => b[1] - a[1])
-      .map(([label, count]) => ({ label, count, cls: statusBarClass(label) }));
+      .map(([label, count]) => ({
+        label, count, cls: statusBarClass(label),
+        onClick: cc ? () => jumpToLibrary(label, null) : undefined,
+      }));
     renderBarSection(wrap, `By ${sc.toLowerCase()}`, bars, rows.length);
   }
 
@@ -128,7 +146,7 @@ export function renderStats(view: CardView, container: HTMLElement): void {
     const bars: BarSpec[] = Array.from(counts.entries())
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .slice(0, 12)
-      .map(([label, count]) => ({ label, count }));
+      .map(([label, count]) => ({ label, count, onClick: () => jumpToLibrary(null, label) }));
     renderBarSection(wrap, `By ${cc.toLowerCase()}`, bars, rows.length);
   }
 

@@ -18,7 +18,7 @@ import type { Chart as ChartType } from "chart.js";
 
 // Import from src modules
 import { CSVRow, ViewMode, FileConfig, CardViewSettings, DEFAULT_SETTINGS, CARD_VIEW_TYPE } from "./src/types";
-import { sanitizeFilename, titleCase, formatRatingForDisplay, showSelectPicker, parseCSV, migrateFileConfigKey, sortRowsByColumn } from "./src/utils";
+import { sanitizeFilename, titleCase, formatRatingForDisplay, showSelectPicker, parseCSV, migrateFileConfigKey, sortRowsByColumn, isMultiValueColName } from "./src/utils";
 import { AddEntryModal, NoteExpanderModal, FileConfigModal, SearchModal } from "./src/modals";
 import { renderTravel } from "./src/travel-view";
 import { CardViewSettingTab } from "./src/settings-tab";
@@ -26,7 +26,8 @@ import { renderAddEntryForm } from "./src/add-entry-form";
 import { renderTable } from "./src/view/table";
 import { renderLibrary } from "./src/view/library";
 import { renderKanbanGenre } from "./src/view/kanban";
-import { renderToolbar } from "./src/view/toolbar";
+import { renderToolbar, availableModes } from "./src/view/toolbar";
+import { renderRandomCard } from "./src/random-block";
 import { renderDashboard } from "./src/view/dashboard";
 import { renderStats, hasStatsColumns } from "./src/view/stats";
 import { renderFocus } from "./src/view/focus";
@@ -375,6 +376,7 @@ export class CardView extends FileView {
       contentTop: contentArea?.scrollTop ?? 0,
       contentLeft: contentArea?.scrollLeft ?? 0,
       tableLeft: tableWrap?.scrollLeft ?? 0,
+      tableTop: tableWrap?.scrollTop ?? 0,
       boardLeft: kanbanBoard?.scrollLeft ?? 0,
       cols: new Map<string, number>(),
     };
@@ -391,7 +393,7 @@ export class CardView extends FileView {
       const tw = this.contentEl.querySelector<HTMLElement>(".csv-table-wrapper");
       const kb = this.contentEl.querySelector<HTMLElement>(".csv-kanban-board");
       if (ca) { ca.scrollTop = snapshot.contentTop; ca.scrollLeft = snapshot.contentLeft; }
-      if (tw) tw.scrollLeft = snapshot.tableLeft;
+      if (tw) { tw.scrollLeft = snapshot.tableLeft; tw.scrollTop = snapshot.tableTop; }
       if (kb) kb.scrollLeft = snapshot.boardLeft;
       this.contentEl.querySelectorAll<HTMLElement>(".csv-kanban-col").forEach(col => {
         const title = col.querySelector(".csv-kanban-col-title")?.textContent ?? "";
@@ -435,13 +437,13 @@ export class CardView extends FileView {
     if (h.toLowerCase() === "status" && val) chip.addClass(`status-chip-${val.toLowerCase().replace(/\s+/g,"-")}`);
     chip.addEventListener("click", e => {
       e.stopPropagation();
-      showSelectPicker(chip, val, this.getColumnValues(h), (newVal) => {
+      showSelectPicker(chip, row[h] ?? "", this.getColumnValues(h), (newVal) => {
         row[h] = newVal;
         chip.setText(newVal || "—");
         chip.className = `csv-select-chip ${newVal ? "" : "empty"}`;
         if (h.toLowerCase() === "status" && newVal) chip.addClass(`status-chip-${newVal.toLowerCase().replace(/\s+/g,"-")}`);
         this.scheduleSave();
-      }, this.contentEl);
+      }, this.contentEl, { multi: isMultiValueColName(h) });
     });
     return chip;
   }
@@ -469,7 +471,10 @@ export class CardView extends FileView {
     // Kanban manages its own scroll: the board fills the viewport, each
     // column scrolls internally. Without this flag .csv-content-area also
     // y-scrolls and the user gets two stacked scrollbars for the same content.
-    content.toggleClass("csv-content-area--no-yscroll", this.mode === "kanban-genre");
+    // Table mode also opts out: the table wrapper becomes the y-scroller so
+    // the sticky header has a scrollport to stick to (sticky inside an
+    // overflow-x:auto wrapper that never y-scrolls is a no-op).
+    content.toggleClass("csv-content-area--no-yscroll", this.mode === "kanban-genre" || this.mode === "table");
 
     if (!this.headers.length) {
       // Distinguish "truly malformed" from "brand-new empty file": both end
@@ -731,6 +736,15 @@ export class CardView extends FileView {
   tableSortDir: "asc" | "desc" = "asc";
 
 
+  /** Switch to the next valid view mode for this file (palette command). */
+  cycleMode(): void {
+    const modes = availableModes(this);
+    if (modes.length < 2) return;
+    const idx = modes.findIndex(m => m.id === this.mode);
+    this.mode = modes[(idx + 1) % modes.length].id;
+    this.renderView();
+  }
+
   onunload(): void { this.renderComponent.unload(); if(this.saveTimer) window.clearTimeout(this.saveTimer); }
 }
 
@@ -747,6 +761,35 @@ export default class CardViewPlugin extends Plugin {
     // Register csv-add code block for mobile entry
     this.registerMarkdownCodeBlockProcessor("csv-add", async (source, el, ctx) => {
       await renderAddEntryForm(this.app, source.trim(), el, ctx);
+    });
+
+    // csv-random: a random entry from a CSV — quote/word of the day for
+    // daily-note templates. Re-rolls per render + via its ↻ button.
+    this.registerMarkdownCodeBlockProcessor("csv-random", async (source, el, ctx) => {
+      await renderRandomCard(this.app, source.trim(), el, ctx);
+    });
+
+    // Palette commands — operate on the active CSV view, so they're
+    // hotkey-able (Settings → Hotkeys → filter "CSV Card View").
+    this.addCommand({
+      id: "add-entry",
+      name: "Add entry to current CSV",
+      checkCallback: (checking) => {
+        const view = this.app.workspace.getActiveViewOfType(CardView);
+        if (!view) return false;
+        if (!checking) view.openAddModal();
+        return true;
+      },
+    });
+    this.addCommand({
+      id: "cycle-view-mode",
+      name: "Cycle view mode",
+      checkCallback: (checking) => {
+        const view = this.app.workspace.getActiveViewOfType(CardView);
+        if (!view) return false;
+        if (!checking) view.cycleMode();
+        return true;
+      },
     });
 
     // Migrate per-file config keys when the user renames or moves a
