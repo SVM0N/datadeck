@@ -183,9 +183,8 @@
     line-height: 1;
     letter-spacing: 0;
   }
-  /* Mode group: slightly tighter so all three modes fit comfortably on
-     iPhone widths without wrapping mid-row. */
-  .csv-mode-btn { padding: 4px 8px; font-size: 11px; }
+  /* Mode dropdown: slightly tighter on iPhone widths. */
+  .csv-mode-select { padding: 5px 8px; font-size: 11px; }
 }
 
 .csv-row-count {
@@ -197,33 +196,27 @@
 
 .csv-mode-group {
   display: flex;
-  gap: 2px;
-  background: var(--csv-surface-2);
-  padding: 2px;
+}
+
+/* View-mode dropdown (replaced the row of segmented buttons). */
+.csv-mode-select {
+  padding: 5px 10px;
   border-radius: var(--csv-radius-sm);
-}
-
-.csv-mode-btn {
-  padding: 4px 10px;
-  border-radius: 4px;
-  font-size: 12px;
-  border: none;
-  background: transparent;
-  color: var(--csv-text-muted);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  font-weight: 500;
-}
-
-.csv-mode-btn:hover {
+  border: 1px solid var(--background-modifier-border);
+  background: var(--csv-surface-2);
   color: var(--csv-text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.csv-mode-select:hover {
   background: var(--csv-surface);
 }
 
-.csv-mode-btn.active {
-  background: var(--csv-bg);
-  color: var(--csv-text);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+.csv-mode-select:focus {
+  outline: none;
+  border-color: var(--text-accent);
 }
 
 /* ─── Search bar ──────────────────────────────────────────────────────────── */

@@ -314,7 +314,7 @@ await test("kanban: stale persisted group column falls back to category", async 
 // ── Toolbar ──────────────────────────────────────────────────────────────────
 const { renderToolbar } = await load("./src/view/toolbar.ts");
 
-await test("toolbar: renders mode buttons, search, row count, + Add", async () => {
+await test("toolbar: renders mode dropdown, search, row count, + Add", async () => {
   const view = {
     file: { basename: "movies", path: "movies.csv" },
     rows: [{}, {}], mode: "table", searchQuery: "",
@@ -326,7 +326,10 @@ await test("toolbar: renders mode buttons, search, row count, + Add", async () =
   const c = document.body.createDiv();
   renderToolbar(view, c);
   assert(c.querySelector(".csv-toolbar"), "toolbar present");
-  assert(c.querySelectorAll(".csv-mode-btn").length === 5, "Cards + Kanban + Table + Focus + Stats (no travel/dashboard)");
+  const sel = c.querySelector(".csv-mode-select");
+  assert(sel, "mode dropdown present");
+  assert(sel.querySelectorAll("option").length === 5, "Cards + Kanban + Table + Focus + Stats (no travel/dashboard)");
+  assert(sel.value === "table", "current mode selected");
   assert(c.querySelector(".csv-search-wrap"), "search bar present for non-dashboard mode");
   assert(c.querySelector(".csv-add-btn"), "+ Add button present");
   assert(c.querySelector(".csv-row-count").textContent === "2 entries", "row count reflects rows");
@@ -343,8 +346,27 @@ await test("toolbar: date files get Dashboard + Table, no Focus/Stats", async ()
   };
   const c = document.body.createDiv();
   renderToolbar(view, c);
-  const labels = Array.from(c.querySelectorAll(".csv-mode-btn")).map(b => b.textContent);
+  const labels = Array.from(c.querySelectorAll(".csv-mode-select option")).map(o => o.textContent);
   assert(labels.join(",") === "Dashboard,Table", `dashboard files keep Dashboard + Table only (got ${labels})`);
+});
+
+await test("toolbar: changing the mode dropdown switches the view", async () => {
+  let rendered = 0;
+  const view = {
+    file: { basename: "movies", path: "movies.csv" },
+    rows: [{}], mode: "table", searchQuery: "",
+    isTravelFile: () => false, hasDateColumn: () => false, getCategoryCol: () => "Category",
+    fileCfg: {}, app: {}, headers: ["Title", "Category"],
+    renderView: () => { rendered++; }, renderViewPreservingScroll: () => {}, saveFileCfg: () => {},
+    autoDetectBooleanColumns: () => [], generateMobileFiles: () => {}, backupToArchive: () => {}, openAddModal: () => {},
+  };
+  const c = document.body.createDiv();
+  renderToolbar(view, c);
+  const sel = c.querySelector(".csv-mode-select");
+  sel.value = "kanban-genre";
+  sel.dispatchEvent(new window.Event("change", { bubbles: true }));
+  assert(view.mode === "kanban-genre", "mode updated from dropdown");
+  assert(rendered === 1, "view re-rendered");
 });
 
 // ── Dashboard view ───────────────────────────────────────────────────────────

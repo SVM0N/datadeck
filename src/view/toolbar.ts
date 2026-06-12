@@ -44,11 +44,18 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
   ctrl.createDiv({cls:"csv-row-count", text:`${view.rows.length} entries`});
   const mg = ctrl.createDiv({cls:"csv-mode-group"});
 
+  // View-mode dropdown. One compact control instead of a row of buttons —
+  // scales to files with many valid modes (travel files show 6+) without
+  // overflowing the toolbar, especially on phones.
   const modes = availableModes(view);
-
+  const modeSel = mg.createEl("select", { cls: "csv-mode-select", attr: { "aria-label": "View mode" } });
   modes.forEach(({id, label}) => {
-    const btn = mg.createEl("button",{cls:`csv-mode-btn ${view.mode===id?"active":""}`, text:label});
-    btn.addEventListener("click",()=>{ view.mode=id; view.renderView(); });
+    const opt = modeSel.createEl("option", { text: label, value: id });
+    if (view.mode === id) opt.selected = true;
+  });
+  modeSel.addEventListener("change", () => {
+    view.mode = modeSel.value as ViewMode;
+    view.renderView();
   });
 
   // Search bar (only for kanban/table views, not dashboard).
@@ -182,7 +189,7 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
   // Handlers are defined once and reused by both surfaces so there's a
   // single place to maintain behaviour.
   const openColumns = () => {
-    new FileConfigModal(view.app, view.headers, view.file?.path ?? "", view.fileCfg, view.autoDetectBooleanColumns(), (cfg) => {
+    new FileConfigModal(view.app, view.headers, view.file?.path ?? "", view.fileCfg, view.autoDetectBooleanColumns(), availableModes(view), (cfg) => {
       view.saveFileCfg(cfg);
       if (cfg.defaultMode) view.mode = cfg.defaultMode;
       view.renderView();

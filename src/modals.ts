@@ -542,14 +542,16 @@ export class FileConfigModal extends Modal {
   filePath: string;
   current: FileConfig;
   autoDetectedHabits: string[];
+  availableModes: { id: ViewMode; label: string }[];
   onSave: (cfg: FileConfig) => void;
 
-  constructor(app: App, headers: string[], filePath: string, current: FileConfig, autoDetectedHabits: string[], onSave: (cfg: FileConfig) => void) {
+  constructor(app: App, headers: string[], filePath: string, current: FileConfig, autoDetectedHabits: string[], availableModes: { id: ViewMode; label: string }[], onSave: (cfg: FileConfig) => void) {
     super(app);
     this.headers = headers;
     this.filePath = filePath;
     this.current = { ...current, habitColumns: current.habitColumns ? [...current.habitColumns] : undefined };
     this.autoDetectedHabits = autoDetectedHabits;
+    this.availableModes = availableModes;
     this.onSave = onSave;
   }
 
@@ -649,13 +651,27 @@ export class FileConfigModal extends Modal {
       });
     });
 
-    // Default mode for this file
+    // Default mode for this file. The list comes from availableModes (same
+    // source as the toolbar dropdown), so it offers exactly the modes this
+    // file's columns can render — Travel appears for travel logs, Stats only
+    // when there's something chartable, etc. The old hardcoded list both
+    // omitted Travel and offered modes the file couldn't actually show.
     const modeRow = form.createDiv({ cls: "csv-modal-row" });
     modeRow.createEl("label", { text: "Default view", cls: "csv-modal-label" });
     const modeSel = modeRow.createEl("select", { cls: "csv-modal-select" });
-    ([["— use global default —",""], ["Dashboard","dashboard"], ["Cards","library"], ["Kanban","kanban-genre"], ["Table","table"], ["Focus","focus"], ["Stats","stats"]] as [string,string][]).forEach(([label, val]) => {
+    const modeOptions: [string, string][] = [
+      ["— use global default —", ""],
+      ...this.availableModes.map(m => [m.label, m.id] as [string, string]),
+    ];
+    // A previously saved mode the file can no longer render (columns changed)
+    // still shows up, flagged — so the user can see and clear the stale pick.
+    const saved = this.current.defaultMode ?? "";
+    if (saved && !this.availableModes.some(m => m.id === saved)) {
+      modeOptions.push([`${saved} (no longer available)`, saved]);
+    }
+    modeOptions.forEach(([label, val]) => {
       const opt = modeSel.createEl("option", { text: label, value: val });
-      if ((this.current.defaultMode ?? "") === val) opt.selected = true;
+      if (saved === val) opt.selected = true;
     });
     modeSel.addEventListener("change", () => { this.current.defaultMode = modeSel.value ? modeSel.value as ViewMode : undefined; });
 
