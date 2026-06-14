@@ -3815,20 +3815,27 @@ select.csv-add-row-control {
 }
 
 /* ─── Native <select> label alignment ─────────────────────────────────────────
-   Left on its native appearance, a styled <select> renders its label
-   vertically off (top clipping against the border) on macOS/Electron — visible
-   on every plugin dropdown: the view-mode picker, the library/tasks filter
-   selects, and the per-file config modal. Dropping the native appearance hands
-   vertical centering back to the CSS box (the per-class rules already use
-   symmetric vertical padding), and we draw our own chevron to replace the
+   A styled <select> renders its label vertically off on macOS/Electron — left
+   on its native appearance it sits a touch low; once you add vertical padding +
+   line-height it grows taller than the control and clips at the top. Obsidian's
+   own dropdowns dodge both by NOT padding vertically: a fixed `height` with zero
+   top/bottom padding lets the control flex-center the label (line-height plays
+   no part). We mirror that exactly, and draw our own chevron to replace the
    native arrow appearance:none removes. The per-class rules use background-color
-   (not the `background` shorthand) so this shared background-image survives. */
+   (not the `background` shorthand) so this shared background-image survives;
+   they still supply the horizontal padding, which we keep. Covers every plugin
+   dropdown: the view-mode picker, the library/tasks filters, the config modal. */
 .csv-mode-select,
 .csv-library-filter-select,
 .csv-modal-select {
   appearance: none;
   -webkit-appearance: none;
-  line-height: 1.5;
+  box-sizing: border-box;
+  height: var(--input-height, 30px);
+  min-height: var(--input-height, 30px);
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: normal;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='none' stroke='gray' stroke-width='1.5' d='M1 1l4 4 4-4'/></svg>");
   background-repeat: no-repeat;
   background-position: right 10px center;
