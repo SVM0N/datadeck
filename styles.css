@@ -203,7 +203,7 @@
   padding: 5px 10px;
   border-radius: var(--csv-radius-sm);
   border: 1px solid var(--background-modifier-border);
-  background: var(--csv-surface-2);
+  background-color: var(--csv-surface-2);
   color: var(--csv-text);
   font-size: 12px;
   font-weight: 500;
@@ -211,7 +211,7 @@
 }
 
 .csv-mode-select:hover {
-  background: var(--csv-surface);
+  background-color: var(--csv-surface);
 }
 
 .csv-mode-select:focus {
@@ -1909,7 +1909,7 @@ td .csv-select-chip {
   padding: 7px 10px;
   border-radius: var(--csv-radius-sm);
   border: 1px solid var(--csv-border);
-  background: var(--background-modifier-form-field);
+  background-color: var(--background-modifier-form-field);
   color: var(--csv-text);
   font-size: 13px;
   outline: none;
@@ -2856,7 +2856,7 @@ select.csv-add-row-control {
   padding: 6px 12px;
   border-radius: 8px;
   border: 1px solid var(--background-modifier-border);
-  background: var(--background-primary);
+  background-color: var(--background-primary);
   color: var(--text-normal);
   font-size: 13px;
   cursor: pointer;
@@ -3812,4 +3812,25 @@ select.csv-add-row-control {
   border-radius: 8px;
   background: var(--background-modifier-hover);
   color: var(--csv-text-muted);
+}
+
+/* ─── Native <select> label alignment ─────────────────────────────────────────
+   Left on its native appearance, a styled <select> renders its label
+   vertically off (top clipping against the border) on macOS/Electron — visible
+   on every plugin dropdown: the view-mode picker, the library/tasks filter
+   selects, and the per-file config modal. Dropping the native appearance hands
+   vertical centering back to the CSS box (the per-class rules already use
+   symmetric vertical padding), and we draw our own chevron to replace the
+   native arrow appearance:none removes. The per-class rules use background-color
+   (not the `background` shorthand) so this shared background-image survives. */
+.csv-mode-select,
+.csv-library-filter-select,
+.csv-modal-select {
+  appearance: none;
+  -webkit-appearance: none;
+  line-height: 1.5;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='none' stroke='gray' stroke-width='1.5' d='M1 1l4 4 4-4'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
 }
