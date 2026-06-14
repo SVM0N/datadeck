@@ -291,15 +291,23 @@ function renderSection(
   });
 }
 
-// Name cell: clickable title that opens/creates the row's backing page, plus a
-// small page icon (📄 if the page exists, + to create) — the "optional pages"
-// model the Library view established.
+// Name cell: clicking the title opens the entry overview (the expander modal,
+// same as tapping a kanban card title) — a quick read/edit without spawning a
+// file. A separate small page icon (📄 if the backing .md exists, + to create)
+// is the only thing that touches the filesystem — the "optional pages" model
+// the Library view established.
 function renderNameCell(view: CardView, tr: HTMLElement, row: CSVRow, titleCol: string, done: boolean): void {
   const nameCell = tr.createEl("td", { cls: "csv-tasks-name-cell" });
   const link = nameCell.createSpan({ cls: `csv-tasks-link ${done ? "csv-tasks-done" : ""}`, text: row[titleCol] || "Untitled" });
-  link.addEventListener("click", () => view.openOrCreateNotes(row));
+  const notesCol = view.getNotesCol();
+  link.addEventListener("click", () => {
+    // Expander needs a notes column to host its body editor; if the file has
+    // none, the page is the only place to write prose, so open/create that.
+    if (notesCol) view.openNoteExpander(row, notesCol);
+    else void view.openOrCreateNotes(row);
+  });
   const exists = view.notesFileExists(row);
   const icon = nameCell.createEl("button", { cls: `csv-tasks-page-icon ${exists ? "exists" : ""}`, text: exists ? "📄" : "+" });
   icon.setAttr("title", exists ? "Open page" : "Create page");
-  icon.addEventListener("click", e => { e.stopPropagation(); view.openOrCreateNotes(row); });
+  icon.addEventListener("click", e => { e.stopPropagation(); void view.openOrCreateNotes(row); });
 }

@@ -837,9 +837,10 @@ function tasksView(rows, overrides = {}) {
     getCategoryCol: () => null, getDateCol: () => null, isNotesCol: () => false,
     getTitle: (r) => r[resolveCol(["Name", "Title"]) ?? headers[0]] ?? "—",
     getColumnValues: (h) => Array.from(new Set(rows.map(r => r[h] ?? "").filter(Boolean))).sort(),
+    getNotesCol: () => resolveCol(["Notes", "Note"]),
     notesFileExists: () => false,
     scheduleSave: () => {}, renderView: () => {},
-    openOrCreateNotes: () => {}, openRowContextMenu: () => {},
+    openNoteExpander: () => {}, openOrCreateNotes: () => {}, openRowContextMenu: () => {},
     contentEl: document.body.createDiv(),
     ...overrides,
   };
@@ -912,6 +913,34 @@ await test("tasks: no type column → everything is a task", async () => {
   const headers = Array.from(c.querySelectorAll(".csv-tasks-section-header")).map(h => h.textContent);
   assert(headers.join(",") === "Tasks", "only a Tasks section");
   assert(c.querySelectorAll(".csv-tasks-table tbody tr").length === 2, "both rows are tasks");
+});
+
+await test("tasks: clicking a name opens the expander, not the filesystem", async () => {
+  const rows = [{ Name: "T", Project: "P", Type: "task", Status: "", Notes: "body", Due: "", Priority: "" }];
+  let expanded = 0, created = 0;
+  const view = tasksView(rows, {
+    openNoteExpander: () => { expanded++; },
+    openOrCreateNotes: () => { created++; },
+  });
+  const c = document.body.createDiv();
+  renderTasks(view, c);
+  c.querySelector(".csv-tasks-link").click();      // name → overview
+  c.querySelector(".csv-tasks-page-icon").click(); // icon → page
+  assert(expanded === 1, "name click opened the expander");
+  assert(created === 1, "only the page icon touches the filesystem");
+});
+
+await test("tasks: name falls back to page when there's no notes column", async () => {
+  const rows = [{ Name: "T", Project: "P", Type: "task", Status: "", Due: "", Priority: "" }];
+  let expanded = 0, created = 0;
+  const view = tasksView(rows, {
+    openNoteExpander: () => { expanded++; },
+    openOrCreateNotes: () => { created++; },
+  });
+  const c = document.body.createDiv();
+  renderTasks(view, c);
+  c.querySelector(".csv-tasks-link").click();
+  assert(expanded === 0 && created === 1, "no notes column → name opens/creates the page");
 });
 
 await test("tasks: hasTaskColumns gates the mode correctly", async () => {
