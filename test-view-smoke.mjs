@@ -816,6 +816,115 @@ await test("utils: decadeLabel buckets years, tolerates dates, rejects junk", as
   assert(decadeLabel("unknown") === null, "non-year → null");
 });
 
+// ── Tasks view ────────────────────────────────────────────────────────────────
+const { renderTasks, hasTaskColumns } = await load("./src/view/tasks.ts");
+
+function tasksView(rows, overrides = {}) {
+  const headers = Object.keys(rows[0] ?? {});
+  const resolveCol = (cands) => {
+    for (const cand of cands) {
+      const f = headers.find(h => h.toLowerCase() === cand.toLowerCase());
+      if (f) return f;
+    }
+    return null;
+  };
+  const view = {
+    headers, rows, searchQuery: "",
+    taskProjectFilter: "all", taskTypeFilter: "all",
+    fileCfg: {}, resolveCol,
+    titleKey: () => resolveCol(["Title", "Name"]) ?? undefined,
+    getStatusCol: () => resolveCol(["Status", "State", "Done"]),
+    getCategoryCol: () => null, getDateCol: () => null, isNotesCol: () => false,
+    getTitle: (r) => r[resolveCol(["Name", "Title"]) ?? headers[0]] ?? "—",
+    getColumnValues: (h) => Array.from(new Set(rows.map(r => r[h] ?? "").filter(Boolean))).sort(),
+    notesFileExists: () => false,
+    scheduleSave: () => {}, renderView: () => {},
+    openOrCreateNotes: () => {}, openRowContextMenu: () => {},
+    contentEl: document.body.createDiv(),
+    ...overrides,
+  };
+  return view;
+}
+
+await test("tasks: splits tasks vs notes and groups by project", async () => {
+  const rows = [
+    { Name: "Fix bug", Project: "Web", Type: "task", Status: "", Due: "", Priority: "high" },
+    { Name: "Idea x", Project: "Web", Type: "idea", Status: "", Due: "", Priority: "" },
+    { Name: "Buy yarn", Project: "Craft", Type: "task", Status: "", Due: "", Priority: "" },
+    { Name: "Ref doc", Project: "Craft", Type: "reference", Status: "", Due: "", Priority: "" },
+  ];
+  const c = document.body.createDiv();
+  renderTasks(tasksView(rows), c);
+  const headers = Array.from(c.querySelectorAll(".csv-tasks-section-header")).map(h => h.textContent);
+  assert(headers.join(",") === "Tasks,Notes & Ideas", `both sections present (got ${headers})`);
+  // 2 task groups (Web, Craft) + 2 notes groups (Web, Craft)
+  assert(c.querySelectorAll(".csv-tasks-group").length === 4, "4 project groups across both sections");
+  assert(c.querySelectorAll(".csv-tasks-table tbody tr").length === 4, "4 rows total");
+  assert(c.querySelectorAll(".csv-tasks-type-pill").length === 2, "idea + reference render type pills");
+});
+
+await test("tasks: sorts done last, then by priority, then due", async () => {
+  const rows = [
+    { Name: "B-low", Project: "P", Type: "task", Status: "", Priority: "low", Due: "" },
+    { Name: "A-high", Project: "P", Type: "task", Status: "", Priority: "high", Due: "" },
+    { Name: "C-done", Project: "P", Type: "task", Status: "done", Priority: "high", Due: "" },
+    { Name: "D-med", Project: "P", Type: "task", Status: "", Priority: "medium", Due: "" },
+  ];
+  const c = document.body.createDiv();
+  renderTasks(tasksView(rows), c);
+  const order = Array.from(c.querySelectorAll(".csv-tasks-link")).map(l => l.textContent);
+  assert(order.join(",") === "A-high,D-med,B-low,C-done", `priority order, done last (got ${order})`);
+  assert(c.querySelector(".csv-tasks-link").classList.contains("csv-tasks-done") === false, "top row not struck through");
+  assert(Array.from(c.querySelectorAll(".csv-tasks-link")).pop().classList.contains("csv-tasks-done"), "done row struck through");
+});
+
+await test("tasks: not-done past-due rows are flagged overdue", async () => {
+  const rows = [
+    { Name: "Late", Project: "P", Type: "task", Status: "", Due: "2000-01-01", Priority: "" },
+    { Name: "Soon", Project: "P", Type: "task", Status: "", Due: "2999-01-01", Priority: "" },
+    { Name: "LateDone", Project: "P", Type: "task", Status: "done", Due: "2000-01-01", Priority: "" },
+  ];
+  const c = document.body.createDiv();
+  renderTasks(tasksView(rows), c);
+  assert(c.querySelectorAll(".csv-tasks-overdue").length === 1, "only the not-done past-due row is overdue");
+});
+
+await test("tasks: done toggle reuses the file's existing finished word", async () => {
+  const rows = [
+    { Name: "T1", Project: "P", Type: "task", Status: "", Priority: "", Due: "" },
+    { Name: "T2", Project: "P", Type: "task", Status: "Completed", Priority: "", Due: "" },
+  ];
+  const view = tasksView(rows);
+  const c = document.body.createDiv();
+  renderTasks(view, c);
+  // T1 sorts first (not done); click its checkbox.
+  c.querySelector(".csv-tasks-check").click();
+  assert(rows.find(r => r.Name === "T1").Status === "Completed", `wrote existing vocab (got ${rows[0].Status})`);
+});
+
+await test("tasks: no type column → everything is a task", async () => {
+  const rows = [
+    { Name: "One", Project: "P", Due: "2030-01-01", Priority: "high" },
+    { Name: "Two", Project: "P", Due: "", Priority: "low" },
+  ];
+  const c = document.body.createDiv();
+  renderTasks(tasksView(rows), c);
+  const headers = Array.from(c.querySelectorAll(".csv-tasks-section-header")).map(h => h.textContent);
+  assert(headers.join(",") === "Tasks", "only a Tasks section");
+  assert(c.querySelectorAll(".csv-tasks-table tbody tr").length === 2, "both rows are tasks");
+});
+
+await test("tasks: hasTaskColumns gates the mode correctly", async () => {
+  // due column alone qualifies
+  assert(hasTaskColumns(tasksView([{ Name: "x", Due: "2030-01-01" }])), "due column → tasks file");
+  // priority alone qualifies
+  assert(hasTaskColumns(tasksView([{ Name: "x", Priority: "high" }])), "priority column → tasks file");
+  // a type column carrying task/note values qualifies
+  assert(hasTaskColumns(tasksView([{ Name: "x", Type: "task" }])), "type=task → tasks file");
+  // a movies-style file (Type holds a genre, no due/priority) does NOT
+  assert(!hasTaskColumns(tasksView([{ Title: "Dune", Type: "Fiction", Rating: "5" }])), "genre Type → not a tasks file");
+});
+
 console.log(`\n${"=".repeat(50)}`);
 console.log(`View smoke tests: ${passed} passed, ${failed} failed`);
 console.log(`${"=".repeat(50)}`);
