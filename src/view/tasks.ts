@@ -13,6 +13,7 @@
 
 import type { CardView } from "../../main";
 import { CSVRow } from "../types";
+import { showSelectPicker } from "../utils";
 import { effectiveGroupCol } from "./kanban";
 
 // ── Column resolution ─────────────────────────────────────────────────────────
@@ -86,6 +87,21 @@ function dueRank(val: string): number {
 // Today as YYYY-MM-DD, for overdue comparison.
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+// The word the done-toggle writes when checking a row. Respect the file's
+// existing vocabulary — if rows already use "Completed" or "Finished", reuse
+// the most common one rather than forcing a second spelling ("done") into the
+// column. Falls back to "done" for a file with no finished rows yet.
+function resolveDoneWord(view: CardView, statusCol: string): string {
+  const counts = new Map<string, number>();
+  view.rows.forEach(r => {
+    const v = (r[statusCol] ?? "").trim();
+    if (v && DONE_WORDS.includes(v.toLowerCase())) counts.set(v, (counts.get(v) ?? 0) + 1);
+  });
+  let best = "done", bestN = 0;
+  counts.forEach((n, v) => { if (n > bestN) { best = v; bestN = n; } });
+  return best;
 }
 
 // ── Renderer ──────────────────────────────────────────────────────────────────
@@ -162,6 +178,7 @@ export function renderTasks(view: CardView, container: HTMLElement): void {
 
   const wrap = container.createDiv({ cls: "csv-tasks" });
   const today = todayISO();
+  const doneWord = statusCol ? resolveDoneWord(view, statusCol) : "done";
 
   // ── Tasks section ──
   renderSection(wrap, "Tasks", tasksByProject, (tbody, items) => {
@@ -191,7 +208,7 @@ export function renderTasks(view: CardView, container: HTMLElement): void {
         box.setAttr("title", done ? "Mark not done" : "Mark done");
         box.addEventListener("click", e => {
           e.stopPropagation();
-          row[statusCol] = done ? "" : "done";
+          row[statusCol] = done ? "" : doneWord;
           view.scheduleSave();
           view.renderView(true);
         });
@@ -204,7 +221,21 @@ export function renderTasks(view: CardView, container: HTMLElement): void {
       dueCell.setText(dueVal || "—");
       if (dueVal && !done && dueVal < today) dueCell.addClass("csv-tasks-overdue");
 
-      tr.createEl("td", { cls: "csv-tasks-priority", text: priCol ? (row[priCol] || "—") : "—" });
+      const priCell = tr.createEl("td", { cls: "csv-tasks-priority", text: priCol ? (row[priCol] || "—") : "—" });
+      if (priCol) {
+        priCell.addClass("csv-tasks-editable");
+        priCell.addEventListener("click", e => {
+          e.stopPropagation();
+          // Offer the file's own priority values plus the canonical three, so
+          // a click cycles through whatever vocabulary the column already uses.
+          const opts = Array.from(new Set([...view.getColumnValues(priCol), "high", "medium", "low"]));
+          showSelectPicker(priCell, row[priCol] ?? "", opts, val => {
+            row[priCol] = val;
+            view.scheduleSave();
+            view.renderView(true);   // re-sort by the new priority
+          }, view.contentEl);
+        });
+      }
       tr.addEventListener("contextmenu", e => view.openRowContextMenu(row, e));
     });
   }, ["", "Name", "Due", "Priority"]);

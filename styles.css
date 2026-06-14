@@ -3799,6 +3799,8 @@ select.csv-add-row-control {
 .csv-tasks-due { white-space: nowrap; width: 96px; color: var(--csv-text-faint); }
 .csv-tasks-overdue { color: var(--text-error); font-weight: 600; }
 .csv-tasks-priority { white-space: nowrap; width: 80px; text-transform: capitalize; }
+.csv-tasks-editable { cursor: pointer; border-radius: 4px; }
+.csv-tasks-editable:hover { color: var(--csv-accent); background: var(--background-modifier-hover); }
 
 .csv-tasks-type-cell { width: 90px; }
 .csv-tasks-type-pill {
