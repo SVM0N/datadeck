@@ -1,0 +1,274 @@
+// Tasks view renderer. A native, CSV-backed replacement for the old
+// DataviewJS "project dashboard" pattern (vault-wide tag scan → per-project
+// task/note tables). Here the CSV *is* the source of truth: one row = one
+// task/note/idea/reference, grouped by a project column, split into a Tasks
+// section (sorted done → priority → due) and a Notes & Ideas section. Each row
+// can spawn an optional backing .md page on demand (same infra the Library
+// view uses). Extracted-style module: reached CardView members are public,
+// type-only import → no runtime cycle. Covered by test-view-smoke.mjs.
+//
+// TODO (phase 2): cross-vault aggregate mode — pull task rows from many files
+// into one board, the way the old dashboard scanned dv.pages('""'). The
+// single-file model below is deliberate for phase 1.
+
+import type { CardView } from "../../main";
+import { CSVRow } from "../types";
+import { effectiveGroupCol } from "./kanban";
+
+// ── Column resolution ─────────────────────────────────────────────────────────
+
+/** The column that distinguishes task / note / idea / reference rows. */
+export function taskTypeCol(view: CardView): string | null {
+  return view.resolveCol(["Type", "type", "Kind", "kind", "Item", "item"]);
+}
+
+/** Group column: an explicit project column, else the shared group fallback. */
+export function taskProjectCol(view: CardView): string | null {
+  return view.resolveCol(["Project", "project", "Projects", "projects", "Area", "area"])
+    ?? effectiveGroupCol(view);
+}
+
+export function taskDueCol(view: CardView): string | null {
+  return view.resolveCol(["Due", "due", "Deadline", "deadline", "Due Date", "Due date", "due date"]);
+}
+
+export function taskPriorityCol(view: CardView): string | null {
+  return view.resolveCol(["Priority", "priority", "Prio", "prio", "Importance", "importance"]);
+}
+
+// Type values that count as actionable tasks (vs notes/ideas/references).
+// Empty type also reads as a task — a row with a due/priority but no type is
+// almost always a todo.
+const TASK_WORDS = ["task", "todo", "to-do", "action", ""];
+// Any type value that marks a row as task-manager content at all. Used by the
+// availability gate so a movies file with a genre "Type" column doesn't get a
+// spurious Tasks mode.
+const STRUCTURED_WORDS = ["task", "todo", "to-do", "action", "note", "idea", "reference", "ref"];
+
+// Status words that mean "this is finished" → struck through, sorted last.
+const DONE_WORDS = ["done", "complete", "completed", "finished", "closed", "resolved", "yes", "x", "✓", "true"];
+
+const PRIORITY_ORDER: Record<string, number> = { high: 0, med: 1, medium: 1, normal: 1, low: 2 };
+
+/**
+ * Whether this file looks like a task manager. True when it has a due or
+ * priority column, or a type column actually carrying task/note/idea values.
+ * Drives availableModes and the onLoadFile mode guard.
+ */
+export function hasTaskColumns(view: CardView): boolean {
+  if (taskDueCol(view) || taskPriorityCol(view)) return true;
+  const tc = taskTypeCol(view);
+  if (!tc) return false;
+  return view.rows.some(r => STRUCTURED_WORDS.includes((r[tc] ?? "").trim().toLowerCase()));
+}
+
+function isTaskRow(view: CardView, row: CSVRow, typeCol: string | null): boolean {
+  if (!typeCol) return true;            // no type column → everything is a task
+  return TASK_WORDS.includes((row[typeCol] ?? "").trim().toLowerCase());
+}
+
+function isDone(view: CardView, row: CSVRow, statusCol: string | null): boolean {
+  if (!statusCol) return false;
+  return DONE_WORDS.includes((row[statusCol] ?? "").trim().toLowerCase());
+}
+
+function priorityRank(val: string): number {
+  const r = PRIORITY_ORDER[(val ?? "").trim().toLowerCase()];
+  return r === undefined ? 3 : r;      // unprioritised sorts after low
+}
+
+function dueRank(val: string): number {
+  // ISO-ish dates sort lexically; missing dates sort last.
+  const s = (val ?? "").trim();
+  return s ? 0 : 1;
+}
+
+// Today as YYYY-MM-DD, for overdue comparison.
+function todayISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// ── Renderer ──────────────────────────────────────────────────────────────────
+
+export function renderTasks(view: CardView, container: HTMLElement): void {
+  const projectCol = taskProjectCol(view);
+  const typeCol = taskTypeCol(view);
+  const statusCol = view.getStatusCol();
+  const dueCol = taskDueCol(view);
+  const priCol = taskPriorityCol(view);
+  const titleCol = view.titleKey() ?? view.headers[0];
+
+  // ── Filters bar (project + type), mirrors the Library filter pattern ──
+  const filtersBar = container.createDiv({ cls: "csv-library-filters" });
+
+  const projects = new Set<string>();
+  if (projectCol) view.rows.forEach(r => {
+    (r[projectCol] ?? "").split(",").map(s => s.trim()).filter(Boolean).forEach(p => projects.add(p));
+  });
+  const projectSelect = filtersBar.createEl("select", { cls: "csv-library-filter-select" });
+  projectSelect.createEl("option", { text: projectCol ? "All projects" : "All", value: "all" });
+  Array.from(projects).sort().forEach(p => projectSelect.createEl("option", { text: p, value: p }));
+  projectSelect.value = view.taskProjectFilter;
+
+  const types = new Set<string>();
+  if (typeCol) view.rows.forEach(r => { const t = (r[typeCol] ?? "").trim(); if (t) types.add(t); });
+  let typeSelect: HTMLSelectElement | null = null;
+  if (types.size > 0) {
+    typeSelect = filtersBar.createEl("select", { cls: "csv-library-filter-select" });
+    typeSelect.createEl("option", { text: "All types", value: "all" });
+    Array.from(types).sort().forEach(t => typeSelect!.createEl("option", { text: t, value: t }));
+    typeSelect.value = view.taskTypeFilter;
+  }
+
+  const applyFilters = () => {
+    view.taskProjectFilter = projectSelect.value;
+    if (typeSelect) view.taskTypeFilter = typeSelect.value;
+    view.renderView(true);
+  };
+  projectSelect.addEventListener("change", applyFilters);
+  typeSelect?.addEventListener("change", applyFilters);
+
+  // ── Filter rows (project / type / toolbar search) ──
+  const q = view.searchQuery.toLowerCase().trim();
+  const filtered = view.rows.filter(row => {
+    if (view.taskProjectFilter !== "all" && projectCol) {
+      const ps = (row[projectCol] ?? "").split(",").map(s => s.trim().toLowerCase());
+      if (!ps.includes(view.taskProjectFilter.toLowerCase())) return false;
+    }
+    if (view.taskTypeFilter !== "all" && typeCol) {
+      if ((row[typeCol] ?? "").trim().toLowerCase() !== view.taskTypeFilter.toLowerCase()) return false;
+    }
+    if (q && !view.headers.some(h => (row[h] ?? "").toLowerCase().includes(q))) return false;
+    return true;
+  });
+
+  if (view.taskProjectFilter !== "all" || view.taskTypeFilter !== "all" || q) {
+    container.createDiv({ cls: "csv-library-result-count", text: `Showing ${filtered.length} of ${view.rows.length} entries` });
+  }
+
+  // ── Split into tasks vs notes, grouped by project ──
+  const tasksByProject: Record<string, CSVRow[]> = {};
+  const notesByProject: Record<string, CSVRow[]> = {};
+  const projectOf = (row: CSVRow): string => {
+    if (!projectCol) return "—";
+    const p = (row[projectCol] ?? "").split(",").map(s => s.trim()).filter(Boolean)[0];
+    return p || "—";
+  };
+  filtered.forEach(row => {
+    const bucket = isTaskRow(view, row, typeCol) ? tasksByProject : notesByProject;
+    const proj = projectOf(row);
+    (bucket[proj] ??= []).push(row);
+  });
+
+  const wrap = container.createDiv({ cls: "csv-tasks" });
+  const today = todayISO();
+
+  // ── Tasks section ──
+  renderSection(wrap, "Tasks", tasksByProject, (tbody, items) => {
+    items.sort((a, b) => {
+      const da = isDone(view, a, statusCol), db = isDone(view, b, statusCol);
+      if (da !== db) return da ? 1 : -1;
+      if (priCol) {
+        const pr = priorityRank(a[priCol] ?? "") - priorityRank(b[priCol] ?? "");
+        if (pr) return pr;
+      }
+      if (dueCol) {
+        const dr = dueRank(a[dueCol] ?? "") - dueRank(b[dueCol] ?? "");
+        if (dr) return dr;
+        const dc = (a[dueCol] ?? "").localeCompare(b[dueCol] ?? "");
+        if (dc) return dc;
+      }
+      return view.getTitle(a).localeCompare(view.getTitle(b));
+    });
+    items.forEach(row => {
+      const done = isDone(view, row, statusCol);
+      const tr = tbody.createEl("tr");
+
+      // Done toggle (only when there's a status column to flip).
+      const checkCell = tr.createEl("td", { cls: "csv-tasks-check-cell" });
+      if (statusCol) {
+        const box = checkCell.createEl("span", { cls: `csv-tasks-check ${done ? "is-done" : ""}`, text: done ? "✓" : "" });
+        box.setAttr("title", done ? "Mark not done" : "Mark done");
+        box.addEventListener("click", e => {
+          e.stopPropagation();
+          row[statusCol] = done ? "" : "done";
+          view.scheduleSave();
+          view.renderView(true);
+        });
+      }
+
+      renderNameCell(view, tr, row, titleCol, done);
+
+      const dueCell = tr.createEl("td", { cls: "csv-tasks-due" });
+      const dueVal = dueCol ? (row[dueCol] ?? "").slice(0, 10) : "";
+      dueCell.setText(dueVal || "—");
+      if (dueVal && !done && dueVal < today) dueCell.addClass("csv-tasks-overdue");
+
+      tr.createEl("td", { cls: "csv-tasks-priority", text: priCol ? (row[priCol] || "—") : "—" });
+      tr.addEventListener("contextmenu", e => view.openRowContextMenu(row, e));
+    });
+  }, ["", "Name", "Due", "Priority"]);
+
+  // ── Notes & Ideas section ──
+  renderSection(wrap, "Notes & Ideas", notesByProject, (tbody, items) => {
+    items.sort((a, b) => view.getTitle(a).localeCompare(view.getTitle(b)));
+    items.forEach(row => {
+      const tr = tbody.createEl("tr");
+      const typeVal = typeCol ? (row[typeCol] || "") : "";
+      const typeCell = tr.createEl("td", { cls: "csv-tasks-type-cell" });
+      if (typeVal) typeCell.createSpan({ cls: "csv-tasks-type-pill", text: typeVal });
+      renderNameCell(view, tr, row, titleCol, false);
+      tr.addEventListener("contextmenu", e => view.openRowContextMenu(row, e));
+    });
+  }, ["Type", "Name"]);
+
+  if (Object.keys(tasksByProject).length === 0 && Object.keys(notesByProject).length === 0) {
+    const empty = wrap.createDiv({ cls: "csv-empty-state" });
+    empty.createEl("p", { text: q || view.taskProjectFilter !== "all" || view.taskTypeFilter !== "all" ? "No entries match your filters." : "No tasks yet." });
+    if (q || view.taskProjectFilter !== "all" || view.taskTypeFilter !== "all") {
+      empty.createEl("button", { cls: "csv-clear-filters-btn", text: "Clear filters" }).addEventListener("click", () => {
+        view.taskProjectFilter = "all"; view.taskTypeFilter = "all"; view.searchQuery = "";
+        view.renderView();
+      });
+    }
+  }
+}
+
+// A titled group of per-project collapsible tables.
+function renderSection(
+  wrap: HTMLElement,
+  title: string,
+  byProject: Record<string, CSVRow[]>,
+  fillBody: (tbody: HTMLElement, items: CSVRow[]) => void,
+  cols: string[],
+): void {
+  if (Object.keys(byProject).length === 0) return;
+  wrap.createDiv({ cls: "csv-tasks-section-header", text: title });
+  const section = wrap.createDiv({ cls: "csv-tasks-section" });
+  Object.keys(byProject).sort().forEach(project => {
+    const items = byProject[project];
+    const details = section.createEl("details", { cls: "csv-tasks-group" });
+    details.open = true;
+    const summary = details.createEl("summary", { cls: "csv-tasks-group-header" });
+    summary.innerHTML = `<span class="csv-tasks-arrow">▶</span> ${project} <span class="csv-tasks-count">${items.length}</span>`;
+    const table = details.createEl("table", { cls: "csv-tasks-table" });
+    const thead = table.createEl("thead");
+    const hr = thead.createEl("tr");
+    cols.forEach(c => hr.createEl("th", { text: c }));
+    const tbody = table.createEl("tbody");
+    fillBody(tbody, items);
+  });
+}
+
+// Name cell: clickable title that opens/creates the row's backing page, plus a
+// small page icon (📄 if the page exists, + to create) — the "optional pages"
+// model the Library view established.
+function renderNameCell(view: CardView, tr: HTMLElement, row: CSVRow, titleCol: string, done: boolean): void {
+  const nameCell = tr.createEl("td", { cls: "csv-tasks-name-cell" });
+  const link = nameCell.createSpan({ cls: `csv-tasks-link ${done ? "csv-tasks-done" : ""}`, text: row[titleCol] || "Untitled" });
+  link.addEventListener("click", () => view.openOrCreateNotes(row));
+  const exists = view.notesFileExists(row);
+  const icon = nameCell.createEl("button", { cls: `csv-tasks-page-icon ${exists ? "exists" : ""}`, text: exists ? "📄" : "+" });
+  icon.setAttr("title", exists ? "Open page" : "Create page");
+  icon.addEventListener("click", e => { e.stopPropagation(); view.openOrCreateNotes(row); });
+}

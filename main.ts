@@ -31,6 +31,7 @@ import { renderRandomCard } from "./src/random-block";
 import { renderDashboard } from "./src/view/dashboard";
 import { renderStats, hasStatsColumns } from "./src/view/stats";
 import { renderFocus } from "./src/view/focus";
+import { renderTasks, hasTaskColumns } from "./src/view/tasks";
 
 // World-map SVG asset, loaded lazily from the plugin dir and cached for the
 // session (undefined = not yet read, null = read failed/missing).
@@ -106,7 +107,8 @@ export class CardView extends FileView {
     const needsDate = this.mode === "dashboard";
     if ((needsCategory && !effectiveGroupCol(this)) || (needsDate && !this.hasDateColumn())
         || (this.mode === "travel" && !this.isTravelFile())
-        || (this.mode === "stats" && !hasStatsColumns(this))) {
+        || (this.mode === "stats" && !hasStatsColumns(this))
+        || (this.mode === "tasks" && !hasTaskColumns(this))) {
       this.mode = "table";
     }
     this.selectedDate = null; // Reset selected date when loading new file
@@ -507,6 +509,7 @@ export class CardView extends FileView {
     else if (this.mode === "kanban-genre") renderKanbanGenre(this, content);
     else if (this.mode === "stats") renderStats(this, content);
     else if (this.mode === "focus") renderFocus(this, content);
+    else if (this.mode === "tasks") renderTasks(this, content);
     else renderTable(this, content);
   }
 
@@ -714,6 +717,11 @@ export class CardView extends FileView {
 
   libraryStatusFilter: string = "all";
   libraryGenreFilter: string = "all";
+
+  // ── Tasks view ────────────────────────────────────────────────────────────────
+
+  taskProjectFilter: string = "all";
+  taskTypeFilter: string = "all";
 
   // ── Focus view ───────────────────────────────────────────────────────────────
 

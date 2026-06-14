@@ -1,7 +1,7 @@
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface CSVRow { [key: string]: string; }
-export type ViewMode = "kanban-genre" | "table" | "dashboard" | "library" | "travel" | "stats" | "focus";
+export type ViewMode = "kanban-genre" | "table" | "dashboard" | "library" | "travel" | "stats" | "focus" | "tasks";
 
 // ─── Residency / threshold rules (travel view) ──────────────────────────────
 // A declarative rule: count days a person was in `scope` within `window`,

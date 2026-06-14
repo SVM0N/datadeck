@@ -3687,3 +3687,127 @@ select.csv-add-row-control {
 .csv-stats-bar-row.is-clickable { cursor: pointer; border-radius: 4px; }
 .csv-stats-bar-row.is-clickable:hover { background: var(--background-modifier-hover); }
 .csv-stats-bar-row.is-clickable:hover .csv-stats-bar-label { color: var(--text-accent); }
+
+/* ─── Tasks view ──────────────────────────────────────────────────────────────
+   Native, CSV-backed project dashboard. Per-project collapsible tables, a
+   Tasks section (done → priority → due) and a Notes & Ideas section. */
+
+.csv-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0 24px;
+}
+
+.csv-tasks-section-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--csv-text);
+  margin: 16px 0 6px;
+}
+
+.csv-tasks-section { display: flex; flex-direction: column; gap: 2px; }
+
+.csv-tasks-group { margin: 0 0 4px; }
+
+.csv-tasks-group-header {
+  list-style: none;
+  cursor: pointer;
+  padding: 4px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--csv-text-faint);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+  border-bottom: 1px solid var(--csv-border);
+}
+.csv-tasks-group-header::-webkit-details-marker { display: none; }
+
+.csv-tasks-arrow {
+  font-size: 9px;
+  transition: transform 0.1s;
+  display: inline-block;
+  line-height: 1;
+}
+.csv-tasks-group[open] .csv-tasks-arrow { transform: rotate(90deg); }
+
+.csv-tasks-count { opacity: 0.55; font-weight: 400; }
+
+.csv-tasks-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 2px 0 8px;
+}
+.csv-tasks-table th {
+  text-align: left;
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--csv-text-faint);
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--csv-border);
+}
+.csv-tasks-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--csv-border);
+  color: var(--csv-text-muted);
+  vertical-align: top;
+}
+.csv-tasks-table tr:last-child td { border-bottom: none; }
+.csv-tasks-table tbody tr:hover { background: var(--background-modifier-hover); }
+
+.csv-tasks-check-cell { width: 22px; padding-right: 0 !important; }
+.csv-tasks-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px; height: 15px;
+  border: 1.5px solid var(--csv-text-faint);
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--csv-accent);
+}
+.csv-tasks-check:hover { border-color: var(--csv-accent); }
+.csv-tasks-check.is-done { border-color: var(--csv-accent); background: var(--csv-accent); color: var(--text-on-accent); }
+
+.csv-tasks-name-cell { display: flex; align-items: center; gap: 6px; }
+.csv-tasks-link { color: var(--csv-accent); cursor: pointer; }
+.csv-tasks-link:hover { text-decoration: underline; }
+.csv-tasks-done { text-decoration: line-through; opacity: 0.45; }
+
+.csv-tasks-page-icon {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  padding: 2px 4px;
+  opacity: 0;
+  color: var(--csv-text-faint);
+  box-shadow: none;
+}
+.csv-tasks-name-cell:hover .csv-tasks-page-icon { opacity: 0.7; }
+.csv-tasks-page-icon.exists { opacity: 0.85; }
+.csv-tasks-page-icon:hover { opacity: 1; color: var(--csv-accent); }
+
+.csv-tasks-due { white-space: nowrap; width: 96px; color: var(--csv-text-faint); }
+.csv-tasks-overdue { color: var(--text-error); font-weight: 600; }
+.csv-tasks-priority { white-space: nowrap; width: 80px; text-transform: capitalize; }
+
+.csv-tasks-type-cell { width: 90px; }
+.csv-tasks-type-pill {
+  display: inline-block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: var(--background-modifier-hover);
+  color: var(--csv-text-muted);
+}

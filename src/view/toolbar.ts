@@ -9,6 +9,7 @@ import { ViewMode } from "../types";
 import { FileConfigModal } from "../modals";
 import { generateMobileFiles } from "./mobile";
 import { hasStatsColumns } from "./stats";
+import { hasTaskColumns } from "./tasks";
 import { effectiveGroupCol } from "./kanban";
 
 declare const __BUILD_TIME__: string;
@@ -22,6 +23,10 @@ export function availableModes(view: CardView): {id: ViewMode, label: string}[] 
   const modes: {id: ViewMode, label: string}[] = [];
   if (view.isTravelFile()) modes.push({id: "travel", label: "Travel"});
   if (view.hasDateColumn()) modes.push({id: "dashboard", label: "Dashboard"});
+  // Tasks: files with a due/priority column or a type column carrying
+  // task/note/idea values (see hasTaskColumns). A native replacement for the
+  // old DataviewJS project dashboard.
+  if (hasTaskColumns(view)) modes.push({id: "tasks", label: "Tasks"});
   // Cards/Kanban work on any file with a groupable column — the per-file
   // "Group by" pick, the category column, or an auto-picked fallback (see
   // effectiveGroupCol). Travel/date files used to lose these entirely.
