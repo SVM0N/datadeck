@@ -6,6 +6,21 @@ export function sanitizeFilename(name: string): string {
 }
 
 /**
+ * Turn an arbitrary field value into a valid Obsidian tag body (the part
+ * after `#`). Obsidian tags can't contain spaces or most punctuation, so we
+ * lower-case, collapse whitespace/illegal chars to single hyphens, and trim
+ * stray hyphens. "Kitchen Reno!" → "kitchen-reno". Returns "" if nothing
+ * usable survives (caller should skip emitting a tag in that case).
+ */
+export function tagify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}/_-]+/gu, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/**
  * Parse a CSV string into `{headers, rows}` using PapaParse. Values stay as
  * strings (no `dynamicTyping`) so they round-trip back to disk unchanged.
  * Missing trailing fields are filled with "" so every row carries every

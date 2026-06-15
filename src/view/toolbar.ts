@@ -1,5 +1,5 @@
 // Toolbar renderer: title, row count, view-mode buttons, search bar, sort
-// toggle, and the secondary actions (Columns / Mobile / Backup / + Add / ⋯).
+// toggle, and the secondary actions (Columns / Mobile / Backup / Anki / + Add / ⋯).
 // Extracted from CardView; reached members are public. Type-only CardView
 // import → no runtime cycle. Covered by test-view-smoke.mjs.
 
@@ -8,6 +8,7 @@ import type { CardView } from "../../main";
 import { ViewMode } from "../types";
 import { FileConfigModal } from "../modals";
 import { generateMobileFiles } from "./mobile";
+import { syncToAnki } from "./anki";
 import { hasStatsColumns } from "./stats";
 import { hasTaskColumns } from "./tasks";
 import { effectiveGroupCol } from "./kanban";
@@ -204,6 +205,7 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
   };
   const openMobile = () => generateMobileFiles(view);
   const openBackup = () => view.backupToArchive();
+  const openAnki = () => syncToAnki(view);
 
   ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-secondary", text: "⚙ Columns", title: "Configure columns for this file" })
     .addEventListener("click", openColumns);
@@ -211,6 +213,8 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
     .addEventListener("click", openMobile);
   ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-secondary", text: "💾 Backup", title: "Copy this file to Archive/ with today's date" })
     .addEventListener("click", openBackup);
+  ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-secondary", text: "🎴 Anki", title: "Sync rows to Anki (needs Anki desktop + AnkiConnect)" })
+    .addEventListener("click", openAnki);
 
   ctrl.createEl("button",{cls:"csv-add-btn",text:"+ Add"}).addEventListener("click",()=>view.openAddModal());
 
@@ -224,6 +228,7 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
     menu.addItem(i => i.setTitle("Columns").setIcon("settings").onClick(openColumns));
     menu.addItem(i => i.setTitle("Mobile dashboard").setIcon("smartphone").onClick(openMobile));
     menu.addItem(i => i.setTitle("Backup").setIcon("save").onClick(openBackup));
+    menu.addItem(i => i.setTitle("Sync to Anki").setIcon("layers").onClick(openAnki));
     menu.addSeparator();
     // Build timestamp baked in at compile time. Lets the user confirm on
     // iPhone that iCloud has actually synced the latest deploy.

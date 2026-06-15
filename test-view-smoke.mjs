@@ -847,7 +847,7 @@ function tasksView(rows, overrides = {}) {
   return view;
 }
 
-await test("tasks: splits tasks vs notes and groups by project", async () => {
+await test("tasks: splits tasks / notes / ideas into peer sections, grouped by project", async () => {
   const rows = [
     { Name: "Fix bug", Project: "Web", Type: "task", Status: "", Due: "", Priority: "high" },
     { Name: "Idea x", Project: "Web", Type: "idea", Status: "", Due: "", Priority: "" },
@@ -857,11 +857,24 @@ await test("tasks: splits tasks vs notes and groups by project", async () => {
   const c = document.body.createDiv();
   renderTasks(tasksView(rows), c);
   const headers = Array.from(c.querySelectorAll(".csv-tasks-section-header")).map(h => h.textContent);
-  assert(headers.join(",") === "Tasks,Notes & Ideas", `both sections present (got ${headers})`);
-  // 2 task groups (Web, Craft) + 2 notes groups (Web, Craft)
-  assert(c.querySelectorAll(".csv-tasks-group").length === 4, "4 project groups across both sections");
+  // reference is non-task, non-idea → Notes; idea → Ideas.
+  assert(headers.join(",") === "Tasks,Notes,Ideas", `three peer sections present (got ${headers})`);
+  // 2 task groups (Web, Craft) + 1 notes group (Craft) + 1 ideas group (Web)
+  assert(c.querySelectorAll(".csv-tasks-group").length === 4, "4 project groups across the three sections");
   assert(c.querySelectorAll(".csv-tasks-table tbody tr").length === 4, "4 rows total");
   assert(c.querySelectorAll(".csv-tasks-type-pill").length === 2, "idea + reference render type pills");
+});
+
+await test("tasks: empty Ideas/Notes sections are omitted, not shown blank", async () => {
+  // All rows are tasks → only the Tasks section header renders.
+  const rows = [
+    { Name: "A", Project: "P", Type: "task", Status: "", Due: "", Priority: "" },
+    { Name: "B", Project: "P", Type: "", Status: "", Due: "", Priority: "" },
+  ];
+  const c = document.body.createDiv();
+  renderTasks(tasksView(rows), c);
+  const headers = Array.from(c.querySelectorAll(".csv-tasks-section-header")).map(h => h.textContent);
+  assert(headers.join(",") === "Tasks", `only Tasks present (got ${headers})`);
 });
 
 await test("tasks: sorts done last, then by priority, then due", async () => {
@@ -952,6 +965,90 @@ await test("tasks: hasTaskColumns gates the mode correctly", async () => {
   assert(hasTaskColumns(tasksView([{ Name: "x", Type: "task" }])), "type=task → tasks file");
   // a movies-style file (Type holds a genre, no due/priority) does NOT
   assert(!hasTaskColumns(tasksView([{ Title: "Dune", Type: "Fiction", Rating: "5" }])), "genre Type → not a tasks file");
+});
+
+// ── Anki sync ────────────────────────────────────────────────────────────────
+const { syncToAnki, ankiFrontCol } = await load("./src/view/anki.ts");
+
+// A quotes-shaped view stub. resolveCol does case-insensitive header matching,
+// mirroring CardView.resolveCol closely enough for front-column resolution.
+function ankiView(headers, rows, cfg = {}, basename = "quotes") {
+  return {
+    file: { basename },
+    fileCfg: cfg,
+    headers,
+    rows,
+    titleKey: () => headers.find(h => ["title", "name"].includes(h.toLowerCase())) ?? undefined,
+    resolveCol: (cands) => headers.find(h => cands.some(c => c.toLowerCase() === h.toLowerCase())) ?? null,
+  };
+}
+
+const QUOTE_HEADERS = ["Author", "Category", "Quote", "Where", "Written In"];
+
+await test("anki: front column falls back to a content column, not the first column", () => {
+  // No Title/Name → should pick Quote, not the literal first header (Author).
+  const view = ankiView(QUOTE_HEADERS, []);
+  assert(ankiFrontCol(view) === "Quote", "quotes front resolves to Quote");
+  // Per-file override wins outright.
+  const overridden = ankiView(QUOTE_HEADERS, [], { ankiFrontCol: "Author" });
+  assert(ankiFrontCol(overridden) === "Author", "configured front column wins");
+  // A stale/unknown configured column is ignored (falls back).
+  const stale = ankiView(QUOTE_HEADERS, [], { ankiFrontCol: "Ghost" });
+  assert(ankiFrontCol(stale) === "Quote", "unknown configured column falls back");
+});
+
+await test("anki: builds Basic notes (front = front col, back = other fields) and counts adds", async () => {
+  let createdDeck = null;
+  let sentNotes = null;
+  globalThis.__ankiRequestUrl = (opts) => {
+    const { action, params } = JSON.parse(opts.body);
+    if (action === "createDeck") { createdDeck = params.deck; return { json: { result: 1, error: null } }; }
+    if (action === "addNotes") {
+      sentNotes = params.notes;
+      // First row added, second a duplicate (null).
+      return { json: { result: [1111, null], error: null } };
+    }
+    return { json: { result: null, error: null } };
+  };
+  const rows = [
+    { Author: "Marcus Aurelius", Category: "Stoicism", Quote: "Waste no more time arguing", Where: "Meditations", "Written In": "180" },
+    { Author: "Anon", Category: "", Quote: "Be water", Where: "", "Written In": "" },
+  ];
+  await syncToAnki(ankiView(QUOTE_HEADERS, rows));
+
+  assert(createdDeck === "quotes", "deck named after the file basename");
+  assert(sentNotes.length === 2, "one note per row");
+  assert(sentNotes[0].modelName === "Basic", "uses the Basic model");
+  assert(sentNotes[0].fields.Front === "Waste no more time arguing", "front is the Quote value");
+  assert(sentNotes[0].fields.Back.includes("Author:") && sentNotes[0].fields.Back.includes("Marcus Aurelius"), "back carries the other columns");
+  assert(!sentNotes[0].fields.Back.includes("Waste no more time"), "front column excluded from the back");
+  // Empty cells are skipped on the back (row 2 has only Author + Quote).
+  assert(!sentNotes[1].fields.Back.includes("Where:"), "empty columns omitted from back");
+  assert(sentNotes[0].options.allowDuplicate === false && sentNotes[0].options.duplicateScope === "deck", "dedupes within the deck");
+  delete globalThis.__ankiRequestUrl;
+});
+
+await test("anki: HTML-escapes cell values so markup renders as text", async () => {
+  let sentNotes = null;
+  globalThis.__ankiRequestUrl = (opts) => {
+    const { action, params } = JSON.parse(opts.body);
+    if (action === "addNotes") { sentNotes = params.notes; return { json: { result: [1], error: null } }; }
+    return { json: { result: 1, error: null } };
+  };
+  await syncToAnki(ankiView(["Phrase", "Meaning"], [{ Phrase: "a<b>", Meaning: "x & y" }], {}, "dictionary"));
+  assert(sentNotes[0].fields.Front === "a&lt;b&gt;", "front escaped");
+  assert(sentNotes[0].fields.Back.includes("x &amp; y"), "back escaped");
+  delete globalThis.__ankiRequestUrl;
+});
+
+await test("anki: surfaces a transport failure instead of throwing", async () => {
+  globalThis.__ankiRequestUrl = () => { throw new Error("ECONNREFUSED"); };
+  // Should resolve (error caught + shown as a Notice), not reject.
+  let threw = false;
+  try { await syncToAnki(ankiView(["Phrase", "Meaning"], [{ Phrase: "x", Meaning: "y" }])); }
+  catch { threw = true; }
+  assert(!threw, "connection failure is caught, not propagated");
+  delete globalThis.__ankiRequestUrl;
 });
 
 console.log(`\n${"=".repeat(50)}`);

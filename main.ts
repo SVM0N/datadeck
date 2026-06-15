@@ -18,8 +18,8 @@ import type { Chart as ChartType } from "chart.js";
 
 // Import from src modules
 import { CSVRow, ViewMode, FileConfig, CardViewSettings, DEFAULT_SETTINGS, CARD_VIEW_TYPE } from "./src/types";
-import { sanitizeFilename, titleCase, formatRatingForDisplay, showSelectPicker, parseCSV, migrateFileConfigKey, sortRowsByColumn, isMultiValueColName } from "./src/utils";
-import { AddEntryModal, NoteExpanderModal, FileConfigModal, SearchModal } from "./src/modals";
+import { sanitizeFilename, tagify, titleCase, formatRatingForDisplay, showSelectPicker, parseCSV, migrateFileConfigKey, sortRowsByColumn, isMultiValueColName } from "./src/utils";
+import { AddEntryModal, NoteExpanderModal, FileConfigModal, SearchModal, PromptModal } from "./src/modals";
 import { renderTravel } from "./src/travel-view";
 import { CardViewSettingTab } from "./src/settings-tab";
 import { renderAddEntryForm } from "./src/add-entry-form";
@@ -31,7 +31,7 @@ import { renderRandomCard } from "./src/random-block";
 import { renderDashboard } from "./src/view/dashboard";
 import { renderStats, hasStatsColumns } from "./src/view/stats";
 import { renderFocus } from "./src/view/focus";
-import { renderTasks, hasTaskColumns } from "./src/view/tasks";
+import { renderTasks, hasTaskColumns, taskProjectCol, taskTypeCol, taskPriorityCol } from "./src/view/tasks";
 
 // World-map SVG asset, loaded lazily from the plugin dir and cached for the
 // session (undefined = not yet read, null = read failed/missing).
@@ -322,7 +322,17 @@ export class CardView extends FileView {
     const path = this.notesFilePath(row);
     let file = this.app.vault.getAbstractFileByPath(path) as TFile|null;
     if (!file) {
-      const fm = ["---",...this.headers.filter(h=>!this.isNotesCol(h)&&row[h]).map(h=>`${h}: "${row[h].replace(/"/g,'\\"')}"`),"---","",`# ${this.getTitle(row)}`,"",""].join("\n");
+      const props = this.headers.filter(h=>!this.isNotesCol(h)&&row[h]).map(h=>`${h}: "${row[h].replace(/"/g,'\\"')}"`);
+      // On a tasks/projects file, surface the project column as a tag so notes
+      // spawned from rows roll up under #project-… in the tag pane / graph /
+      // any vault-wide dashboard scan — not just as a structured property.
+      // Comma-separated projects → one tag each. Skipped for non-task files.
+      const projectCol = hasTaskColumns(this) ? taskProjectCol(this) : null;
+      const tags = projectCol
+        ? (row[projectCol] ?? "").split(",").map(p=>tagify(p.trim())).filter(Boolean).map(t=>`project-${t}`)
+        : [];
+      if (tags.length) props.unshift(`tags: [${tags.join(", ")}]`);
+      const fm = ["---",...props,"---","",`# ${this.getTitle(row)}`,"",""].join("\n");
       const notesCol = this.headers.find(h=>this.isNotesCol(h));
       const content = fm+(notesCol&&row[notesCol]?.trim()?row[notesCol]:"");
       const folderPath = path.substring(0,path.lastIndexOf("/"));
@@ -413,6 +423,17 @@ export class CardView extends FileView {
   }
 
   openAddModal(): void {
+    // On a tasks/projects file, seed the Type and Priority dropdowns with their
+    // canonical vocabularies so a brand-new file offers them before any row
+    // exists to harvest values from. (Skipped elsewhere — a movies "Type"
+    // holds genres, not Task/Note/Idea.)
+    const optionPresets: Record<string, string[]> = {};
+    if (hasTaskColumns(this)) {
+      const typeCol = taskTypeCol(this);
+      if (typeCol) optionPresets[typeCol] = ["Task", "Note", "Idea"];
+      const priCol = taskPriorityCol(this);
+      if (priCol) optionPresets[priCol] = ["Low", "Medium", "High"];
+    }
     new AddEntryModal(
       this.app,
       this.headers,
@@ -426,7 +447,8 @@ export class CardView extends FileView {
         // the Notice; yanking to (0,0) just disorients them.
         this.renderViewPreservingScroll();
         new Notice(`Added: ${this.getTitle(row)}`);
-      }
+      },
+      optionPresets
     ).open();
   }
 
@@ -756,6 +778,44 @@ export class CardView extends FileView {
   onunload(): void { this.renderComponent.unload(); if(this.saveTimer) window.clearTimeout(this.saveTimer); }
 }
 
+// ─── File templates ─────────────────────────────────────────────────────────
+//
+// Canonical column sets for the "create … file" palette commands. `headers`
+// must satisfy the target view's detector (see the command registration in
+// onload). `defaultName` seeds the name prompt; `mode` is pinned in
+// fileConfigs so the new file opens straight into the right renderer.
+interface FileTemplate {
+  id: string;
+  command: string;
+  defaultName: string;
+  headers: string[];
+  mode: ViewMode;
+}
+
+const FILE_TEMPLATES: FileTemplate[] = [
+  {
+    id: "tasks",
+    command: "Create tasks file",
+    defaultName: "Tasks",
+    headers: ["Title", "Type", "Project", "Status", "Priority", "Due", "Notes"],
+    mode: "tasks",
+  },
+  {
+    id: "travel",
+    command: "Create travel file",
+    defaultName: "Travel",
+    headers: ["Country", "date_entered", "date_left", "source", "Notes"],
+    mode: "travel",
+  },
+  {
+    id: "habits",
+    command: "Create habit tracker file",
+    defaultName: "Habits",
+    headers: ["Date", "Exercise", "Meditate", "Read", "Notes"],
+    mode: "dashboard",
+  },
+];
+
 // ─── Plugin ───────────────────────────────────────────────────────────────────
 
 export default class CardViewPlugin extends Plugin {
@@ -800,6 +860,22 @@ export default class CardViewPlugin extends Plugin {
       },
     });
 
+    // "Create … file" palette commands — one per view template. Each scaffolds
+    // a fresh CSV with the canonical columns for that view, pins its
+    // defaultMode so it opens straight into the right renderer, and opens it.
+    // Always available (no active-view gate), so they're the entry point to a
+    // new tracker from anywhere. Headers must satisfy each view's detector:
+    //  - tasks: hasTaskColumns() (Priority/Due present)
+    //  - travel: isTravelFile() (country + date_entered + date_left + source)
+    //  - dashboard: a date column + boolean habit columns.
+    for (const tpl of FILE_TEMPLATES) {
+      this.addCommand({
+        id: `create-${tpl.id}`,
+        name: tpl.command,
+        callback: () => this.createTemplateFile(tpl),
+      });
+    }
+
     // Migrate per-file config keys when the user renames or moves a
     // tracked csv inside Obsidian. Without this, `fileConfigs[oldPath]`
     // (cardFields, categoryColumn, defaultMode, etc.) is orphaned and the
@@ -840,6 +916,39 @@ export default class CardViewPlugin extends Plugin {
     });
   }
 
+
+  /**
+   * Scaffold a new CSV from a view template: prompt for a name, create it
+   * (header row only) next to the active file or at the vault root, pin its
+   * defaultMode so it opens in the right renderer, and open it. Resolves name
+   * collisions by appending " 2", " 3", … rather than overwriting.
+   */
+  async createTemplateFile(tpl: FileTemplate): Promise<void> {
+    new PromptModal(
+      this.app,
+      tpl.command,
+      tpl.defaultName,
+      "File name (without .csv)",
+      async (name) => {
+        // Drop into the active file's folder so a tracker lands beside related
+        // notes; fall back to the vault root.
+        const active = this.app.workspace.getActiveFile();
+        const folder = active?.parent && active.parent.path !== "/" ? `${active.parent.path}/` : "";
+        const base = sanitizeFilename(name);
+        let path = normalizePath(`${folder}${base}.csv`);
+        for (let n = 2; this.app.vault.getAbstractFileByPath(path); n++) {
+          path = normalizePath(`${folder}${base} ${n}.csv`);
+        }
+        const file = await this.app.vault.create(path, tpl.headers.join(",") + "\n");
+        // Pin the renderer up front so the file opens in its template's view
+        // even before the user adds a row that would trigger auto-detection.
+        this.settings.fileConfigs[file.path] = { ...this.settings.fileConfigs[file.path], defaultMode: tpl.mode };
+        await this.saveSettings();
+        await this.app.workspace.getLeaf("tab").openFile(file);
+        new Notice(`Created: ${file.name}`);
+      }
+    ).open();
+  }
 
   async loadSettings(): Promise<void> {
     this.settings=Object.assign({},DEFAULT_SETTINGS,await this.loadData());

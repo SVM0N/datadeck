@@ -47,6 +47,11 @@ export class AddEntryModal extends Modal {
   isSelectCol: (h: string) => boolean;
   getColumnValues: (h: string) => string[];
   onSubmit: (row: CSVRow) => void;
+  // Predefined options per column (keyed by header). Merged ahead of the
+  // file's existing values in the dropdown — e.g. a tasks file passes
+  // { Type: ["Task","Note","Idea"], Priority: ["Low","Medium","High"] } so a
+  // brand-new file offers them before any row exists to harvest values from.
+  optionPresets: Record<string, string[]>;
 
   constructor(
     app: App,
@@ -54,7 +59,8 @@ export class AddEntryModal extends Modal {
     isNotesCol: (h: string) => boolean,
     isSelectCol: (h: string) => boolean,
     getColumnValues: (h: string) => string[],
-    onSubmit: (row: CSVRow) => void
+    onSubmit: (row: CSVRow) => void,
+    optionPresets: Record<string, string[]> = {}
   ) {
     super(app);
     this.headers = headers;
@@ -62,6 +68,7 @@ export class AddEntryModal extends Modal {
     this.isSelectCol = isSelectCol;
     this.getColumnValues = getColumnValues;
     this.onSubmit = onSubmit;
+    this.optionPresets = optionPresets;
   }
 
   onOpen(): void {
@@ -93,12 +100,55 @@ export class AddEntryModal extends Modal {
       // how the CSV happens to capitalise its headers (Apple-style row labels).
       row.createEl("label", { text: titleCase(h), cls: "csv-modal-label" });
 
+      const presets = this.optionPresets[h] ?? [];
+      // Single-value option columns (preset-backed or configured select) render
+      // as a native <select>. Crucially this keeps focus *inside* the modal —
+      // the body-appended showSelectPicker (used elsewhere) loses focus to the
+      // modal's focus-trap, which on an empty column made the field unfillable
+      // (it bounced back to the title). Multi-value columns (tags/genres) still
+      // use the chip picker since a native select can't multi-select cleanly.
+      const useNativeSelect = !this.isNotesCol(h) && (presets.length > 0 || (this.isSelectCol(h) && !isMultiValueColName(h)));
+
       if (this.isNotesCol(h)) {
         const ta = row.createEl("textarea", { cls: "csv-modal-textarea", placeholder: "Markdown supported…" });
         ta.addEventListener("input", () => { values[h] = ta.value; });
 
+      } else if (useNativeSelect) {
+        // Options: presets first (canonical order), then any extra existing
+        // values from the file, then a "+ Custom…" escape hatch that reveals
+        // an inline text input — so the column is never a closed vocabulary.
+        const CUSTOM = "__custom__";
+        const merged: string[] = [];
+        [...presets, ...this.getColumnValues(h)].forEach(v => {
+          const t = (v ?? "").trim();
+          if (t && !merged.some(m => m.toLowerCase() === t.toLowerCase())) merged.push(t);
+        });
+        const sel = row.createEl("select", { cls: "csv-modal-select" });
+        sel.createEl("option", { text: "—", value: "" });
+        merged.forEach(v => sel.createEl("option", { text: v, value: v }));
+        sel.createEl("option", { text: "+ Custom…", value: CUSTOM });
+
+        const customInput = row.createEl("input", { cls: "csv-modal-input csv-modal-custom", type: "text", placeholder: `Custom ${titleCase(h).toLowerCase()}` });
+        customInput.hide();
+        customInput.addEventListener("input", () => { values[h] = customInput.value; });
+        customInput.addEventListener("keydown", e => { if (e.key === "Enter") submit(); });
+
+        sel.addEventListener("change", () => {
+          if (sel.value === CUSTOM) {
+            customInput.show();
+            customInput.focus();
+            values[h] = customInput.value;
+          } else {
+            customInput.hide();
+            values[h] = sel.value;
+          }
+        });
+
       } else if (this.isSelectCol(h)) {
-        // Render as a chip that opens the picker, scoped to the modal
+        // Multi-value select (tags/genres/themes): chip + picker, which the
+        // picker's "+ Add" / existing-value clicks drive. Still works inside
+        // the modal because the user clicks options rather than typing into a
+        // focus-trapped search.
         const chipWrap = row.createDiv({ cls: "csv-modal-select-wrap" });
         const chip = chipWrap.createDiv({ cls: "csv-select-chip empty" });
         chip.setText("— click to select —");
@@ -651,6 +701,21 @@ export class FileConfigModal extends Modal {
       });
     });
 
+    // Anki card front — which column becomes the front of each card on
+    // "Sync to Anki". Unset = the title/primary field; every other non-empty
+    // column is joined onto the back. Its own "primary field" sentinel rather
+    // than the shared global-default one, since there's no global Anki front.
+    const ankiNone = "— title / primary field —";
+    const ankiRow = form.createDiv({ cls: "csv-modal-row" });
+    ankiRow.createEl("label", { text: "Anki card front", cls: "csv-modal-label" });
+    ankiRow.createEl("p", { cls: "csv-modal-hint", text: "Column used as the front of each card when syncing to Anki. Other columns become the back." });
+    const ankiSel = ankiRow.createEl("select", { cls: "csv-modal-select" });
+    [ankiNone, ...this.headers].forEach(o => {
+      const opt = ankiSel.createEl("option", { text: o, value: o });
+      if ((this.current.ankiFrontCol ?? ankiNone) === o) opt.selected = true;
+    });
+    ankiSel.addEventListener("change", () => { this.current.ankiFrontCol = ankiSel.value === ankiNone ? undefined : ankiSel.value; });
+
     // Default mode for this file. The list comes from availableModes (same
     // source as the toolbar dropdown), so it offers exactly the modes this
     // file's columns can render — Travel appears for travel logs, Stats only
@@ -681,6 +746,53 @@ export class FileConfigModal extends Modal {
       this.onSave(this.current);
       this.close();
     });
+  }
+
+  onClose(): void { this.contentEl.empty(); }
+}
+
+// ─── Prompt modal ───────────────────────────────────────────────────────────
+//
+// A minimal single-field text prompt (title + input + Cancel/OK). Used by the
+// "create … file" palette commands to ask for the new file's name. onSubmit
+// fires only on OK/Enter with a non-empty value, so callers never have to
+// guard against blank names.
+export class PromptModal extends Modal {
+  constructor(
+    app: App,
+    private title: string,
+    private initial: string,
+    private placeholder: string,
+    private onSubmit: (value: string) => void
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("csv-add-modal");
+    contentEl.createEl("h2", { text: this.title, cls: "csv-modal-title" });
+
+    const input = contentEl.createEl("input", { cls: "csv-modal-field", type: "text" });
+    input.value = this.initial;
+    input.placeholder = this.placeholder;
+    // Select the basename so the user can type over the default immediately.
+    window.setTimeout(() => { input.focus(); input.select(); }, 0);
+
+    const submit = () => {
+      const value = input.value.trim();
+      if (!value) return;
+      this.onSubmit(value);
+      this.close();
+    };
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); submit(); }
+    });
+
+    const btnRow = contentEl.createDiv({ cls: "csv-modal-btns" });
+    btnRow.createEl("button", { text: "Cancel", cls: "csv-modal-cancel" }).addEventListener("click", () => this.close());
+    btnRow.createEl("button", { text: "Create", cls: "csv-modal-submit" }).addEventListener("click", submit);
   }
 
   onClose(): void { this.contentEl.empty(); }

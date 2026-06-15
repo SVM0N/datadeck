@@ -42,6 +42,9 @@ export interface FileConfig {
   kanbanGroupCol?: string;    // Kanban "Group by" column. Unset = category column.
                               // Year-like columns bucket into decades.
   librarySort?: LibrarySort;  // Card-view section ordering. Unset = "status".
+  ankiFrontCol?: string;      // Column used as the Anki card front on sync.
+                              // Unset = the title/primary field; every other
+                              // non-empty column becomes the card back.
 }
 
 export type LibrarySort = "status" | "title" | "rating" | "year";

@@ -68,6 +68,17 @@ function isTaskRow(view: CardView, row: CSVRow, typeCol: string | null): boolean
   return TASK_WORDS.includes((row[typeCol] ?? "").trim().toLowerCase());
 }
 
+// Which of the three sections a row belongs to. Tasks (incl. empty/no-type),
+// Ideas (type "idea"), and Notes (everything else non-task: note, reference,
+// or any other non-task value).
+type TaskBucket = "task" | "note" | "idea";
+function bucketOf(view: CardView, row: CSVRow, typeCol: string | null): TaskBucket {
+  if (isTaskRow(view, row, typeCol)) return "task";
+  const t = (typeCol ? row[typeCol] : "").trim().toLowerCase();
+  if (t === "idea" || t === "ideas") return "idea";
+  return "note";
+}
+
 function isDone(view: CardView, row: CSVRow, statusCol: string | null): boolean {
   if (!statusCol) return false;
   return DONE_WORDS.includes((row[statusCol] ?? "").trim().toLowerCase());
@@ -162,16 +173,20 @@ export function renderTasks(view: CardView, container: HTMLElement): void {
     container.createDiv({ cls: "csv-library-result-count", text: `Showing ${filtered.length} of ${view.rows.length} entries` });
   }
 
-  // ── Split into tasks vs notes, grouped by project ──
+  // ── Split into tasks / notes / ideas, each grouped by project ──
   const tasksByProject: Record<string, CSVRow[]> = {};
   const notesByProject: Record<string, CSVRow[]> = {};
+  const ideasByProject: Record<string, CSVRow[]> = {};
+  const buckets: Record<TaskBucket, Record<string, CSVRow[]>> = {
+    task: tasksByProject, note: notesByProject, idea: ideasByProject,
+  };
   const projectOf = (row: CSVRow): string => {
     if (!projectCol) return "—";
     const p = (row[projectCol] ?? "").split(",").map(s => s.trim()).filter(Boolean)[0];
     return p || "—";
   };
   filtered.forEach(row => {
-    const bucket = isTaskRow(view, row, typeCol) ? tasksByProject : notesByProject;
+    const bucket = buckets[bucketOf(view, row, typeCol)];
     const proj = projectOf(row);
     (bucket[proj] ??= []).push(row);
   });
@@ -240,8 +255,9 @@ export function renderTasks(view: CardView, container: HTMLElement): void {
     });
   }, ["", "Name", "Due", "Priority"]);
 
-  // ── Notes & Ideas section ──
-  renderSection(wrap, "Notes & Ideas", notesByProject, (tbody, items) => {
+  // ── Notes and Ideas sections ── peers of Tasks, each grouped by project.
+  // Same row rendering (type pill + name), just different buckets/titles.
+  const fillNoteLike = (tbody: HTMLElement, items: CSVRow[]) => {
     items.sort((a, b) => view.getTitle(a).localeCompare(view.getTitle(b)));
     items.forEach(row => {
       const tr = tbody.createEl("tr");
@@ -251,9 +267,11 @@ export function renderTasks(view: CardView, container: HTMLElement): void {
       renderNameCell(view, tr, row, titleCol, false);
       tr.addEventListener("contextmenu", e => view.openRowContextMenu(row, e));
     });
-  }, ["Type", "Name"]);
+  };
+  renderSection(wrap, "Notes", notesByProject, fillNoteLike, ["Type", "Name"]);
+  renderSection(wrap, "Ideas", ideasByProject, fillNoteLike, ["Type", "Name"]);
 
-  if (Object.keys(tasksByProject).length === 0 && Object.keys(notesByProject).length === 0) {
+  if (Object.keys(tasksByProject).length === 0 && Object.keys(notesByProject).length === 0 && Object.keys(ideasByProject).length === 0) {
     const empty = wrap.createDiv({ cls: "csv-empty-state" });
     empty.createEl("p", { text: q || view.taskProjectFilter !== "all" || view.taskTypeFilter !== "all" ? "No entries match your filters." : "No tasks yet." });
     if (q || view.taskProjectFilter !== "all" || view.taskTypeFilter !== "all") {

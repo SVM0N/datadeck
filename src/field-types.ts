@@ -18,14 +18,15 @@ export function suggestionsFor(h: string): string[] | null {
 
 /**
  * Is this column date-like *by name*? Matches `date`, `date_entered`,
- * `date_left`, `Release Date`, `start-date` — i.e. "date" as a whole word
- * (bounded by start/end or _ / space / -). Deliberately does NOT match
- * `update`, `mandate`, `candidate`, `dateline`, or `Year`, so we never turn a
- * non-date column into a date picker. Paired with an ISO-value guard at the
- * call site so existing non-ISO values are never clobbered.
+ * `date_left`, `Release Date`, `start-date`, plus the task columns `due` and
+ * `deadline` — i.e. any of those as a whole word (bounded by start/end or
+ * _ / space / -). Deliberately does NOT match `update`, `mandate`,
+ * `candidate`, `dateline`, `overdue`, or `Year`, so we never turn a non-date
+ * column into a date picker. Paired with an ISO-value guard at the call site
+ * so existing non-ISO values are never clobbered.
  */
 export function isDateCol(h: string): boolean {
-  return /(^|[_\s-])date([_\s-]|$)/i.test(h.trim());
+  return /(^|[_\s-])(date|due|deadline)([_\s-]|$)/i.test(h.trim());
 }
 
 /** A clean yyyy-mm-dd value — the only shape safe to hand a native date input. */

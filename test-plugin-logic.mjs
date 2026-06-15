@@ -44,6 +44,16 @@ function sanitizeFilename(name) {
   return name.replace(/[\\/:*?"<>|#^[\]]/g, "").replace(/\s+/g, " ").trim().slice(0, 100);
 }
 
+// Copy of tagify from src/utils.ts — turns a project value into a valid
+// Obsidian tag body for the project-tag injection in openOrCreateNotes.
+function tagify(value) {
+  return value
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}/_-]+/gu, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 // Copy of formatRatingForDisplay from src/utils.ts — used by the Library
 // card render to turn a Rating cell value into a star string (or "" to skip).
 function formatRatingForDisplay(raw, columnName) {
@@ -162,6 +172,22 @@ test("sanitizeFilename: preserves valid characters", () => {
   assertEqual(sanitizeFilename('Hello World 2024'), "Hello World 2024");
   assertEqual(sanitizeFilename('日本語タイトル'), "日本語タイトル");
   assertEqual(sanitizeFilename('Émile Zola - Germinal'), "Émile Zola - Germinal");
+});
+
+test("tagify: lowercases and hyphenates project names", () => {
+  assertEqual(tagify('Kitchen Reno'), "kitchen-reno");
+  assertEqual(tagify('Q3 Launch!'), "q3-launch");
+  assertEqual(tagify('  Side  Project  '), "side-project");
+});
+
+test("tagify: keeps unicode letters and nested-tag slashes", () => {
+  assertEqual(tagify('Café/Refit'), "café/refit");
+  assertEqual(tagify('日本語'), "日本語");
+});
+
+test("tagify: returns empty when nothing usable survives", () => {
+  assertEqual(tagify('!!!'), "");
+  assertEqual(tagify('   '), "");
 });
 
 console.log("\n=== CSV Parsing ===\n");
@@ -945,13 +971,13 @@ test("migrateFileConfigKey: caller-set new entry wins, old still cleared", () =>
   const { isDateCol, suggestionsFor, ISO_DATE } = await import(pathToFileURL(out).href);
   fs.rmSync(out, { force: true });
 
-  test("field-types: isDateCol matches date as a whole word", () => {
-    for (const h of ["date", "Date", "date_entered", "date_left", "Release Date", "Watched Date", "start-date", "date-start"]) {
+  test("field-types: isDateCol matches date/due/deadline as a whole word", () => {
+    for (const h of ["date", "Date", "date_entered", "date_left", "Release Date", "Watched Date", "start-date", "date-start", "Due", "due", "Due Date", "Deadline", "deadline"]) {
       assertEqual(isDateCol(h), true, `expected ${h} to be a date column`);
     }
   });
   test("field-types: isDateCol rejects substrings & non-dates", () => {
-    for (const h of ["update", "update_at", "mandate", "candidate", "validate", "dateline", "Year", "country", "city"]) {
+    for (const h of ["update", "update_at", "mandate", "candidate", "validate", "dateline", "Year", "country", "city", "overdue", "subdue"]) {
       assertEqual(isDateCol(h), false, `expected ${h} NOT to be a date column`);
     }
   });

@@ -23,3 +23,12 @@ export class Setting extends Base {
   addDropdown() { return this; } addButton() { return this; } addTextArea() { return this; }
 }
 export function normalizePath(p) { return p; }
+
+// AnkiConnect transport stub. Tests set `globalThis.__ankiRequestUrl` to a
+// handler that inspects the request and returns a fake `{ json }` response;
+// unset, it behaves like a reachable-but-empty Anki (null result, no error).
+export function requestUrl(opts) {
+  const handler = globalThis.__ankiRequestUrl;
+  if (handler) return Promise.resolve(handler(opts));
+  return Promise.resolve({ json: { result: null, error: null } });
+}
