@@ -1,5 +1,45 @@
 import Papa from "papaparse";
+import { App, TFile } from "obsidian";
 import { CSVRow } from "./types";
+
+// Column-name aliases that mark a cell as holding an image, for card/kanban
+// thumbnails. Matched case-insensitively against headers (see getImageCol).
+export const IMAGE_COL_ALIASES = ["Image", "image", "Cover", "cover", "Poster", "poster", "Thumbnail", "thumbnail", "Thumb", "thumb", "Photo", "photo", "Picture", "picture", "Img", "img"];
+
+/**
+ * Resolve a cell value into an <img> src, or null if it isn't resolvable.
+ * Accepts: http(s)/data URLs (used as-is), `![[wikilink]]` / `[[wikilink]]`,
+ * `![](path)` markdown images, and bare vault paths / filenames (resolved
+ * relative to the CSV's own path via the link cache → getResourcePath).
+ */
+export function resolveImageSrc(app: App, raw: string, sourcePath: string): string | null {
+  let v = (raw ?? "").trim();
+  if (!v) return null;
+  // Absolute URLs / data URIs pass through untouched.
+  if (/^(https?:|data:)/i.test(v)) return v;
+  // Unwrap ![[wikilink]] / [[wikilink]] and ![](path) markdown image syntax.
+  const wiki = v.match(/!?\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/);
+  if (wiki) v = wiki[1].trim();
+  else {
+    const md = v.match(/!\[[^\]]*\]\(([^)]+)\)/);
+    if (md) v = md[1].trim();
+  }
+  if (/^(https?:|data:)/i.test(v)) return v; // an md-image whose target was a URL
+  // Resolve as a vault link relative to the CSV file, then to a usable src.
+  const file = app.metadataCache.getFirstLinkpathDest(v, sourcePath);
+  if (file instanceof TFile) return app.vault.getResourcePath(file);
+  return null;
+}
+
+// Largest distinct-value count at which a column still "looks categorical" —
+// i.e. worth an option picker rather than a free-text input. The single source
+// of truth for the add form, the entry editor, and the mobile add form, so all
+// three offer the same pseudo-categorical columns (e.g. Watched, Format) the
+// same way, not just the names configured in settings.selectColumns.
+export const CATEGORICAL_MAX_DISTINCT = 15;
+export function looksCategorical(distinctCount: number): boolean {
+  return distinctCount >= 1 && distinctCount <= CATEGORICAL_MAX_DISTINCT;
+}
 
 export function sanitizeFilename(name: string): string {
   return name.replace(/[\\/:*?"<>|#^[\]]/g,"").replace(/\s+/g," ").trim().slice(0,100);

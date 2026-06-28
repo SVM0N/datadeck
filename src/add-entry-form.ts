@@ -1,7 +1,7 @@
 import { App, Notice, TFile, MarkdownPostProcessorContext } from "obsidian";
 import Papa from "papaparse";
 import { CSVRow } from "./types";
-import { parseCSV, resolvePath, titleCase } from "./utils";
+import { parseCSV, resolvePath, titleCase, looksCategorical } from "./utils";
 
 // ─── csv-add code block (mobile entry form) ──────────────────────────────────
 // Extracted from CardViewPlugin. Depends only on `app` (vault/workspace),
@@ -137,7 +137,7 @@ export async function renderAddEntryForm(app: App, source: string, el: HTMLEleme
     otherCols.forEach(h => {
       const row = makeRow(h, "field");
       const uniqueVals = new Set(rows.map(r => (r[h] ?? "").trim()).filter(Boolean));
-      if (uniqueVals.size > 0 && uniqueVals.size <= 15) {
+      if (looksCategorical(uniqueVals.size)) {
         const select = row.createEl("select", { cls: "csv-add-row-control" });
         select.createEl("option", { text: "—", value: "" });
         Array.from(uniqueVals).sort().forEach(v => select.createEl("option", { text: v, value: v }));

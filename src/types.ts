@@ -42,6 +42,10 @@ export interface FileConfig {
   kanbanGroupCol?: string;    // Kanban "Group by" column. Unset = category column.
                               // Year-like columns bucket into decades.
   librarySort?: LibrarySort;  // Card-view section ordering. Unset = "status".
+  imageColumn?: string;       // Column holding an image (path/wikilink/URL) for
+                              // card/kanban thumbnails. Unset = auto-detect by name.
+  collapsedGroups?: string[]; // Card-view group values (lowercased) collapsed by
+                              // default; remembers manual collapse/expand toggles.
   ankiFrontCol?: string;      // Column used as the Anki card front on sync.
                               // Unset = the title/primary field; every other
                               // non-empty column becomes the card back.

@@ -6,7 +6,7 @@ import {
   Notice,
 } from "obsidian";
 import { CSVRow, FileConfig, ViewMode } from "./types";
-import { showSelectPicker, titleCase, isMultiValueColName } from "./utils";
+import { showSelectPicker, titleCase, isMultiValueColName, looksCategorical } from "./utils";
 import { suggestionsFor, isDateCol, ISO_DATE } from "./field-types";
 
 // ─── Shared field input ─────────────────────────────────────────────────────
@@ -47,6 +47,10 @@ export class AddEntryModal extends Modal {
   isSelectCol: (h: string) => boolean;
   getColumnValues: (h: string) => string[];
   onSubmit: (row: CSVRow) => void;
+  // True for 0/1 habit-style columns — they render as a toggle instead of a
+  // text field so logging a day is a tap, not typing "1". Optional so callers
+  // that don't track habits can omit it (defaults to never-boolean).
+  isBooleanCol: (h: string) => boolean;
   // Predefined options per column (keyed by header). Merged ahead of the
   // file's existing values in the dropdown — e.g. a tasks file passes
   // { Type: ["Task","Note","Idea"], Priority: ["Low","Medium","High"] } so a
@@ -60,7 +64,8 @@ export class AddEntryModal extends Modal {
     isSelectCol: (h: string) => boolean,
     getColumnValues: (h: string) => string[],
     onSubmit: (row: CSVRow) => void,
-    optionPresets: Record<string, string[]> = {}
+    optionPresets: Record<string, string[]> = {},
+    isBooleanCol: (h: string) => boolean = () => false
   ) {
     super(app);
     this.headers = headers;
@@ -69,6 +74,7 @@ export class AddEntryModal extends Modal {
     this.getColumnValues = getColumnValues;
     this.onSubmit = onSubmit;
     this.optionPresets = optionPresets;
+    this.isBooleanCol = isBooleanCol;
   }
 
   onOpen(): void {
@@ -107,9 +113,29 @@ export class AddEntryModal extends Modal {
       // modal's focus-trap, which on an empty column made the field unfillable
       // (it bounced back to the title). Multi-value columns (tags/genres) still
       // use the chip picker since a native select can't multi-select cleanly.
-      const useNativeSelect = !this.isNotesCol(h) && (presets.length > 0 || (this.isSelectCol(h) && !isMultiValueColName(h)));
+      // Pseudo-categorical: an un-configured column whose existing values are
+      // few enough to be a closed-ish vocabulary (e.g. Watched, Format) gets a
+      // dropdown of its values + "Custom…" too — not just the names listed in
+      // settings.selectColumns. Same heuristic as the mobile add form.
+      const autoCategorical = !this.isSelectCol(h) && !isMultiValueColName(h)
+        && !isDateCol(h) && looksCategorical(this.getColumnValues(h).length);
+      const useNativeSelect = !this.isNotesCol(h) && (presets.length > 0 || (this.isSelectCol(h) && !isMultiValueColName(h)) || autoCategorical);
 
-      if (this.isNotesCol(h)) {
+      if (this.isBooleanCol(h)) {
+        // Habit-style 0/1 column → a toggle. Off writes "0", on "1", so logging
+        // a day is a tap per habit instead of typing each value. Self-contained
+        // (own knob + CSS) rather than Obsidian's .checkbox-container so it
+        // renders consistently across themes.
+        values[h] = "0";
+        const toggle = row.createDiv({ cls: "csv-toggle" });
+        toggle.createDiv({ cls: "csv-toggle-knob" });
+        toggle.addEventListener("click", () => {
+          const on = !toggle.hasClass("is-on");
+          toggle.toggleClass("is-on", on);
+          values[h] = on ? "1" : "0";
+        });
+
+      } else if (this.isNotesCol(h)) {
         const ta = row.createEl("textarea", { cls: "csv-modal-textarea", placeholder: "Markdown supported…" });
         ta.addEventListener("input", () => { values[h] = ta.value; });
 
@@ -296,7 +322,12 @@ export class NoteExpanderModal extends Modal {
       // titleCase: Apple-style row labels, independent of CSV header casing.
       fieldRow.createDiv({ cls: "csv-expander-field-label", text: titleCase(h) });
 
-      if (this.isSelectCol(h)) {
+      // Configured select column, or a pseudo-categorical one (few distinct
+      // values, e.g. Watched/Format) — both get the chip + option picker, so
+      // editing offers the same vocabulary the add form does.
+      const selectLike = this.isSelectCol(h)
+        || (!isMultiValueColName(h) && !isDateCol(h) && looksCategorical(this.getColumnValues(h).length));
+      if (selectLike) {
         const chip = fieldRow.createDiv({ cls: `csv-select-chip ${this.row[h] ? "" : "empty"}` });
         chip.setText(this.row[h] || "—");
         chip.addEventListener("click", e => {
@@ -325,63 +356,71 @@ export class NoteExpanderModal extends Modal {
     // click-to-edit pattern as the kanban card preview). Links and embeds
     // inside the markdown stay clickable — we suppress the edit-swap only
     // when the click landed on an anchor or the user is selecting text.
-    const notesDivider = contentEl.createDiv({ cls: "csv-expander-divider" });
-    notesDivider.createDiv({ cls: "csv-expander-notes-label", text: this.notesCol });
-
+    // Notes section is only rendered when the file actually has a notes column.
+    // Files without one (e.g. an applications tracker that's all structured
+    // fields) still open the expander to edit every other field — the notes
+    // editor just isn't shown. `ta` stays null in that case; the Save handler
+    // guards on this.notesCol before writing back.
     let isEditing = false;
-    let currentText = this.row[this.notesCol] ?? "";
+    let currentText = this.notesCol ? (this.row[this.notesCol] ?? "") : "";
+    let ta: HTMLTextAreaElement | null = null;
 
-    const rendered = contentEl.createDiv({ cls: "csv-expander-rendered markdown-rendered" });
-    rendered.title = "Click to edit";
-    const editorWrap = contentEl.createDiv({ cls: "csv-expander-editor" });
-    editorWrap.style.display = "none";
+    if (this.notesCol) {
+      const notesDivider = contentEl.createDiv({ cls: "csv-expander-divider" });
+      notesDivider.createDiv({ cls: "csv-expander-notes-label", text: this.notesCol });
 
-    const renderMarkdown = () => {
-      rendered.empty();
-      if (currentText.trim()) {
-        MarkdownRenderer.render(this.app, currentText, rendered, this.filePath, this.renderComponent);
-      } else {
-        rendered.createDiv({ cls: "csv-notes-empty", text: "+ Add note" });
-      }
-    };
-    renderMarkdown();
-
-    const ta = editorWrap.createEl("textarea", { cls: "csv-expander-textarea" });
-    ta.value = currentText;
-    ta.addEventListener("input", () => { currentText = ta.value; });
-
-    const enterEdit = () => {
-      if (isEditing) return;
-      isEditing = true;
-      rendered.style.display = "none";
-      editorWrap.style.display = "flex";
-      ta.value = currentText;
-      ta.focus();
-    };
-    const exitEdit = () => {
-      if (!isEditing) return;
-      isEditing = false;
+      const rendered = contentEl.createDiv({ cls: "csv-expander-rendered markdown-rendered" });
+      rendered.title = "Click to edit";
+      const editorWrap = contentEl.createDiv({ cls: "csv-expander-editor" });
       editorWrap.style.display = "none";
-      rendered.style.display = "";
-      currentText = ta.value;
-      renderMarkdown();
-    };
 
-    rendered.addEventListener("click", (e) => {
-      // Don't hijack clicks on links, buttons, or other interactive children —
-      // they should open as the user expects.
-      const target = e.target as HTMLElement;
-      if (target.closest("a, button, input, textarea, [contenteditable]")) return;
-      // Don't enter edit mode if the user just finished a text selection inside
-      // the rendered note; respects normal text-select semantics.
-      const sel = window.getSelection();
-      if (sel && sel.toString().length > 0) return;
-      enterEdit();
-    });
-    // Esc inside the textarea returns to the preview. Click outside (blur)
-    // also exits — keeps the modal feeling lightweight.
-    ta.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); ta.blur(); } });
-    ta.addEventListener("blur", exitEdit);
+      const renderMarkdown = () => {
+        rendered.empty();
+        if (currentText.trim()) {
+          MarkdownRenderer.render(this.app, currentText, rendered, this.filePath, this.renderComponent);
+        } else {
+          rendered.createDiv({ cls: "csv-notes-empty", text: "+ Add note" });
+        }
+      };
+      renderMarkdown();
+
+      ta = editorWrap.createEl("textarea", { cls: "csv-expander-textarea" });
+      ta.value = currentText;
+      ta.addEventListener("input", () => { currentText = ta!.value; });
+
+      const enterEdit = () => {
+        if (isEditing) return;
+        isEditing = true;
+        rendered.style.display = "none";
+        editorWrap.style.display = "flex";
+        ta!.value = currentText;
+        ta!.focus();
+      };
+      const exitEdit = () => {
+        if (!isEditing) return;
+        isEditing = false;
+        editorWrap.style.display = "none";
+        rendered.style.display = "";
+        currentText = ta!.value;
+        renderMarkdown();
+      };
+
+      rendered.addEventListener("click", (e) => {
+        // Don't hijack clicks on links, buttons, or other interactive children —
+        // they should open as the user expects.
+        const target = e.target as HTMLElement;
+        if (target.closest("a, button, input, textarea, [contenteditable]")) return;
+        // Don't enter edit mode if the user just finished a text selection inside
+        // the rendered note; respects normal text-select semantics.
+        const sel = window.getSelection();
+        if (sel && sel.toString().length > 0) return;
+        enterEdit();
+      });
+      // Esc inside the textarea returns to the preview. Click outside (blur)
+      // also exits — keeps the modal feeling lightweight.
+      ta.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); ta!.blur(); } });
+      ta.addEventListener("blur", exitEdit);
+    }
 
     // ── Footer buttons ───────────────────────────────────────────────────────
     // Layout: [Delete] ............... [Cancel] [Save & close]
@@ -407,8 +446,11 @@ export class NoteExpanderModal extends Modal {
       .addEventListener("click", () => {
         // If still in edit mode (user clicked Save without blurring), grab
         // the live textarea content; otherwise currentText is already fresh.
-        if (isEditing) currentText = ta.value;
-        this.row[this.notesCol] = currentText;
+        // Only write back when there's a notes column (ta is null otherwise).
+        if (this.notesCol) {
+          if (isEditing && ta) currentText = ta.value;
+          this.row[this.notesCol] = currentText;
+        }
         this.onSave(this.row);
         this.close();
       });

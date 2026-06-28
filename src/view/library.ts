@@ -4,7 +4,7 @@
 
 import type { CardView } from "../../main";
 import { CSVRow, LibrarySort } from "../types";
-import { formatRatingForDisplay } from "../utils";
+import { formatRatingForDisplay, resolveImageSrc } from "../utils";
 import { parseRating } from "./stats";
 import { effectiveGroupCol } from "./kanban";
 
@@ -174,7 +174,26 @@ export function renderLibrary(view: CardView, container: HTMLElement): void {
   Object.keys(groups).sort().forEach(genre => {
     const items = groups[genre];
     const section = sectionsWrap.createEl("details", { cls: "csv-library-section" });
-    section.open = true;
+    // Collapsed by default if this group is in the inline `collapse:` directive
+    // (view.collapsedGroups) OR the file's remembered collapsed set
+    // (fileCfg.collapsedGroups). Manual toggles below persist to the latter, so
+    // collapse works — and is remembered — in the full-page Cards view too.
+    const gKey = genre.toLowerCase();
+    const persisted = (view.fileCfg.collapsedGroups ?? []).map(s => s.toLowerCase());
+    section.open = !(view.collapsedGroups?.has(gKey) || persisted.includes(gKey));
+    section.addEventListener("toggle", () => {
+      const cfg = view.fileCfg;
+      const cur = (cfg.collapsedGroups ?? []).map(s => s.toLowerCase());
+      const set = new Set(cur);
+      if (section.open) set.delete(gKey); else set.add(gKey);
+      const next = Array.from(set);
+      // Skip the write when nothing changed — guards against the spurious
+      // toggle event fired by the initial programmatic `section.open` set, so
+      // a render doesn't rewrite data.json every time.
+      if (next.length === cur.length && next.every(x => cur.includes(x))) return;
+      cfg.collapsedGroups = next;
+      view.saveFileCfg(cfg);
+    });
 
     const summary = section.createEl("summary", { cls: "csv-library-section-header" });
     summary.innerHTML = `<span class="csv-library-arrow">▶</span> ${genre} <span class="csv-library-count">${items.length}</span>`;
@@ -227,9 +246,20 @@ export function renderLibrary(view: CardView, container: HTMLElement): void {
     // Otherwise auto-detect: author, year, rating, theme.
     const autoFields = [authorCol, yearCol, ratingCol, themeCol].filter((c): c is string => !!c);
     const cardFields = view.fileCfg.cardFields ?? autoFields;
+    const imageCol = view.getImageCol?.() ?? null;
 
     items.forEach(row => {
       const card = grid.createDiv({ cls: "csv-library-card" });
+
+      // Cover image (when an image column resolves to a usable src). Lazy so a
+      // genre section with many cards doesn't fetch every image up front.
+      if (imageCol) {
+        const src = resolveImageSrc(view.app, row[imageCol] ?? "", view.file?.path ?? "");
+        if (src) {
+          const img = card.createEl("img", { cls: "csv-library-card-img", attr: { src, loading: "lazy", alt: "" } });
+          img.addEventListener("error", () => img.remove()); // drop broken images quietly
+        }
+      }
 
       // Title with green dot for "done"-style status (watched, read, finished, etc.)
       const titleWrap = card.createDiv({ cls: "csv-library-card-title" });
@@ -281,12 +311,10 @@ export function renderLibrary(view: CardView, container: HTMLElement): void {
         });
       }
 
-      // Click to expand
+      // Click to expand. Opens even without a notes column — the expander
+      // edits every structured field; its notes section just doesn't render.
       card.addEventListener("click", () => {
-        const notesCol = view.getNotesCol();
-        if (notesCol) {
-          view.openNoteExpander(row, notesCol);
-        }
+        view.openNoteExpander(row, view.getNotesCol() ?? "");
       });
       card.addEventListener("contextmenu", e => view.openRowContextMenu(row, e));
     });

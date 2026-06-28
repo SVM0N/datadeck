@@ -923,8 +923,14 @@
    otherwise leaves the last-touched row tinted and forces a recomposite
    per scroll frame — a major cause of table lag on iPhone. */
 @media (hover: hover) {
+  /* `--background-modifier-hover` is barely perceptible in dark themes, so the
+     row looked like only some cells lit up. Use a text-tinted overlay that
+     reads clearly in both light and dark; the plain var is the fallback for
+     engines without color-mix. The row highlights uniformly because every
+     cell (incl. the action cell) is a <td>. */
   .csv-table tr:hover td { background: var(--background-modifier-hover); }
-  .csv-table tr:hover td.csv-cell--clipped::after { background: linear-gradient(to bottom, transparent, var(--background-modifier-hover)); }
+  .csv-table tr:hover td { background: color-mix(in srgb, var(--text-normal) 16%, transparent); }
+  .csv-table tr:hover td.csv-cell--clipped::after { background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--text-normal) 16%, transparent)); }
 }
 /* Long-content fade-out hint, scoped to cells JS measured as overflowing.
    The pseudo-element previously existed on every td (opacity:0 by default)
@@ -3841,3 +3847,123 @@ select.csv-add-row-control {
   background-position: right 10px center;
   padding-right: 28px;
 }
+
+/* ─── Inline csv-view block ──────────────────────────────────────────────────
+   The `csv-view` code block embeds a table/cards/kanban view inside a note
+   (a .base / Notion-DB-style embed). The full view fills its leaf via flex:1;
+   inline there's no such parent, so the wrapper establishes a bounded, self-
+   contained box: the toolbar reuses .csv-toolbar chrome, the content area
+   scrolls internally, and kanban columns get a definite height to size to. */
+.csv-inline-view {
+  display: flex;
+  flex-direction: column;
+  max-height: 600px;            /* `height:` directive overrides via inline max-height on .csv-content-area */
+  margin: 0.5em 0;
+  border: 1px solid var(--csv-border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--background-primary);
+  box-shadow: var(--csv-shadow);
+}
+
+/* Content area fills the remaining height so internal scroll works and the
+   kanban board (flex:1) has a parent height to stretch into. */
+.csv-inline-view .csv-content-area {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 12px;
+}
+
+/* Compact toolbar — slimmer than the full-view bar, and the title is a
+   click target that opens the source .csv in its own tab. */
+.csv-inline-toolbar {
+  padding: 8px 12px;
+}
+.csv-inline-toolbar .csv-toolbar-title {
+  display: block;
+  cursor: pointer;
+  text-decoration: none;
+}
+.csv-inline-toolbar .csv-toolbar-title:hover {
+  color: var(--csv-accent);
+  text-decoration: underline;
+}
+
+/* Mode segmented control (Table / Cards / Kanban). The full view uses a
+   <select>; inline uses buttons so the modes are one tap away. */
+.csv-inline-toolbar .csv-mode-group {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--csv-surface);
+  border: 1px solid var(--csv-border);
+  border-radius: 7px;
+}
+.csv-mode-btn {
+  padding: 3px 10px;
+  font-size: 12px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  box-shadow: none;
+}
+.csv-mode-btn:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+.csv-mode-btn.active {
+  background: var(--csv-accent);
+  color: var(--text-on-accent);
+}
+
+/* ─── Card / Kanban image thumbnails ─────────────────────────────────────────
+   Rendered when a column named Image/Cover/Poster/Thumbnail/Photo (or the
+   per-file image column) resolves to a usable src. Lazy-loaded; broken srcs
+   remove themselves so a card never shows a torn-image glyph. */
+.csv-library-card-img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  background: var(--csv-surface-2);
+}
+.csv-kanban-card-img {
+  display: block;
+  width: 100%;
+  max-height: 140px;
+  object-fit: cover;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  background: var(--csv-surface-2);
+}
+
+/* ─── Toggle (habit 0/1 columns in the add form) ─────────────────────────────
+   Self-contained switch so logging a habit day is a tap, not typing 0/1.
+   On = accent track + knob slid right; writes "1" (off → "0"). */
+.csv-toggle {
+  width: 38px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--background-modifier-border);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  flex: 0 0 auto;
+}
+.csv-toggle.is-on { background: var(--csv-accent); }
+.csv-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--text-on-accent, #fff);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: left 0.15s ease;
+}
+.csv-toggle.is-on .csv-toggle-knob { left: 18px; }

@@ -18,7 +18,7 @@ import type { Chart as ChartType } from "chart.js";
 
 // Import from src modules
 import { CSVRow, ViewMode, FileConfig, CardViewSettings, DEFAULT_SETTINGS, CARD_VIEW_TYPE } from "./src/types";
-import { sanitizeFilename, tagify, titleCase, formatRatingForDisplay, showSelectPicker, parseCSV, migrateFileConfigKey, sortRowsByColumn, isMultiValueColName } from "./src/utils";
+import { sanitizeFilename, tagify, titleCase, formatRatingForDisplay, showSelectPicker, parseCSV, migrateFileConfigKey, sortRowsByColumn, isMultiValueColName, IMAGE_COL_ALIASES } from "./src/utils";
 import { AddEntryModal, NoteExpanderModal, FileConfigModal, SearchModal, PromptModal } from "./src/modals";
 import { renderTravel } from "./src/travel-view";
 import { CardViewSettingTab } from "./src/settings-tab";
@@ -32,6 +32,7 @@ import { renderDashboard } from "./src/view/dashboard";
 import { renderStats, hasStatsColumns } from "./src/view/stats";
 import { renderFocus } from "./src/view/focus";
 import { renderTasks, hasTaskColumns, taskProjectCol, taskTypeCol, taskPriorityCol } from "./src/view/tasks";
+import { registerCsvViewBlock } from "./src/inline-view";
 
 // World-map SVG asset, loaded lazily from the plugin dir and cached for the
 // session (undefined = not yet read, null = read failed/missing).
@@ -238,6 +239,12 @@ export class CardView extends FileView {
   getTitle(row: CSVRow) { const k=this.titleKey(); return (k?row[k]:row[this.headers[0]])??"—"; }
   getSubtitle(row: CSVRow) { const k=this.authorKey(); return k?row[k]??"":""; }
   getColumnValues(h: string) { return Array.from(new Set(this.rows.map(r=>r[h]??"").filter(Boolean))).sort(); }
+  // Image column for card/kanban thumbnails — per-file override (reuses the
+  // cardImageColumn config) or detected by name (Image/Cover/Poster/…).
+  getImageCol(): string | null {
+    if (this.fileCfg.imageColumn) return this.headers.find(h => h.toLowerCase() === this.fileCfg.imageColumn!.toLowerCase()) ?? null;
+    return this.resolveCol(IMAGE_COL_ALIASES);
+  }
 
   // ── Notes file ─────────────────────────────────────────────────────────────
 
@@ -298,10 +305,9 @@ export class CardView extends FileView {
   openRowContextMenu(row: CSVRow, e: MouseEvent): void {
     const menu = new Menu();
     menu.addItem(i => i.setTitle("Open / Create Notes file").setIcon("file-text").onClick(() => this.openOrCreateNotes(row)));
-    const notesCol = this.getNotesCol();
-    if (notesCol) {
-      menu.addItem(i => i.setTitle("Open entry").setIcon("maximize").onClick(() => this.openNoteExpander(row, notesCol)));
-    }
+    // Always offered — the expander edits every structured field; on files
+    // without a notes column it simply omits the notes editor.
+    menu.addItem(i => i.setTitle("Open entry").setIcon("maximize").onClick(() => this.openNoteExpander(row, this.getNotesCol() ?? "")));
     const sc = this.getStatusCol();
     if (sc) {
       const statuses = this.getColumnValues(sc);
@@ -448,7 +454,9 @@ export class CardView extends FileView {
         this.renderViewPreservingScroll();
         new Notice(`Added: ${this.getTitle(row)}`);
       },
-      optionPresets
+      optionPresets,
+      // Habit/0-1 columns render as toggles in the add form.
+      (h) => this.getBooleanColumns().includes(h)
     ).open();
   }
 
@@ -739,6 +747,10 @@ export class CardView extends FileView {
 
   libraryStatusFilter: string = "all";
   libraryGenreFilter: string = "all";
+  // Group values (lowercased) collapsed by default in Cards view. Only the
+  // inline csv-view block populates this (via its `collapse:` directive); the
+  // full-page view leaves it empty, so every section opens as before.
+  collapsedGroups: Set<string> = new Set();
 
   // ── Tasks view ────────────────────────────────────────────────────────────────
 
@@ -836,6 +848,16 @@ export default class CardViewPlugin extends Plugin {
     this.registerMarkdownCodeBlockProcessor("csv-random", async (source, el, ctx) => {
       await renderRandomCard(this.app, source.trim(), el, ctx);
     });
+
+    // csv-view: an inline, editable table/cards/kanban view of a CSV file —
+    // a .base / Notion-DB-style embed. Reuses the full-view renderers via a
+    // lightweight host tied to the block's lifecycle. See src/inline-view.ts.
+    registerCsvViewBlock(
+      this.app,
+      this.settings,
+      () => this.saveSettings(),
+      (lang, handler) => this.registerMarkdownCodeBlockProcessor(lang, handler),
+    );
 
     // Palette commands — operate on the active CSV view, so they're
     // hotkey-able (Settings → Hotkeys → filter "CSV Card View").

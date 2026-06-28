@@ -4,7 +4,7 @@
 
 import type { CardView } from "../../main";
 import { CSVRow } from "../types";
-import { showSelectPicker, isMultiValueColName, isYearLikeColumn, decadeLabel, pickFallbackGroupCol } from "../utils";
+import { showSelectPicker, isMultiValueColName, isYearLikeColumn, decadeLabel, pickFallbackGroupCol, resolveImageSrc } from "../utils";
 
 /**
  * The column Cards/Kanban group by, resolved in priority order:
@@ -66,11 +66,9 @@ export function renderKanbanGenre(view: CardView, container: HTMLElement): void 
   // doesn't explode into 40 single-year columns. Everything else keeps the
   // comma-split multi-value behavior the genre kanban always had.
   const isYear = isYearLikeColumn(cc, filteredRows.map(r => r[cc] ?? ""));
-  // When the user explicitly grouped by a non-default column, rows with an
-  // empty value get a "—" bucket instead of silently vanishing (an explicit
-  // grouping should account for every row). The default genre view keeps
-  // its original drop-empties behavior.
-  const explicit = cc !== defaultCc;
+  // Rows with an empty group value get a "—" bucket instead of silently
+  // vanishing — every row should land in some column, including the default
+  // genre view (a movie with no genre still belongs on the board).
   const groupValues = (row: CSVRow): string[] => {
     const raw = row[cc] ?? "";
     let vals: string[];
@@ -80,7 +78,7 @@ export function renderKanbanGenre(view: CardView, container: HTMLElement): void 
     } else {
       vals = raw.split(",").map(s=>s.trim()).filter(Boolean);
     }
-    if (!vals.length && explicit) vals = ["—"];
+    if (!vals.length) vals = ["—"];
     return vals;
   };
 
@@ -120,6 +118,12 @@ export function renderKanbanGenre(view: CardView, container: HTMLElement): void 
         groupEl.createDiv({cls:`csv-kanban-status-label status-${status.toLowerCase().replace(/\s+/g,"-")}`, text:status});
         statusRows.forEach(row => renderKanbanCard(view, groupEl, row, sc, cc));
       });
+      // Rows whose status is blank or not among the known statuses (the empty
+      // strings dropped by `.filter(Boolean)` above) still belong in this
+      // column — render them ungrouped so they don't vanish while the column
+      // header still counts them.
+      const known = new Set(statuses);
+      genreRows.filter(r => !known.has(r[sc] ?? "")).forEach(row => renderKanbanCard(view, cb, row, sc, cc));
     } else {
       genreRows.forEach(row => renderKanbanCard(view, cb, row, sc, cc));
     }
@@ -130,14 +134,25 @@ function renderKanbanCard(view: CardView, container: HTMLElement, row: CSVRow, s
   const card = container.createDiv({cls:"csv-kanban-card"});
   const notesColForCard = view.getNotesCol();
 
+  // Thumbnail (when an image column resolves). Lazy-loaded; broken srcs drop out.
+  const imageCol = view.getImageCol?.() ?? null;
+  if (imageCol) {
+    const src = resolveImageSrc(view.app, row[imageCol] ?? "", view.file?.path ?? "");
+    if (src) {
+      const img = card.createEl("img", { cls: "csv-kanban-card-img", attr: { src, loading: "lazy", alt: "" } });
+      img.addEventListener("error", () => img.remove());
+    }
+  }
+
   // Title row: title text on the left, small notes-file icon on the right.
   // Tapping the title opens the entry expander; the small icon creates or
   // opens the sidecar .md. Replaces the old hover-revealed bottom button row.
   const titleRow = card.createDiv({cls:"csv-kanban-card-title-row"});
   const titleEl = titleRow.createDiv({cls:"csv-kanban-card-title", text:view.getTitle(row)});
-  if (notesColForCard) {
-    titleEl.addEventListener("click", e => { e.stopPropagation(); view.openNoteExpander(row, notesColForCard); });
-  }
+  // Tapping the title opens the entry editor. Works even when the file has no
+  // notes column (e.g. an applications tracker) — the expander still edits
+  // every structured field; its notes section just doesn't render.
+  titleEl.addEventListener("click", e => { e.stopPropagation(); view.openNoteExpander(row, notesColForCard ?? ""); });
   const hasNotesFile = view.notesFileExists(row);
   const notesIconBtn = titleRow.createEl("button", {
     cls: `csv-kanban-notes-icon ${hasNotesFile ? "exists" : ""}`,
