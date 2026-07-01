@@ -290,7 +290,16 @@ export function showSelectPicker(
   // Capture-phase scroll: catches scrolling on any ancestor (table wrapper,
   // modal body, content area), not just window. Matches native <select>
   // behaviour — scroll dismisses the dropdown rather than letting it float.
-  const onScroll = () => dismiss();
+  // Scrolling *inside* the picker itself (dragging the list, or the
+  // cursor auto-scrolling via paintCursor's scrollIntoView while typing)
+  // must NOT dismiss — capture-phase listeners see every scroll in the
+  // document, including the picker's own list, and without this guard the
+  // picker closed itself the instant its list scrolled or a keystroke
+  // moved the keyboard cursor, which also stole focus back to the modal.
+  const onScroll = (e: Event) => {
+    if (picker.contains(e.target as Node)) return;
+    dismiss();
+  };
   const dismiss = () => {
     picker.remove();
     document.removeEventListener("mousedown", onOutside);

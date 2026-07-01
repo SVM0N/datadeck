@@ -636,8 +636,20 @@ export class FileConfigModal extends Modal {
   autoDetectedHabits: string[];
   availableModes: { id: ViewMode; label: string }[];
   onSave: (cfg: FileConfig) => void;
+  // Column-structure ops (add/remove the CSV column itself, not its role).
+  // Return a fresh headers/config snapshot so the modal can re-render in
+  // place after a mutation rather than requiring a close+reopen.
+  getHeaders: () => string[];
+  getFileCfg: () => FileConfig;
+  onAddColumn: (name: string) => string | null;
+  onRemoveColumn: (header: string) => void;
 
-  constructor(app: App, headers: string[], filePath: string, current: FileConfig, autoDetectedHabits: string[], availableModes: { id: ViewMode; label: string }[], onSave: (cfg: FileConfig) => void) {
+  constructor(
+    app: App, headers: string[], filePath: string, current: FileConfig, autoDetectedHabits: string[],
+    availableModes: { id: ViewMode; label: string }[], onSave: (cfg: FileConfig) => void,
+    getHeaders: () => string[], getFileCfg: () => FileConfig,
+    onAddColumn: (name: string) => string | null, onRemoveColumn: (header: string) => void,
+  ) {
     super(app);
     this.headers = headers;
     this.filePath = filePath;
@@ -645,6 +657,10 @@ export class FileConfigModal extends Modal {
     this.autoDetectedHabits = autoDetectedHabits;
     this.availableModes = availableModes;
     this.onSave = onSave;
+    this.getHeaders = getHeaders;
+    this.getFileCfg = getFileCfg;
+    this.onAddColumn = onAddColumn;
+    this.onRemoveColumn = onRemoveColumn;
   }
 
   onOpen(): void {
@@ -657,6 +673,52 @@ export class FileConfigModal extends Modal {
     const form = contentEl.createDiv({ cls: "csv-modal-form" });
     const none = "— use global default —";
     const opts = [none, ...this.headers];
+
+    // Column structure — add a new CSV column or delete an existing one.
+    // Re-fetches headers/config and calls onOpen() again after any mutation
+    // so every dropdown/checklist below reflects the new column set, and any
+    // per-file config that pointed at a just-deleted column shows cleared.
+    const refresh = () => {
+      this.headers = this.getHeaders();
+      const cfg = this.getFileCfg();
+      this.current = { ...cfg, habitColumns: cfg.habitColumns ? [...cfg.habitColumns] : undefined };
+      this.onOpen();
+    };
+
+    const colRow = form.createDiv({ cls: "csv-modal-row" });
+    colRow.createEl("label", { text: "Columns", cls: "csv-modal-label" });
+    const colList = colRow.createDiv({ cls: "csv-modal-column-list" });
+    this.headers.forEach(h => {
+      const chip = colList.createDiv({ cls: "csv-modal-column-chip" });
+      chip.createSpan({ text: h });
+      const rm = chip.createEl("button", {
+        cls: "csv-modal-column-remove", text: "✕",
+        attr: { title: `Remove "${h}" — deletes this column's data from every row` },
+      });
+      rm.addEventListener("click", () => {
+        if (rm.hasClass("confirm")) {
+          this.onRemoveColumn(h);
+          refresh();
+          return;
+        }
+        // Destructive — require a second click within a few seconds rather
+        // than a native confirm() dialog, matching the rest of the modal.
+        colList.querySelectorAll(".csv-modal-column-remove.confirm").forEach(el => { el.removeClass("confirm"); el.setText("✕"); });
+        rm.addClass("confirm");
+        rm.setText("Confirm?");
+        window.setTimeout(() => { if (rm.isConnected) { rm.removeClass("confirm"); rm.setText("✕"); } }, 3000);
+      });
+    });
+    const addColWrap = colRow.createDiv({ cls: "csv-modal-add-column" });
+    const addColInput = addColWrap.createEl("input", { cls: "csv-modal-input", type: "text", placeholder: "New column name" });
+    const addColBtn = addColWrap.createEl("button", { cls: "csv-modal-cancel", text: "+ Add column" });
+    const doAdd = () => {
+      const err = this.onAddColumn(addColInput.value);
+      if (err) { new Notice(err); return; }
+      refresh();
+    };
+    addColBtn.addEventListener("click", doAdd);
+    addColInput.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); doAdd(); } });
 
     const makeDropdown = (label: string, currentVal: string | undefined, onChange: (v: string | undefined) => void) => {
       const row = form.createDiv({ cls: "csv-modal-row" });

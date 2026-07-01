@@ -197,11 +197,18 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
   // Handlers are defined once and reused by both surfaces so there's a
   // single place to maintain behaviour.
   const openColumns = () => {
-    new FileConfigModal(view.app, view.headers, view.file?.path ?? "", view.fileCfg, view.autoDetectBooleanColumns(), availableModes(view), (cfg) => {
-      view.saveFileCfg(cfg);
-      if (cfg.defaultMode) view.mode = cfg.defaultMode;
-      view.renderView();
-    }).open();
+    new FileConfigModal(
+      view.app, view.headers, view.file?.path ?? "", view.fileCfg, view.autoDetectBooleanColumns(), availableModes(view),
+      (cfg) => {
+        view.saveFileCfg(cfg);
+        if (cfg.defaultMode) view.mode = cfg.defaultMode;
+        view.renderView();
+      },
+      () => view.headers,
+      () => view.fileCfg,
+      (name) => view.addColumn(name),
+      (header) => view.removeColumn(header),
+    ).open();
   };
   const openMobile = () => generateMobileFiles(view);
   const openBackup = () => view.backupToArchive();

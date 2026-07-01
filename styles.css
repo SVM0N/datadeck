@@ -1978,6 +1978,61 @@ td .csv-select-chip {
   border: 1px solid rgba(52, 168, 83, 0.2);
 }
 
+.csv-modal-column-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+  background: var(--background-modifier-form-field);
+  border: 1px solid var(--csv-border);
+  border-radius: var(--csv-radius-sm);
+}
+
+.csv-modal-column-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  border-radius: 999px;
+  background: var(--background-secondary);
+  border: 1px solid var(--csv-border);
+  font-size: 12px;
+  color: var(--csv-text);
+}
+
+.csv-modal-column-remove {
+  border: none;
+  background: transparent;
+  color: var(--csv-text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 999px;
+  transition: all 0.15s;
+}
+
+.csv-modal-column-remove:hover {
+  background: var(--background-modifier-error, rgba(224, 49, 49, 0.12));
+  color: var(--color-red, #e03131);
+}
+
+.csv-modal-column-remove.confirm {
+  background: var(--color-red, #e03131);
+  color: white;
+  font-weight: 600;
+}
+
+.csv-modal-add-column {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.csv-modal-add-column .csv-modal-input {
+  flex: 1;
+}
+
 .csv-modal-checkbox-label input[type="checkbox"] {
   margin: 0;
   cursor: pointer;

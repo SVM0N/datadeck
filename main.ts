@@ -154,6 +154,45 @@ export class CardView extends FileView {
     void this.persistSettings();
   }
 
+  // ── Column structure ───────────────────────────────────────────────────────
+  // Add/remove a CSV column itself (not just its role). Used by the ⚙ Columns
+  // modal. `doSave` writes with `columns: this.headers`, so pushing/filtering
+  // headers is what actually changes the file's shape on next save.
+
+  /** Returns an error message on failure, or null on success. */
+  addColumn(name: string): string | null {
+    const trimmed = name.trim();
+    if (!trimmed) return "Column name can't be empty.";
+    if (this.headers.some(h => h.toLowerCase() === trimmed.toLowerCase())) return `"${trimmed}" already exists.`;
+    this.headers.push(trimmed);
+    this.rows.forEach(r => { r[trimmed] = ""; });
+    this.scheduleSave();
+    this.renderViewPreservingScroll();
+    return null;
+  }
+
+  /**
+   * Deletes a column and its data from every row. Also clears any per-file
+   * config pointing at it (category/status/notes/anki/card-fields/habits) so
+   * a stale reference doesn't silently break kanban grouping, the Add form,
+   * etc. after the column is gone.
+   */
+  removeColumn(header: string): void {
+    this.headers = this.headers.filter(h => h !== header);
+    this.rows.forEach(r => { delete r[header]; });
+    const cfg = this.fileCfg;
+    if (cfg.categoryColumn === header) cfg.categoryColumn = undefined;
+    if (cfg.statusColumn === header) cfg.statusColumn = undefined;
+    if (cfg.notesColumn === header) cfg.notesColumn = undefined;
+    if (cfg.ankiFrontCol === header) cfg.ankiFrontCol = undefined;
+    if (cfg.kanbanGroupCol === header) cfg.kanbanGroupCol = undefined;
+    if (cfg.habitColumns) cfg.habitColumns = cfg.habitColumns.filter(h => h !== header);
+    if (cfg.cardFields) cfg.cardFields = cfg.cardFields.filter(h => h !== header);
+    this.saveFileCfg(cfg);
+    this.scheduleSave();
+    this.renderViewPreservingScroll();
+  }
+
   // ── Field helpers ──────────────────────────────────────────────────────────
 
   // ── Field helpers with fallback chains ────────────────────────────────────
