@@ -537,7 +537,7 @@ export class CardView extends FileView {
     const root = this.contentEl;
 
     if (!contentOnly) {
-      root.empty(); root.addClass("csv-card-view-root");
+      root.empty(); root.addClass("datadeck-root");
       this.renderComponent.unload();
       this.renderComponent = new Component(); this.renderComponent.load();
       renderToolbar(this, root);
@@ -680,7 +680,7 @@ export class CardView extends FileView {
    */
   private async loadMapSvg(): Promise<string | null> {
     if (worldMapSvgCache !== undefined) return worldMapSvgCache;
-    const path = normalizePath(`${this.app.vault.configDir}/plugins/csv-card-view/world-map.svg`);
+    const path = normalizePath(`${this.app.vault.configDir}/plugins/datadeck/world-map.svg`);
     try {
       worldMapSvgCache = await this.app.vault.adapter.read(path);
     } catch (_e) {

@@ -172,21 +172,21 @@ function renderKanbanCard(view: CardView, container: HTMLElement, row: CSVRow, s
   const skipInCard = new Set([sc, tk, ak, groupCol].filter(Boolean) as string[]);
   const metaEl = card.createDiv({cls:"csv-kanban-card-meta"});
   view.headers.forEach(h => {
-    if (skipInCard.has(h) || view.isNotesCol(h) || !row[h]) return;
+    if (skipInCard.has(h) || view.isNotesCol(h)) return;
     const chip = metaEl.createDiv({cls:"csv-kanban-chip"});
     chip.createSpan({cls:"csv-chip-label", text:h+": "});
     if (view.isSelectCol(h)) {
-      const valSpan = chip.createSpan({cls:"csv-chip-value csv-chip-select", text:row[h]});
+      const valSpan = chip.createSpan({cls:`csv-chip-value csv-chip-select${row[h] ? "" : " csv-chip-value--empty"}`, text:row[h]||"—"});
       valSpan.addEventListener("click", e => {
         e.stopPropagation();
         showSelectPicker(valSpan, row[h], view.getColumnValues(h), (newVal) => {
-          row[h]=newVal; valSpan.setText(newVal||"—"); view.scheduleSave();
+          row[h]=newVal; valSpan.setText(newVal||"—"); valSpan.classList.toggle("csv-chip-value--empty", !newVal); view.scheduleSave();
         }, view.contentEl, { multi: isMultiValueColName(h) });
       });
     } else {
-      const display = row[h].length > 40 ? row[h].slice(0, 38) + "…" : row[h];
-      const valSpan = chip.createSpan({cls:"csv-chip-value", text: display});
-      if (row[h].length > 40) valSpan.title = row[h]; // full text on hover
+      const display = row[h] ? (row[h].length > 40 ? row[h].slice(0, 38) + "…" : row[h]) : "—";
+      const valSpan = chip.createSpan({cls:`csv-chip-value${row[h] ? "" : " csv-chip-value--empty"}`, text: display});
+      if (row[h] && row[h].length > 40) valSpan.title = row[h]; // full text on hover
     }
   });
 

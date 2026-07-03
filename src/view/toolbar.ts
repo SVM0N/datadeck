@@ -251,5 +251,5 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
     text: "ⓘ",
     title: `Built ${__BUILD_TIME__} — click to confirm`,
   });
-  infoBtn.addEventListener("click", () => new Notice(`csv-card-view — built ${__BUILD_TIME__}`, 4000));
+  infoBtn.addEventListener("click", () => new Notice(`datadeck — built ${__BUILD_TIME__}`, 4000));
 }

@@ -15,7 +15,7 @@
   --csv-amber-bg: rgba(255, 149, 0, 0.13);
 }
 
-.csv-card-view-root {
+.datadeck-root {
   --csv-bg: var(--background-primary);
   --csv-surface: var(--background-secondary);
   --csv-surface-2: var(--background-modifier-border);
@@ -162,7 +162,7 @@
      is open. The input itself + the underlying filtered view convey the
      same info; the header clips weirdly when iOS shrinks the WebView for
      the keyboard. */
-  .csv-card-view-root:has(.csv-toolbar--search-expanded) .csv-search-results {
+  .datadeck-root:has(.csv-toolbar--search-expanded) .csv-search-results {
     display: none;
   }
   /* `!important` defeats the desktop `.csv-search-input:focus { width:220px }`
@@ -1257,6 +1257,10 @@ td .csv-select-chip {
   cursor: pointer;
   text-decoration: underline dotted;
   text-underline-offset: 2px;
+}
+
+.csv-chip-value--empty {
+  color: var(--csv-text-faint);
 }
 
 /* ─── Picker dropdown ─────────────────────────────────────────────────────── */
@@ -3682,7 +3686,7 @@ select.csv-add-row-control {
 /* ─── Multi-select picker (category / tags columns) ───────────────────────── */
 
 /* Raw Obsidian vars: the picker mounts on document.body, outside
-   .csv-card-view-root where the --csv-* vars are defined. */
+   .datadeck-root where the --csv-* vars are defined. */
 .csv-picker-done {
   display: block;
   width: calc(100% - 12px);

@@ -98,7 +98,7 @@ export async function syncToAnki(view: CardView): Promise<void> {
       modelName: "Basic",
       fields: { Front: esc(row[frontCol].trim()), Back: buildBack(view, row, frontCol) },
       options: { allowDuplicate: false, duplicateScope: "deck" },
-      tags: ["csv-card-view"],
+      tags: ["datadeck"],
     }));
 
     const result = await ankiInvoke("addNotes", { notes }) as (number | null)[];
