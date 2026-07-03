@@ -9,6 +9,7 @@ import {
   Notice,
   TFile,
   normalizePath,
+  stringifyYaml,
 } from "obsidian";
 import Papa from "papaparse";
 // Type-only import — erased at compile time, no runtime cost. Used for the
@@ -367,7 +368,11 @@ export class CardView extends FileView {
     const path = this.notesFilePath(row);
     let file = this.app.vault.getAbstractFileByPath(path) as TFile|null;
     if (!file) {
-      const props = this.headers.filter(h=>!this.isNotesCol(h)&&row[h]).map(h=>`${h}: "${row[h].replace(/"/g,'\\"')}"`);
+      // Serialize properties with stringifyYaml — hand-built `key: "value"`
+      // lines broke on values containing backslashes (invalid YAML escapes)
+      // or newlines (multi-line CSV cells), which corrupted the whole
+      // properties block in Obsidian.
+      const fmObj: Record<string, unknown> = {};
       // On a tasks/projects file, surface the project column as a tag so notes
       // spawned from rows roll up under #project-… in the tag pane / graph /
       // any vault-wide dashboard scan — not just as a structured property.
@@ -376,8 +381,13 @@ export class CardView extends FileView {
       const tags = projectCol
         ? (row[projectCol] ?? "").split(",").map(p=>tagify(p.trim())).filter(Boolean).map(t=>`project-${t}`)
         : [];
-      if (tags.length) props.unshift(`tags: [${tags.join(", ")}]`);
-      const fm = ["---",...props,"---","",`# ${this.getTitle(row)}`,"",""].join("\n");
+      if (tags.length) fmObj.tags = tags;
+      for (const h of this.headers) { if (!this.isNotesCol(h) && row[h]) fmObj[h] = row[h]; }
+      // Wikilink back to the CSV: gives every sidecar note a backlink to its
+      // source file. Obsidian property names are case-insensitive, so skip
+      // when any column is already named "source".
+      if (this.file && !Object.keys(fmObj).some(k=>k.toLowerCase()==="source")) fmObj.source = `[[${this.file.path}]]`;
+      const fm = ["---",stringifyYaml(fmObj).trimEnd(),"---","",`# ${this.getTitle(row)}`,"",""].join("\n");
       const notesCol = this.headers.find(h=>this.isNotesCol(h));
       const content = fm+(notesCol&&row[notesCol]?.trim()?row[notesCol]:"");
       const folderPath = path.substring(0,path.lastIndexOf("/"));
