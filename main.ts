@@ -19,7 +19,7 @@ import type { Chart as ChartType } from "chart.js";
 
 // Import from src modules
 import { CSVRow, ViewMode, FileConfig, CardViewSettings, DEFAULT_SETTINGS, CARD_VIEW_TYPE } from "./src/types";
-import { sanitizeFilename, tagify, titleCase, formatRatingForDisplay, showSelectPicker, parseCSV, migrateFileConfigKey, sortRowsByColumn, isMultiValueColName, IMAGE_COL_ALIASES, TITLE_COL_ALIASES, CATEGORY_COL_ALIASES, STATUS_COL_ALIASES, NOTES_COL_ALIASES, looksBoolean, looksCategorical } from "./src/utils";
+import { sanitizeFilename, tagify, titleCase, formatRatingForDisplay, showSelectPicker, parseCSV, migrateFileConfigKey, sortRowsByColumn, isMultiValueColName, IMAGE_COL_ALIASES, TITLE_COL_ALIASES, CATEGORY_COL_ALIASES, STATUS_COL_ALIASES, NOTES_COL_ALIASES, looksBoolean, looksCategorical, isTruthyVal } from "./src/utils";
 import { isDateCol } from "./src/field-types";
 import { AddEntryModal, NoteExpanderModal, FileConfigModal, SearchModal, PromptModal } from "./src/modals";
 import { renderTravel } from "./src/travel-view";
@@ -450,7 +450,8 @@ export class CardView extends FileView {
       // Delete with undo: the helper handles splice + save + rerender + Notice.
       () => this.deleteWithUndo(row),
       this.isCategoricalCol.bind(this),
-      this.titleKey()
+      this.titleKey(),
+      (h) => this.getBooleanColumns().includes(h)
     ).open();
   }
 
@@ -812,8 +813,7 @@ export class CardView extends FileView {
   }
 
   isTruthy(val: string): boolean {
-    const v = (val ?? "").toLowerCase().trim();
-    return v === "1" || v === "true" || v === "yes";
+    return isTruthyVal(val);
   }
 
   // ── Dashboard view ──────────────────────────────────────────────────────────

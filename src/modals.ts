@@ -6,7 +6,7 @@ import {
   Notice,
 } from "obsidian";
 import { CSVRow, FileConfig, ViewMode } from "./types";
-import { showSelectPicker, titleCase, isMultiValueColName, looksCategorical } from "./utils";
+import { showSelectPicker, titleCase, isMultiValueColName, looksCategorical, isTruthyVal } from "./utils";
 import { suggestionsFor, isDateCol, ISO_DATE } from "./field-types";
 
 // ─── Shared field input ─────────────────────────────────────────────────────
@@ -271,6 +271,14 @@ export class NoteExpanderModal extends Modal {
   // actually take effect in the header, the field list, and the delete
   // confirmation, instead of always re-guessing by name internally.
   private titleCol: string | undefined;
+  // True for Checkbox-typed (Type: Checkbox / habit) columns — rendered as a
+  // toggle here too, same as the Add-entry modal, instead of falling through
+  // to a plain text field. Without this, editing an existing row was the one
+  // place a Checkbox column's value wasn't actually constrained to 0/1 —
+  // Config's Type picker wouldn't mean much if the row editor let you type
+  // any string back into it. Optional so callers/tests that don't track
+  // habit columns default to never-boolean (unchanged behaviour).
+  private isBooleanCol: (h: string) => boolean;
 
   constructor(
     app: App,
@@ -285,6 +293,7 @@ export class NoteExpanderModal extends Modal {
     onDelete?: () => void,
     isCategoricalCol?: (h: string) => boolean,
     titleCol?: string,
+    isBooleanCol: (h: string) => boolean = () => false,
   ) {
     super(app);
     // Work on a shallow copy so cancel doesn't mutate
@@ -301,6 +310,7 @@ export class NoteExpanderModal extends Modal {
     this.isCategoricalCol = isCategoricalCol
       ?? ((h) => this.isSelectCol(h) || (!isDateCol(h) && looksCategorical(this.getColumnValues(h).length)));
     this.titleCol = titleCol ?? this.headers.find(h => ["title", "name", "Title", "Name"].includes(h));
+    this.isBooleanCol = isBooleanCol;
     this.modalEl.addClass("csv-note-expander-modal");
   }
 
@@ -353,6 +363,22 @@ export class NoteExpanderModal extends Modal {
       const fieldRow = fieldsEl.createDiv({ cls: "csv-expander-field-row" });
       // titleCase: Apple-style row labels, independent of CSV header casing.
       fieldRow.createDiv({ cls: "csv-expander-field-label", text: titleCase(h) });
+
+      if (this.isBooleanCol(h)) {
+        // Same toggle as the Add-entry modal — "checked" is a narrow
+        // truthy check (1/true/yes, case-insensitive), everything else
+        // (0, "", no, false, or any leftover non-conforming text) reads as
+        // unchecked; writing always normalizes to exactly "1" or "0".
+        const isChecked = isTruthyVal(this.row[h] ?? "");
+        const toggle = fieldRow.createDiv({ cls: `csv-toggle ${isChecked ? "is-on" : ""}` });
+        toggle.createDiv({ cls: "csv-toggle-knob" });
+        toggle.addEventListener("click", () => {
+          const on = !toggle.hasClass("is-on");
+          toggle.toggleClass("is-on", on);
+          this.row[h] = on ? "1" : "0";
+        });
+        return;
+      }
 
       // Configured select column, per-file categorical list, or a
       // pseudo-categorical one (few distinct values, e.g. Watched/Format) —

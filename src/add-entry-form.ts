@@ -1,7 +1,7 @@
 import { App, Notice, TFile, MarkdownPostProcessorContext } from "obsidian";
 import Papa from "papaparse";
 import { CSVRow, FileConfig } from "./types";
-import { parseCSV, resolvePath, titleCase, looksCategorical } from "./utils";
+import { parseCSV, resolvePath, titleCase, looksCategorical, looksBoolean, isTruthyVal } from "./utils";
 
 // ─── csv-add code block (mobile entry form) ──────────────────────────────────
 // Extracted from CardViewPlugin. Depends only on `app` (vault/workspace),
@@ -63,12 +63,6 @@ export async function renderAddEntryForm(app: App, source: string, el: HTMLEleme
     }
 
     // Detect column types
-    const binaryPatterns = ["0", "1", "true", "false", "yes", "no", ""];
-    const isBinaryCol = (h: string): boolean => {
-      const vals = rows.map(r => (r[h] ?? "").toLowerCase().trim());
-      return vals.length > 0 && vals.every(v => binaryPatterns.includes(v));
-    };
-
     const isDateCol = (h: string): boolean => {
       const hLower = h.toLowerCase();
       if (["date", "day", "datum"].includes(hLower)) return true;
@@ -81,8 +75,15 @@ export async function renderAddEntryForm(app: App, source: string, el: HTMLEleme
       return ["notes", "note", "comments", "description", "journal"].includes(hLower);
     };
 
-    // Categorize columns
-    const binaryCols = headers.filter(h => isBinaryCol(h) && !isDateCol(h));
+    // Categorize columns. Checkbox/binary: an explicit ⚙ Config Type=Checkbox
+    // list wins outright, even empty (matches getBooleanColumns() elsewhere) —
+    // previously this always auto-detected from existing data, so a column
+    // freshly retyped to Checkbox (with no boolean-shaped data yet) wouldn't
+    // render as a toggle here even though it already did in the Dashboard and
+    // desktop Add-entry modal.
+    const binaryCols = fileCfg.habitColumns
+      ? fileCfg.habitColumns.filter(h => headers.includes(h))
+      : headers.filter(h => !isDateCol(h) && looksBoolean(rows.map(r => (r[h] ?? "").toLowerCase().trim())));
     const dateCols = headers.filter(h => isDateCol(h));
     const notesCols = headers.filter(h => isNotesCol(h));
     const otherCols = headers.filter(h => !binaryCols.includes(h) && !dateCols.includes(h) && !notesCols.includes(h));
@@ -210,12 +211,14 @@ export async function renderAddEntryForm(app: App, source: string, el: HTMLEleme
       card.classList.toggle("is-updating", !!existing);
       submitBtn.setText(existing ? "Update" : "Add");
 
-      // Binary toggles — set from existing or clear back to false.
+      // Binary toggles — set from existing or clear back to false. Same
+      // narrow truth-list as isTruthyVal (1/true/yes) — anything else,
+      // including leftover non-conforming text from before this column was
+      // typed Checkbox, reads as off rather than erroring.
       binaryCols.forEach(h => {
         const checkbox = inputs[h] as HTMLInputElement | undefined;
         if (!checkbox) return;
-        const v = (existing?.[h] ?? "").toLowerCase().trim();
-        const on = v === "1" || v === "true" || v === "yes";
+        const on = isTruthyVal(existing?.[h] ?? "");
         checkbox.checked = on;
         toggleStates[h] = on;
       });

@@ -441,6 +441,7 @@ export class InlineCardHost extends MarkdownRenderChild {
       () => this.deleteWithUndo(row),
       this.isCategoricalCol.bind(this),
       this.titleKey(),
+      (h) => this.getBooleanColumns().includes(h),
     ).open();
   }
 

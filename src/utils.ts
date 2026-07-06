@@ -86,6 +86,20 @@ export function looksBoolean(values: string[]): boolean {
   return values.length > 0 && values.every(v => BOOLEAN_PATTERNS.includes(v));
 }
 
+// Whether a single cell value reads as "checked" for a Checkbox-typed
+// column. Deliberately a narrow truth-list, not a wide falsy-list: only
+// 1/true/yes (case-insensitive) count as on — 0, "", no, false, and any
+// other leftover/non-conforming text all read as off, with no error. Every
+// write path (dashboard toggle, add-entry toggle, note-expander toggle)
+// normalizes back to exactly "1" or "0", never a blank string — so this
+// wide "everything else is off" net is what stays safe if a column is
+// retyped to Checkbox while it still has pre-existing, non-boolean-shaped
+// values sitting in it; they just render unchecked until touched.
+export function isTruthyVal(val: string): boolean {
+  const v = (val ?? "").toLowerCase().trim();
+  return v === "1" || v === "true" || v === "yes";
+}
+
 export function sanitizeFilename(name: string): string {
   return name.replace(/[\\/:*?"<>|#^[\]]/g,"").replace(/\s+/g," ").trim().slice(0,100);
 }

@@ -699,7 +699,7 @@ await test("table: clicking a header cycles sort asc → desc → off", async ()
 });
 
 // ── Boolean/habit-column auto-detection ─────────────────────────────────────
-const { looksBoolean } = await load("./src/utils.ts");
+const { looksBoolean, isTruthyVal } = await load("./src/utils.ts");
 
 await test("looksBoolean: empty column (no rows yet) is never boolean", async () => {
   // Regression test: [].every(...) is vacuously true in JS, which used to
@@ -712,6 +712,18 @@ await test("looksBoolean: recognizes 0/1/true/false/yes/no/empty vocabularies", 
   assert(looksBoolean(["true", "false"]), "true/false is boolean");
   assert(looksBoolean(["yes", "no", ""]), "yes/no/empty is boolean");
   assert(!looksBoolean(["0", "1", "Task"]), "a non-boolean value disqualifies the column");
+});
+
+await test("isTruthyVal: narrow truth-list — only 1/true/yes (any case) read as checked", async () => {
+  assert(isTruthyVal("1"), "1 is checked");
+  assert(isTruthyVal("true"), "true is checked");
+  assert(isTruthyVal("TRUE"), "case-insensitive");
+  assert(isTruthyVal(" Yes "), "trims whitespace");
+  assert(!isTruthyVal("0"), "0 is unchecked");
+  assert(!isTruthyVal(""), "empty is unchecked");
+  assert(!isTruthyVal("no"), "no is unchecked");
+  assert(!isTruthyVal("false"), "false is unchecked");
+  assert(!isTruthyVal("Maybe"), "any other leftover text reads as unchecked, not an error");
 });
 
 // ── Add Entry / Note Expander modals: title column is never categorical ────
@@ -791,7 +803,7 @@ function openExpander(row, headers, overrides = {}) {
   const modal = new NoteExpanderModal(
     new StubApp(), row, overrides.notesCol ?? "", headers, "test.csv",
     isNotesCol, isSelectCol, getColumnValues, () => {}, undefined,
-    overrides.isCategoricalCol, overrides.titleCol,
+    overrides.isCategoricalCol, overrides.titleCol, overrides.isBooleanCol,
   );
   modal.contentEl = document.body.createDiv();
   modal.onOpen();
@@ -849,6 +861,21 @@ await test("add-entry: an explicit titleCol override excludes a non-conventional
   const slugRow = fieldRowFor(modal, "Slug");
   assert(slugRow.querySelector("input.csv-modal-input"), "the overridden title column stays a plain text input");
   assert(!slugRow.querySelector("select"), "never a <select>, even with few distinct existing values");
+});
+
+await test("note-expander: a Checkbox-typed column edits as a toggle, not free text — value normalizes to 1/0", async () => {
+  const headers = ["Title", "Watered"];
+  const row = { Title: "Fern", Watered: "yes" }; // leftover non-0/1 vocabulary
+  const modal = openExpander(row, headers, { isBooleanCol: (h) => h === "Watered" });
+  const fieldRows = Array.from(modal.contentEl.querySelectorAll(".csv-expander-field-row"));
+  const wateredFieldRow = fieldRows.find(r => r.querySelector(".csv-expander-field-label")?.textContent === "Watered");
+  const toggle = wateredFieldRow.querySelector(".csv-toggle");
+  assert(toggle, "renders as a toggle, not a text field or select chip");
+  assert(toggle.hasClass("is-on"), "'yes' (not yet 0/1) still reads as checked via the same narrow truth-list");
+  assert(!wateredFieldRow.querySelector(".csv-select-chip") && !wateredFieldRow.querySelector(".csv-expander-field-value"), "no fallback text/select rendering alongside the toggle");
+
+  toggle.dispatchEvent(new window.Event("click", { bubbles: true }));
+  assert(modal.row.Watered === "0", "clicking an on toggle normalizes the leftover 'yes' straight to '0', not back to some other word");
 });
 
 // ── FileConfigModal: per-column config table (⚙ Config panel) ───────────────
