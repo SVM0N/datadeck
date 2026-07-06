@@ -120,10 +120,17 @@ export function renderKanbanGenre(view: CardView, container: HTMLElement): void 
       });
       // Rows whose status is blank or not among the known statuses (the empty
       // strings dropped by `.filter(Boolean)` above) still belong in this
-      // column — render them ungrouped so they don't vanish while the column
-      // header still counts them.
+      // column. Same "—" convention as a missing genre/group value getting
+      // its own kanban column — give them their own labeled group instead of
+      // dropping them straight into the column body with no header (which
+      // previously just read as leftover margin under the last real group).
       const known = new Set(statuses);
-      genreRows.filter(r => !known.has(r[sc] ?? "")).forEach(row => renderKanbanCard(view, cb, row, sc, cc));
+      const ungrouped = genreRows.filter(r => !known.has(r[sc] ?? ""));
+      if (ungrouped.length) {
+        const groupEl = cb.createDiv({cls:"csv-kanban-status-group"});
+        groupEl.createDiv({cls:"csv-kanban-status-label", text:"—"});
+        ungrouped.forEach(row => renderKanbanCard(view, groupEl, row, sc, cc));
+      }
     } else {
       genreRows.forEach(row => renderKanbanCard(view, cb, row, sc, cc));
     }

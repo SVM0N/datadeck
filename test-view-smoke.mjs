@@ -288,6 +288,37 @@ await test("kanban: builds a column per genre with cards", async () => {
   assert(c.querySelector(".csv-kanban-groupbar select"), "group-by selector present");
 });
 
+await test("kanban: rows with a blank status get their own \"—\" labeled group", async () => {
+  const rows = [
+    { Title: "Dune", Category: "SciFi", Status: "Finished" },
+    { Title: "Foundation", Category: "SciFi", Status: "" },
+    { Title: "Hyperion", Category: "SciFi", Status: "" },
+  ];
+  const c = document.body.createDiv();
+  renderKanbanGenre(kanbanView(rows), c);
+  const groups = Array.from(c.querySelectorAll(".csv-kanban-status-group"));
+  assert(groups.length === 2, `finished group + one "—" group for the blank-status rows (got ${groups.length})`);
+  const dashGroup = groups.find(g => g.querySelector(".csv-kanban-status-label")?.textContent === "—");
+  assert(dashGroup, "a group is labeled \"—\"");
+  assert(dashGroup.querySelectorAll(".csv-kanban-card").length === 2, "both blank-status rows land in the \"—\" group");
+  // No bare cards sitting directly in the column body outside any group.
+  const col = c.querySelector(".csv-kanban-col-body");
+  const bareCards = Array.from(col.children).filter(el => el.classList.contains("csv-kanban-card"));
+  assert(bareCards.length === 0, "no ungrouped cards left directly in the column body");
+});
+
+await test("kanban: a status value outside the canonical list still gets its own real label", async () => {
+  const rows = [
+    { Title: "Dune", Category: "SciFi", Status: "Finished" },
+    { Title: "Rendezvous", Category: "SciFi", Status: "On hold" },
+  ];
+  const c = document.body.createDiv();
+  renderKanbanGenre(kanbanView(rows), c);
+  const labels = Array.from(c.querySelectorAll(".csv-kanban-status-label")).map(l => l.textContent);
+  assert(labels.includes("On hold"), `an unrecognized-but-present status still gets its own label (got ${labels})`);
+  assert(!labels.includes("—"), "no \"—\" group needed when every row has a real status value");
+});
+
 await test("kanban: highlighted entry gets the highlight class on its title", async () => {
   const rows = [
     { Title: "Dune", Category: "SciFi", Status: "Finished" },
