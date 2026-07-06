@@ -215,7 +215,7 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
   const openBackup = () => view.backupToArchive();
   const openAnki = () => syncToAnki(view);
 
-  ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-secondary", text: "⚙ Columns", title: "Configure columns for this file" })
+  ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-secondary", text: "⚙ Config", title: "Configure this file's columns and views" })
     .addEventListener("click", openColumns);
   ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-secondary", text: "📱 Mobile", title: "Generate mobile dashboard with add form" })
     .addEventListener("click", openMobile);
@@ -233,7 +233,7 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
   const overflowBtn = ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-overflow", text: "⋯", title: "More actions" });
   overflowBtn.addEventListener("click", (e) => {
     const menu = new Menu();
-    menu.addItem(i => i.setTitle("Columns").setIcon("settings").onClick(openColumns));
+    menu.addItem(i => i.setTitle("Config").setIcon("settings").onClick(openColumns));
     menu.addItem(i => i.setTitle("Mobile dashboard").setIcon("smartphone").onClick(openMobile));
     menu.addItem(i => i.setTitle("Backup").setIcon("save").onClick(openBackup));
     menu.addItem(i => i.setTitle("Sync to Anki").setIcon("layers").onClick(openAnki));

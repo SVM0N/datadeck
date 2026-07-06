@@ -1961,18 +1961,6 @@ td .csv-select-chip {
   line-height: 1.4;
 }
 
-.csv-modal-checkbox-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 6px;
-  padding: 8px;
-  background: var(--background-modifier-form-field);
-  border: 1px solid var(--csv-border);
-  border-radius: var(--csv-radius-sm);
-  max-height: 180px;
-  overflow-y: auto;
-}
-
 .csv-modal-checkbox-label {
   display: flex;
   align-items: center;
@@ -1996,24 +1984,57 @@ td .csv-select-chip {
 
 .csv-modal-column-list {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px;
   background: var(--background-modifier-form-field);
   border: 1px solid var(--csv-border);
   border-radius: var(--csv-radius-sm);
 }
 
-.csv-modal-column-chip {
+/* Per-column config row: name + remove on top, role select + toggles below.
+   Vertical layout (not a wide side-by-side table) so it stays usable on a
+   phone-width modal — see handoff notes on DataDeck's mobile-first usage. */
+.csv-modal-colcfg-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: var(--csv-radius-sm);
+}
+
+.csv-modal-colcfg-row:not(:last-child) {
+  border-bottom: 1px solid var(--csv-border);
+}
+
+.csv-modal-colcfg-name {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
-  padding: 4px 6px 4px 10px;
-  border-radius: 999px;
-  background: var(--background-secondary);
-  border: 1px solid var(--csv-border);
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--csv-text);
+}
+
+.csv-modal-colcfg-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.csv-modal-colcfg-role {
+  flex: 1 1 auto;
+  min-width: 180px;
+  width: auto;
+}
+
+.csv-modal-colcfg-toggle {
+  padding: 4px 8px;
+  flex: 0 0 auto;
 }
 
 .csv-modal-column-remove {

@@ -824,7 +824,7 @@ await test("note-expander: an explicit isCategoricalCol override wins over auto-
   assert(notesRow.querySelector(".csv-select-chip"), "explicit override renders Notes as a select chip");
 });
 
-// ── FileConfigModal: categorical-column selector (⚙ Columns panel) ─────────
+// ── FileConfigModal: per-column config rows (⚙ Config panel) ────────────────
 const { FileConfigModal } = await load("./src/modals.ts");
 
 function openFileConfigModal(headers, current, autoDetectedCategorical, overrides = {}) {
@@ -842,12 +842,26 @@ function openFileConfigModal(headers, current, autoDetectedCategorical, override
   return modal;
 }
 
-function categoricalCheckboxFor(modal, header) {
-  const labels = Array.from(modal.contentEl.querySelectorAll(".csv-modal-categorical-grid .csv-modal-checkbox-label"));
-  return labels.find(l => l.textContent === header)?.querySelector("input[type=checkbox]");
+function colConfigRowFor(modal, header) {
+  const rows = Array.from(modal.contentEl.querySelectorAll(".csv-modal-colcfg-row"));
+  return rows.find(r => r.querySelector(".csv-modal-colcfg-name > span")?.textContent === header);
 }
 
-await test("FileConfigModal: categorical grid pre-checks auto-detected columns and excludes the title", async () => {
+function toggleFor(modal, header, label) {
+  const row = colConfigRowFor(modal, header);
+  const labels = Array.from(row?.querySelectorAll(".csv-modal-colcfg-toggle") ?? []);
+  return labels.find(l => l.textContent === label)?.querySelector("input[type=checkbox]");
+}
+
+function categoricalCheckboxFor(modal, header) { return toggleFor(modal, header, "Categorical"); }
+function roleSelectFor(modal, header) { return colConfigRowFor(modal, header)?.querySelector(".csv-modal-colcfg-role"); }
+
+function setRoleSelect(sel, value) {
+  sel.value = value;
+  sel.dispatchEvent(new window.Event("change", { bubbles: true }));
+}
+
+await test("FileConfigModal: categorical toggle pre-checks auto-detected columns and excludes the title", async () => {
   const headers = ["Title", "Type", "Notes"];
   const modal = openFileConfigModal(headers, {}, ["Type"]);
   assert(categoricalCheckboxFor(modal, "Type")?.checked, "auto-detected column is pre-checked");
@@ -874,6 +888,37 @@ await test("FileConfigModal: an existing categoricalColumns config overrides the
   const modal = openFileConfigModal(headers, { categoricalColumns: ["Notes"] }, ["Type"]);
   assert(categoricalCheckboxFor(modal, "Notes")?.checked, "configured column is checked");
   assert(!categoricalCheckboxFor(modal, "Type")?.checked, "auto-detected-but-not-configured column is unchecked once a config exists");
+});
+
+await test("FileConfigModal: assigning a role to one column evicts the previous holder", async () => {
+  const headers = ["Title", "Genre", "Watched"];
+  const modal = openFileConfigModal(headers, { categoryColumn: "Genre" }, []);
+  assert(roleSelectFor(modal, "Genre").value === "category", "Genre starts out holding the Category role");
+
+  setRoleSelect(roleSelectFor(modal, "Watched"), "category");
+  assert(modal.current.categoryColumn === "Watched", "Watched now holds the Category role");
+  assert(roleSelectFor(modal, "Genre").value === "", "Genre's role select re-renders back to none");
+});
+
+await test("FileConfigModal: reassigning a column's own role clears its previous field first", async () => {
+  const headers = ["Title", "Status"];
+  const modal = openFileConfigModal(headers, { notesColumn: "Status" }, []);
+  assert(roleSelectFor(modal, "Status").value === "notes");
+
+  setRoleSelect(roleSelectFor(modal, "Status"), "status");
+  assert(modal.current.statusColumn === "Status", "Status column now holds the Status role");
+  assert(!modal.current.notesColumn, "the old Notes assignment on the same column is cleared, not left dangling");
+});
+
+await test("FileConfigModal: role/toggle edits don't touch disk — only add/remove column does", async () => {
+  const headers = ["Title", "Genre", "Watched"];
+  let getFileCfgCalls = 0;
+  const modal = openFileConfigModal(headers, {}, [], {
+    getFileCfg: () => { getFileCfgCalls++; return {}; },
+  });
+  setRoleSelect(roleSelectFor(modal, "Genre"), "category");
+  toggleFor(modal, "Watched", "Habit").dispatchEvent(new window.Event("change", { bubbles: true }));
+  assert(getFileCfgCalls === 0, "editing roles/toggles is a pending, in-memory draft until Save — it must not refetch from disk");
 });
 
 // ── Multi-select picker ──────────────────────────────────────────────────────

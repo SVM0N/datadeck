@@ -697,13 +697,16 @@ export class FileConfigModal extends Modal {
     contentEl.createEl("p", { text: "These settings apply only to this file and override the global defaults.", cls: "csv-modal-desc" });
 
     const form = contentEl.createDiv({ cls: "csv-modal-form" });
-    const none = "— use global default —";
-    const opts = [none, ...this.headers];
 
     // Column structure — add a new CSV column or delete an existing one.
     // Re-fetches headers/config and calls onOpen() again after any mutation
-    // so every dropdown/checklist below reflects the new column set, and any
-    // per-file config that pointed at a just-deleted column shows cleared.
+    // so every row below reflects the new column set, and any per-file
+    // config that pointed at a just-deleted column shows cleared. Only used
+    // for structural changes (add/remove), which persist immediately via
+    // onAddColumn/onRemoveColumn — everything else in this modal is a local
+    // edit to `this.current` that isn't written until Save, so it uses the
+    // lighter `renderRows()` below instead (a disk refetch here would wipe
+    // any of those pending edits).
     const refresh = () => {
       this.headers = this.getHeaders();
       const cfg = this.getFileCfg();
@@ -715,31 +718,146 @@ export class FileConfigModal extends Modal {
       this.onOpen();
     };
 
-    const colRow = form.createDiv({ cls: "csv-modal-row" });
-    colRow.createEl("label", { text: "Columns", cls: "csv-modal-label" });
-    const colList = colRow.createDiv({ cls: "csv-modal-column-list" });
-    this.headers.forEach(h => {
-      const chip = colList.createDiv({ cls: "csv-modal-column-chip" });
-      chip.createSpan({ text: h });
-      const rm = chip.createEl("button", {
-        cls: "csv-modal-column-remove", text: "✕",
-        attr: { title: `Remove "${h}" — deletes this column's data from every row` },
-      });
-      rm.addEventListener("click", () => {
-        if (rm.hasClass("confirm")) {
-          this.onRemoveColumn(h);
-          refresh();
-          return;
-        }
-        // Destructive — require a second click within a few seconds rather
-        // than a native confirm() dialog, matching the rest of the modal.
-        colList.querySelectorAll(".csv-modal-column-remove.confirm").forEach(el => { el.removeClass("confirm"); el.setText("✕"); });
-        rm.addClass("confirm");
-        rm.setText("Confirm?");
-        window.setTimeout(() => { if (rm.isConnected) { rm.removeClass("confirm"); rm.setText("✕"); } }, 3000);
-      });
+    // ── Per-column configuration ────────────────────────────────────────────
+    // One row per CSV column instead of eight separate "which column(s) for
+    // role X?" sections — you look at a column and decide what it does,
+    // rather than hunting through unrelated sections to find where a column
+    // is referenced. Each row has a "Role" — a single exclusive slot a column
+    // can hold at most one of (Category/Status/Notes/Image/Anki front), since
+    // these already only ever point at one column each — plus three
+    // independent toggles a column can hold any combination of.
+    const colSection = form.createDiv({ cls: "csv-modal-row" });
+    colSection.createEl("label", { text: "Columns", cls: "csv-modal-label" });
+    colSection.createEl("p", {
+      cls: "csv-modal-hint",
+      text: "Role is exclusive — picking it for one column clears it from any other. The three toggles can be combined freely.",
     });
-    const addColWrap = colRow.createDiv({ cls: "csv-modal-add-column" });
+
+    type Role = "category" | "status" | "notes" | "image" | "anki" | "";
+    const ROLE_OPTIONS: { value: Role; label: string }[] = [
+      { value: "", label: "— no special role —" },
+      { value: "category", label: "Category (Kanban grouping)" },
+      { value: "status", label: "Status (checkmark / row subgroups)" },
+      { value: "notes", label: "Notes" },
+      { value: "image", label: "Image (card / kanban thumbnail)" },
+      { value: "anki", label: "Anki card front" },
+    ];
+    const roleOf = (h: string): Role => {
+      if (this.current.categoryColumn === h) return "category";
+      if (this.current.statusColumn === h) return "status";
+      if (this.current.notesColumn === h) return "notes";
+      if (this.current.imageColumn === h) return "image";
+      if (this.current.ankiFrontCol === h) return "anki";
+      return "";
+    };
+    // Only clears the role(s) *this* column currently holds — reassigning a
+    // role to a different column evicts its previous holder for free, since
+    // categoryColumn/statusColumn/etc. are each a single string field.
+    const clearRoleFieldsFor = (h: string) => {
+      if (this.current.categoryColumn === h) this.current.categoryColumn = undefined;
+      if (this.current.statusColumn === h) this.current.statusColumn = undefined;
+      if (this.current.notesColumn === h) this.current.notesColumn = undefined;
+      if (this.current.imageColumn === h) this.current.imageColumn = undefined;
+      if (this.current.ankiFrontCol === h) this.current.ankiFrontCol = undefined;
+    };
+    const setRole = (h: string, role: Role) => {
+      clearRoleFieldsFor(h);
+      if (role === "category") this.current.categoryColumn = h;
+      else if (role === "status") this.current.statusColumn = h;
+      else if (role === "notes") this.current.notesColumn = h;
+      else if (role === "image") this.current.imageColumn = h;
+      else if (role === "anki") this.current.ankiFrontCol = h;
+    };
+
+    // Auto-detected card-field defaults — used when cardFields is undefined.
+    const autoDetect = (candidates: string[]) =>
+      this.headers.find(h => candidates.some(c => c.toLowerCase() === h.toLowerCase()));
+    const autoCardFields = [
+      autoDetect(["Author","Authors","Director","Artist","Creator","By"]),
+      autoDetect(["Year","Date","Released"]),
+      autoDetect(["Rating","Score","Score /5","Stars"]),
+      autoDetect(["Theme","Tags","Tag","Mood"]),
+    ].filter((c): c is string => !!c);
+    const titleCol = this.headers.find(h => ["title", "name", "Title", "Name"].includes(h)) ?? this.headers[0];
+
+    const rowsList = colSection.createDiv({ cls: "csv-modal-column-list" });
+    const renderRows = () => {
+      rowsList.empty();
+      const selectedHabits = new Set(this.current.habitColumns ?? this.autoDetectedHabits);
+      const selectedCard = new Set(this.current.cardFields ?? autoCardFields);
+      const selectedCategorical = new Set(this.current.categoricalColumns ?? this.autoDetectedCategorical);
+
+      this.headers.forEach(h => {
+        const row = rowsList.createDiv({ cls: "csv-modal-colcfg-row" });
+
+        const nameLine = row.createDiv({ cls: "csv-modal-colcfg-name" });
+        nameLine.createSpan({ text: h });
+        const rm = nameLine.createEl("button", {
+          cls: "csv-modal-column-remove", text: "✕",
+          attr: { title: `Remove "${h}" — deletes this column's data from every row` },
+        });
+        rm.addEventListener("click", () => {
+          if (rm.hasClass("confirm")) {
+            this.onRemoveColumn(h);
+            refresh();
+            return;
+          }
+          // Destructive — require a second click within a few seconds rather
+          // than a native confirm() dialog, matching the rest of the modal.
+          rowsList.querySelectorAll(".csv-modal-column-remove.confirm").forEach(el => { el.removeClass("confirm"); el.setText("✕"); });
+          rm.addClass("confirm");
+          rm.setText("Confirm?");
+          window.setTimeout(() => { if (rm.isConnected) { rm.removeClass("confirm"); rm.setText("✕"); } }, 3000);
+        });
+
+        const controls = row.createDiv({ cls: "csv-modal-colcfg-controls" });
+
+        const roleSel = controls.createEl("select", { cls: "csv-modal-select csv-modal-colcfg-role" });
+        const currentRole = roleOf(h);
+        ROLE_OPTIONS.forEach(o => {
+          const opt = roleSel.createEl("option", { text: o.label, value: o.value });
+          if (o.value === currentRole) opt.selected = true;
+        });
+        roleSel.addEventListener("change", () => {
+          setRole(h, roleSel.value as Role);
+          renderRows();
+        });
+
+        const toggle = (label: string, checked: boolean, autoDetected: boolean, onChange: (v: boolean) => void) => {
+          const lbl = controls.createEl("label", { cls: "csv-modal-checkbox-label csv-modal-colcfg-toggle" });
+          const cb = lbl.createEl("input", { type: "checkbox" });
+          cb.checked = checked;
+          if (autoDetected) lbl.addClass("auto-detected");
+          lbl.createSpan({ text: label });
+          cb.addEventListener("change", () => onChange(cb.checked));
+        };
+
+        toggle("Habit", selectedHabits.has(h), this.autoDetectedHabits.includes(h) && !this.current.habitColumns, checked => {
+          if (!this.current.habitColumns) this.current.habitColumns = [...this.autoDetectedHabits];
+          if (checked) { if (!this.current.habitColumns.includes(h)) this.current.habitColumns.push(h); }
+          else { this.current.habitColumns = this.current.habitColumns.filter(c => c !== h); }
+        });
+
+        toggle("Card field", selectedCard.has(h), autoCardFields.includes(h) && !this.current.cardFields, checked => {
+          if (!this.current.cardFields) this.current.cardFields = [...autoCardFields];
+          if (checked) { if (!this.current.cardFields.includes(h)) this.current.cardFields.push(h); }
+          else { this.current.cardFields = this.current.cardFields.filter(c => c !== h); }
+        });
+
+        // The title/index column is always a free-text identifier — never
+        // offered as a categorical candidate at all.
+        if (h !== titleCol) {
+          toggle("Categorical", selectedCategorical.has(h), this.autoDetectedCategorical.includes(h) && !this.current.categoricalColumns, checked => {
+            if (!this.current.categoricalColumns) this.current.categoricalColumns = [...this.autoDetectedCategorical];
+            if (checked) { if (!this.current.categoricalColumns.includes(h)) this.current.categoricalColumns.push(h); }
+            else { this.current.categoricalColumns = this.current.categoricalColumns.filter(c => c !== h); }
+          });
+        }
+      });
+    };
+    renderRows();
+
+    const addColWrap = colSection.createDiv({ cls: "csv-modal-add-column" });
     const addColInput = addColWrap.createEl("input", { cls: "csv-modal-input", type: "text", placeholder: "New column name" });
     const addColBtn = addColWrap.createEl("button", { cls: "csv-modal-cancel", text: "+ Add column" });
     const doAdd = () => {
@@ -749,144 +867,6 @@ export class FileConfigModal extends Modal {
     };
     addColBtn.addEventListener("click", doAdd);
     addColInput.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); doAdd(); } });
-
-    const makeDropdown = (label: string, currentVal: string | undefined, onChange: (v: string | undefined) => void) => {
-      const row = form.createDiv({ cls: "csv-modal-row" });
-      row.createEl("label", { text: label, cls: "csv-modal-label" });
-      const sel = row.createEl("select", { cls: "csv-modal-select" });
-      opts.forEach(o => {
-        const opt = sel.createEl("option", { text: o, value: o });
-        if ((currentVal ?? none) === o) opt.selected = true;
-      });
-      sel.addEventListener("change", () => onChange(sel.value === none ? undefined : sel.value));
-    };
-
-    makeDropdown("Category column (kanban grouping)", this.current.categoryColumn, v => { this.current.categoryColumn = v; });
-    makeDropdown("Status column (row subgroups)", this.current.statusColumn, v => { this.current.statusColumn = v; });
-    makeDropdown("Notes column", this.current.notesColumn, v => { this.current.notesColumn = v; });
-
-    // Habit columns (multi-select with checkboxes)
-    const habitRow = form.createDiv({ cls: "csv-modal-row" });
-    habitRow.createEl("label", { text: "Habit columns (dashboard)", cls: "csv-modal-label" });
-    const habitDesc = habitRow.createEl("p", { cls: "csv-modal-hint", text: "Select columns to track as habits. Auto-detected columns with binary values (0/1) are pre-selected." });
-    const habitGrid = habitRow.createDiv({ cls: "csv-modal-checkbox-grid" });
-
-    // Determine which columns are selected (use config if set, else auto-detected)
-    const selectedHabits = new Set(this.current.habitColumns ?? this.autoDetectedHabits);
-
-    this.headers.forEach(h => {
-      const label = habitGrid.createEl("label", { cls: "csv-modal-checkbox-label" });
-      const checkbox = label.createEl("input", { type: "checkbox" });
-      checkbox.checked = selectedHabits.has(h);
-      if (this.autoDetectedHabits.includes(h) && !this.current.habitColumns) {
-        label.addClass("auto-detected");
-      }
-      label.createSpan({ text: h });
-
-      checkbox.addEventListener("change", () => {
-        if (!this.current.habitColumns) {
-          this.current.habitColumns = [...this.autoDetectedHabits];
-        }
-        if (checkbox.checked) {
-          if (!this.current.habitColumns.includes(h)) {
-            this.current.habitColumns.push(h);
-          }
-        } else {
-          this.current.habitColumns = this.current.habitColumns.filter(c => c !== h);
-        }
-      });
-    });
-
-    // Card fields — which columns to surface on Library/Kanban cards.
-    // If never set, defaults to auto-detected (author/year/rating/theme).
-    // Once the user touches the checkboxes, an explicit list is stored.
-    const cardRow = form.createDiv({ cls: "csv-modal-row" });
-    cardRow.createEl("label", { text: "Card fields (Library / Kanban)", cls: "csv-modal-label" });
-    cardRow.createEl("p", { cls: "csv-modal-hint", text: "Columns shown under each card title. Rating renders as stars, theme/tag columns as pills. Leave all unchecked for title-only cards." });
-    const cardGrid = cardRow.createDiv({ cls: "csv-modal-checkbox-grid" });
-
-    // Auto-detected defaults — used when cardFields is undefined.
-    const autoDetect = (candidates: string[]) =>
-      this.headers.find(h => candidates.some(c => c.toLowerCase() === h.toLowerCase()));
-    const autoFields = [
-      autoDetect(["Author","Authors","Director","Artist","Creator","By"]),
-      autoDetect(["Year","Date","Released"]),
-      autoDetect(["Rating","Score","Score /5","Stars"]),
-      autoDetect(["Theme","Tags","Tag","Mood"]),
-    ].filter((c): c is string => !!c);
-    const selectedCard = new Set(this.current.cardFields ?? autoFields);
-    const isCustom = !!this.current.cardFields;
-
-    this.headers.forEach(h => {
-      const label = cardGrid.createEl("label", { cls: "csv-modal-checkbox-label" });
-      const checkbox = label.createEl("input", { type: "checkbox" });
-      checkbox.checked = selectedCard.has(h);
-      if (autoFields.includes(h) && !isCustom) label.addClass("auto-detected");
-      label.createSpan({ text: h });
-
-      checkbox.addEventListener("change", () => {
-        // First touch promotes auto-detected defaults into an explicit list.
-        if (!this.current.cardFields) this.current.cardFields = [...autoFields];
-        if (checkbox.checked) {
-          if (!this.current.cardFields.includes(h)) this.current.cardFields.push(h);
-        } else {
-          this.current.cardFields = this.current.cardFields.filter(c => c !== h);
-        }
-      });
-    });
-
-    // Categorical columns — which columns render as a dropdown (Add entry /
-    // entry editor / mobile add form) instead of free text. If never set,
-    // defaults to auto-detected (a configured select column, or a
-    // low-cardinality "pseudo-categorical" one — same heuristic as the add
-    // form). The title/index column can't be made categorical — it's always
-    // a free-text identifier — so it's left out of the list entirely.
-    const catRow = form.createDiv({ cls: "csv-modal-row" });
-    catRow.createEl("label", { text: "Categorical columns (dropdown in Add / Edit)", cls: "csv-modal-label" });
-    catRow.createEl("p", { cls: "csv-modal-hint", text: "Columns offered as a picker instead of free text when adding or editing an entry. Auto-detected low-cardinality columns are pre-selected." });
-    const catGrid = catRow.createDiv({ cls: "csv-modal-checkbox-grid csv-modal-categorical-grid" });
-
-    const titleCol = this.headers.find(h => ["title", "name", "Title", "Name"].includes(h)) ?? this.headers[0];
-    const categoricalCandidates = this.headers.filter(h => h !== titleCol);
-    const selectedCategorical = new Set(this.current.categoricalColumns ?? this.autoDetectedCategorical);
-
-    categoricalCandidates.forEach(h => {
-      const label = catGrid.createEl("label", { cls: "csv-modal-checkbox-label" });
-      const checkbox = label.createEl("input", { type: "checkbox" });
-      checkbox.checked = selectedCategorical.has(h);
-      if (this.autoDetectedCategorical.includes(h) && !this.current.categoricalColumns) {
-        label.addClass("auto-detected");
-      }
-      label.createSpan({ text: h });
-
-      checkbox.addEventListener("change", () => {
-        if (!this.current.categoricalColumns) {
-          this.current.categoricalColumns = [...this.autoDetectedCategorical];
-        }
-        if (checkbox.checked) {
-          if (!this.current.categoricalColumns.includes(h)) {
-            this.current.categoricalColumns.push(h);
-          }
-        } else {
-          this.current.categoricalColumns = this.current.categoricalColumns.filter(c => c !== h);
-        }
-      });
-    });
-
-    // Anki card front — which column becomes the front of each card on
-    // "Sync to Anki". Unset = the title/primary field; every other non-empty
-    // column is joined onto the back. Its own "primary field" sentinel rather
-    // than the shared global-default one, since there's no global Anki front.
-    const ankiNone = "— title / primary field —";
-    const ankiRow = form.createDiv({ cls: "csv-modal-row" });
-    ankiRow.createEl("label", { text: "Anki card front", cls: "csv-modal-label" });
-    ankiRow.createEl("p", { cls: "csv-modal-hint", text: "Column used as the front of each card when syncing to Anki. Other columns become the back." });
-    const ankiSel = ankiRow.createEl("select", { cls: "csv-modal-select" });
-    [ankiNone, ...this.headers].forEach(o => {
-      const opt = ankiSel.createEl("option", { text: o, value: o });
-      if ((this.current.ankiFrontCol ?? ankiNone) === o) opt.selected = true;
-    });
-    ankiSel.addEventListener("change", () => { this.current.ankiFrontCol = ankiSel.value === ankiNone ? undefined : ankiSel.value; });
 
     // Default mode for this file. The list comes from availableModes (same
     // source as the toolbar dropdown), so it offers exactly the modes this
