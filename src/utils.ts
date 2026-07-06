@@ -6,6 +6,39 @@ import { CSVRow } from "./types";
 // thumbnails. Matched case-insensitively against headers (see getImageCol).
 export const IMAGE_COL_ALIASES = ["Image", "image", "Cover", "cover", "Poster", "poster", "Thumbnail", "thumbnail", "Thumb", "thumb", "Photo", "photo", "Picture", "picture", "Img", "img"];
 
+// Column-name aliases for the three other name-detected roles (see
+// getCategoryCol/getStatusCol/getNotesCol). Shared between main.ts,
+// inline-view.ts, and the ⚙ Config modal's auto-detected role indicator, so
+// the modal's "this is auto-detected" badge always agrees with what the
+// views actually resolve at render time.
+export const CATEGORY_COL_ALIASES = [
+  "Category","category","Categories","categories",
+  "Genre","genre","Genres","genres",
+  "Type","type","Types","types",
+  "Tag","tag","Tags","tags",
+  "Topic","topic","Topics","topics",
+  "Subject","subject",
+  "Section","section",
+];
+export const STATUS_COL_ALIASES = [
+  "Status","status",
+  "State","state",
+  "Progress","progress",
+  "Stage","stage",
+  "Read","read",
+  "Watched","watched","Seen","seen",
+  "Done","done","Completed","completed",
+];
+export const NOTES_COL_ALIASES = [
+  "Notes","notes","Note","note",
+  "Summary","summary",
+  "Review","review",
+  "Quote","quote","Quotes","quotes",
+  "Comment","comment","Comments","comments",
+  "Description","description",
+  "Annotation","annotation",
+];
+
 /**
  * Resolve a cell value into an <img> src, or null if it isn't resolvable.
  * Accepts: http(s)/data URLs (used as-is), `![[wikilink]]` / `[[wikilink]]`,

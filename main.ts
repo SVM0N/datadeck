@@ -19,7 +19,7 @@ import type { Chart as ChartType } from "chart.js";
 
 // Import from src modules
 import { CSVRow, ViewMode, FileConfig, CardViewSettings, DEFAULT_SETTINGS, CARD_VIEW_TYPE } from "./src/types";
-import { sanitizeFilename, tagify, titleCase, formatRatingForDisplay, showSelectPicker, parseCSV, migrateFileConfigKey, sortRowsByColumn, isMultiValueColName, IMAGE_COL_ALIASES, looksBoolean, looksCategorical } from "./src/utils";
+import { sanitizeFilename, tagify, titleCase, formatRatingForDisplay, showSelectPicker, parseCSV, migrateFileConfigKey, sortRowsByColumn, isMultiValueColName, IMAGE_COL_ALIASES, CATEGORY_COL_ALIASES, STATUS_COL_ALIASES, NOTES_COL_ALIASES, looksBoolean, looksCategorical } from "./src/utils";
 import { isDateCol } from "./src/field-types";
 import { AddEntryModal, NoteExpanderModal, FileConfigModal, SearchModal, PromptModal } from "./src/modals";
 import { renderTravel } from "./src/travel-view";
@@ -233,15 +233,7 @@ export class CardView extends FileView {
     // 1. Per-file override
     if (this.fileCfg.notesColumn) return this.fileCfg.notesColumn;
     // 2. Fallback chain
-    return this.resolveCol([
-      "Notes","notes","Note","note",
-      "Summary","summary",
-      "Review","review",
-      "Quote","quote","Quotes","quotes",
-      "Comment","comment","Comments","comments",
-      "Description","description",
-      "Annotation","annotation",
-    ]);
+    return this.resolveCol(NOTES_COL_ALIASES);
   }
 
   isNotesCol(h: string): boolean {
@@ -283,31 +275,14 @@ export class CardView extends FileView {
     if (this.fileCfg.statusColumn) {
       return this.headers.find(h => h.toLowerCase() === this.fileCfg.statusColumn!.toLowerCase()) ?? null;
     }
-    return this.resolveCol([
-      "Status","status",
-      "State","state",
-      "Progress","progress",
-      "Stage","stage",
-      "Read","read",
-      "Watched","watched","Seen","seen",
-      "Done","done","Completed","completed",
-    ]);
+    return this.resolveCol(STATUS_COL_ALIASES);
   }
 
   getCategoryCol(): string | null {
     if (this.fileCfg.categoryColumn) {
       return this.headers.find(h => h.toLowerCase() === this.fileCfg.categoryColumn!.toLowerCase()) ?? null;
     }
-    return this.resolveCol([
-      "Category","category",
-      "Categories","categories",
-      "Genre","genre","Genres","genres",
-      "Type","type","Types","types",
-      "Tag","tag","Tags","tags",
-      "Topic","topic","Topics","topics",
-      "Subject","subject",
-      "Section","section",
-    ]);
+    return this.resolveCol(CATEGORY_COL_ALIASES);
   }
 
   titleKey(): string | undefined {

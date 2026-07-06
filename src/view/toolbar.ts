@@ -6,12 +6,13 @@
 import { Menu, Notice } from "obsidian";
 import type { CardView } from "../../main";
 import { ViewMode } from "../types";
-import { FileConfigModal } from "../modals";
+import { FileConfigModal, AutoDetectedRoles } from "../modals";
 import { generateMobileFiles } from "./mobile";
-import { syncToAnki } from "./anki";
+import { syncToAnki, autoAnkiFrontCol } from "./anki";
 import { hasStatsColumns } from "./stats";
 import { hasTaskColumns } from "./tasks";
 import { effectiveGroupCol } from "./kanban";
+import { CATEGORY_COL_ALIASES, STATUS_COL_ALIASES, NOTES_COL_ALIASES, IMAGE_COL_ALIASES } from "../utils";
 
 declare const __BUILD_TIME__: string;
 
@@ -197,9 +198,20 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
   // Handlers are defined once and reused by both surfaces so there's a
   // single place to maintain behaviour.
   const openColumns = () => {
+    // What each exclusive role would resolve to with no fileCfg override,
+    // purely by column name/position — same lists/logic getCategoryCol etc.
+    // already use at render time — so the modal's "auto (by name)" badge
+    // always agrees with what's actually driving the view right now.
+    const autoDetectedRoles: AutoDetectedRoles = {
+      category: view.resolveCol(CATEGORY_COL_ALIASES),
+      status: view.resolveCol(STATUS_COL_ALIASES),
+      notes: view.resolveCol(NOTES_COL_ALIASES),
+      image: view.resolveCol(IMAGE_COL_ALIASES),
+      anki: autoAnkiFrontCol(view),
+    };
     new FileConfigModal(
       view.app, view.headers, view.file?.path ?? "", view.fileCfg, view.autoDetectBooleanColumns(),
-      view.autoDetectCategoricalColumns(), availableModes(view),
+      view.autoDetectCategoricalColumns(), autoDetectedRoles, availableModes(view),
       (cfg) => {
         view.saveFileCfg(cfg);
         if (cfg.defaultMode) view.mode = cfg.defaultMode;

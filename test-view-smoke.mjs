@@ -828,9 +828,10 @@ await test("note-expander: an explicit isCategoricalCol override wins over auto-
 const { FileConfigModal } = await load("./src/modals.ts");
 
 function openFileConfigModal(headers, current, autoDetectedCategorical, overrides = {}) {
+  const autoDetectedRoles = { category: null, status: null, notes: null, image: null, anki: null, ...overrides.autoDetectedRoles };
   const modal = new FileConfigModal(
     new StubApp(), headers, "test.csv", current, overrides.autoDetectedHabits ?? [],
-    autoDetectedCategorical, overrides.availableModes ?? [],
+    autoDetectedCategorical, autoDetectedRoles, overrides.availableModes ?? [],
     overrides.onSave ?? (() => {}),
     overrides.getHeaders ?? (() => headers),
     overrides.getFileCfg ?? (() => current),
@@ -919,6 +920,33 @@ await test("FileConfigModal: role/toggle edits don't touch disk — only add/rem
   setRoleSelect(roleSelectFor(modal, "Genre"), "category");
   toggleFor(modal, "Watched", "Habit").dispatchEvent(new window.Event("change", { bubbles: true }));
   assert(getFileCfgCalls === 0, "editing roles/toggles is a pending, in-memory draft until Save — it must not refetch from disk");
+});
+
+await test("FileConfigModal: a name-detected column shows its role with an auto badge, no config needed", async () => {
+  // Mirrors a real project dash file: nothing in fileCfg, but "Status" already
+  // resolves by name at render time (getStatusCol) — the row should show
+  // that, not "— no special role —", which is what prompted this feature.
+  const headers = ["Title", "Type", "Project", "Status"];
+  const modal = openFileConfigModal(headers, {}, [], { autoDetectedRoles: { status: "Status" } });
+  const sel = roleSelectFor(modal, "Status");
+  assert(sel.value === "status", "Status column shows the Status role even with nothing saved");
+  assert(sel.hasClass("auto-detected"), "auto-detected role select gets the auto-detected styling");
+  assert(colConfigRowFor(modal, "Status").textContent.includes("auto (by name)"), "row surfaces the auto badge text");
+
+  const typeSel = roleSelectFor(modal, "Type");
+  assert(typeSel.value === "", "a column with no matching alias and no config shows no role");
+  assert(!typeSel.hasClass("auto-detected"), "no badge when there's nothing auto-detected for this column");
+});
+
+await test("FileConfigModal: an explicit override elsewhere suppresses the auto badge, matching runtime resolution", async () => {
+  // getStatusCol() never blends a name-based guess back in once statusColumn
+  // is set — even to a different column — so neither the auto pick nor the
+  // explicit pick should show "auto" once an override exists for the role.
+  const headers = ["Title", "Status", "Progress"];
+  const modal = openFileConfigModal(headers, { statusColumn: "Progress" }, [], { autoDetectedRoles: { status: "Status" } });
+  assert(roleSelectFor(modal, "Progress").value === "status", "the explicit override holds the Status role");
+  assert(!roleSelectFor(modal, "Progress").hasClass("auto-detected"), "explicit picks aren't flagged as auto");
+  assert(roleSelectFor(modal, "Status").value === "", "the name-matched column no longer shows the role once something else is configured");
 });
 
 // ── Multi-select picker ──────────────────────────────────────────────────────

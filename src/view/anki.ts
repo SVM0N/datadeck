@@ -38,18 +38,27 @@ async function ankiInvoke(action: string, params: Record<string, unknown>): Prom
 }
 
 /**
- * Resolve the column used as the Anki card front. Honours the per-file
- * `ankiFrontCol`; otherwise falls back to the title/primary field, then to a
- * content-bearing column (so a quotes file fronts on Quote, not its first
- * column Author), then to the first column.
+ * What ankiFrontCol would resolve to with no per-file override — the
+ * title/primary field, then a content-bearing column (so a quotes file
+ * fronts on Quote, not its first column Author), then the first column.
+ * Exposed separately so the ⚙ Config modal can show which column is
+ * *already* the front by name/position, without an explicit `ankiFrontCol`.
  */
-export function ankiFrontCol(view: CardView): string | null {
-  const configured = view.fileCfg.ankiFrontCol;
-  if (configured && view.headers.includes(configured)) return configured;
+export function autoAnkiFrontCol(view: CardView): string | null {
   return view.titleKey()
     ?? view.resolveCol(["Quote", "Headline", "Phrase", "Term", "Word", "Question", "Front", "Name", "Title"])
     ?? view.headers[0]
     ?? null;
+}
+
+/**
+ * Resolve the column used as the Anki card front. Honours the per-file
+ * `ankiFrontCol`; otherwise falls back to autoAnkiFrontCol.
+ */
+export function ankiFrontCol(view: CardView): string | null {
+  const configured = view.fileCfg.ankiFrontCol;
+  if (configured && view.headers.includes(configured)) return configured;
+  return autoAnkiFrontCol(view);
 }
 
 // HTML-escape a cell so quotes/dictionary entries with <, >, & render as text

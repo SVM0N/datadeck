@@ -2032,6 +2032,18 @@ td .csv-select-chip {
   width: auto;
 }
 
+.csv-modal-colcfg-role.auto-detected {
+  border-color: rgba(52, 168, 83, 0.4);
+  background: rgba(52, 168, 83, 0.08);
+}
+
+.csv-modal-colcfg-auto-badge {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--color-green, #34a853);
+  flex: 0 0 auto;
+}
+
 .csv-modal-colcfg-toggle {
   padding: 4px 8px;
   flex: 0 0 auto;

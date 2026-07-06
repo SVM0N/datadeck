@@ -32,7 +32,7 @@ import {
 import Papa from "papaparse";
 import type { CardView } from "../main";
 import { CSVRow, ViewMode, FileConfig, CardViewSettings } from "./types";
-import { parseCSV, resolvePath, sanitizeFilename, showSelectPicker, IMAGE_COL_ALIASES, looksBoolean, looksCategorical, isMultiValueColName } from "./utils";
+import { parseCSV, resolvePath, sanitizeFilename, showSelectPicker, IMAGE_COL_ALIASES, CATEGORY_COL_ALIASES, STATUS_COL_ALIASES, NOTES_COL_ALIASES, looksBoolean, looksCategorical, isMultiValueColName } from "./utils";
 import { isDateCol } from "./field-types";
 import { AddEntryModal, NoteExpanderModal } from "./modals";
 import { renderTable } from "./view/table";
@@ -257,11 +257,7 @@ export class InlineCardHost extends MarkdownRenderChild {
   }
   getNotesCol(): string | null {
     if (this.fileCfg.notesColumn) return this.fileCfg.notesColumn;
-    return this.resolveCol([
-      "Notes", "notes", "Note", "note", "Summary", "summary", "Review", "review",
-      "Quote", "quote", "Quotes", "quotes", "Comment", "comment", "Comments", "comments",
-      "Description", "description", "Annotation", "annotation",
-    ]);
+    return this.resolveCol(NOTES_COL_ALIASES);
   }
   isNotesCol(h: string): boolean {
     const notesCol = this.getNotesCol();
@@ -284,20 +280,13 @@ export class InlineCardHost extends MarkdownRenderChild {
     if (this.fileCfg.statusColumn) {
       return this.headers.find(h => h.toLowerCase() === this.fileCfg.statusColumn!.toLowerCase()) ?? null;
     }
-    return this.resolveCol([
-      "Status", "status", "State", "state", "Progress", "progress", "Stage", "stage",
-      "Read", "read", "Watched", "watched", "Seen", "seen", "Done", "done", "Completed", "completed",
-    ]);
+    return this.resolveCol(STATUS_COL_ALIASES);
   }
   getCategoryCol(): string | null {
     if (this.fileCfg.categoryColumn) {
       return this.headers.find(h => h.toLowerCase() === this.fileCfg.categoryColumn!.toLowerCase()) ?? null;
     }
-    return this.resolveCol([
-      "Category", "category", "Categories", "categories", "Genre", "genre", "Genres", "genres",
-      "Type", "type", "Types", "types", "Tag", "tag", "Tags", "tags",
-      "Topic", "topic", "Topics", "topics", "Subject", "subject", "Section", "section",
-    ]);
+    return this.resolveCol(CATEGORY_COL_ALIASES);
   }
   titleKey(): string | undefined {
     return this.resolveCol(["Title", "title", "Name", "name"]) ?? undefined;

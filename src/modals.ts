@@ -648,12 +648,26 @@ export class SearchModal extends Modal {
 // ─── File Config Modal ────────────────────────────────────────────────────────
 // Per-file column mapping — which column is the kanban group, notes, status
 
+// What each of the 5 exclusive per-column roles would resolve to with no
+// explicit fileCfg override — i.e. what getCategoryCol/getStatusCol/
+// getNotesCol/getImageCol/ankiFrontCol already do by name/position at
+// render time. Lets the Config modal show "(auto)" on whichever column is
+// already fulfilling a role, instead of looking like no column does.
+export interface AutoDetectedRoles {
+  category: string | null;
+  status: string | null;
+  notes: string | null;
+  image: string | null;
+  anki: string | null;
+}
+
 export class FileConfigModal extends Modal {
   headers: string[];
   filePath: string;
   current: FileConfig;
   autoDetectedHabits: string[];
   autoDetectedCategorical: string[];
+  autoDetectedRoles: AutoDetectedRoles;
   availableModes: { id: ViewMode; label: string }[];
   onSave: (cfg: FileConfig) => void;
   // Column-structure ops (add/remove the CSV column itself, not its role).
@@ -666,7 +680,7 @@ export class FileConfigModal extends Modal {
 
   constructor(
     app: App, headers: string[], filePath: string, current: FileConfig, autoDetectedHabits: string[],
-    autoDetectedCategorical: string[],
+    autoDetectedCategorical: string[], autoDetectedRoles: AutoDetectedRoles,
     availableModes: { id: ViewMode; label: string }[], onSave: (cfg: FileConfig) => void,
     getHeaders: () => string[], getFileCfg: () => FileConfig,
     onAddColumn: (name: string) => string | null, onRemoveColumn: (header: string) => void,
@@ -681,6 +695,7 @@ export class FileConfigModal extends Modal {
     };
     this.autoDetectedHabits = autoDetectedHabits;
     this.autoDetectedCategorical = autoDetectedCategorical;
+    this.autoDetectedRoles = autoDetectedRoles;
     this.availableModes = availableModes;
     this.onSave = onSave;
     this.getHeaders = getHeaders;
@@ -730,7 +745,7 @@ export class FileConfigModal extends Modal {
     colSection.createEl("label", { text: "Columns", cls: "csv-modal-label" });
     colSection.createEl("p", {
       cls: "csv-modal-hint",
-      text: "Role is exclusive — picking it for one column clears it from any other. The three toggles can be combined freely.",
+      text: "Role is exclusive — picking it for one column clears it from any other. \"auto (by name)\" means it's already playing that role because of its column name, with nothing saved here yet. The three toggles can be combined freely.",
     });
 
     type Role = "category" | "status" | "notes" | "image" | "anki" | "";
@@ -742,13 +757,28 @@ export class FileConfigModal extends Modal {
       { value: "image", label: "Image (card / kanban thumbnail)" },
       { value: "anki", label: "Anki card front" },
     ];
-    const roleOf = (h: string): Role => {
-      if (this.current.categoryColumn === h) return "category";
-      if (this.current.statusColumn === h) return "status";
-      if (this.current.notesColumn === h) return "notes";
-      if (this.current.imageColumn === h) return "image";
-      if (this.current.ankiFrontCol === h) return "anki";
-      return "";
+    // Explicit fileCfg fields always win outright over name-based detection —
+    // mirrors getCategoryCol/getStatusCol/getNotesCol/getImageCol/ankiFrontCol,
+    // which never blend an auto guess in once a role has an override, even if
+    // that override points at a column that no longer looks like a great fit.
+    // So `auto: true` only ever appears when the role's field is fully unset.
+    const roleOf = (h: string): { role: Role; auto: boolean } => {
+      if (this.current.categoryColumn !== undefined) { if (this.current.categoryColumn === h) return { role: "category", auto: false }; }
+      else if (this.autoDetectedRoles.category === h) return { role: "category", auto: true };
+
+      if (this.current.statusColumn !== undefined) { if (this.current.statusColumn === h) return { role: "status", auto: false }; }
+      else if (this.autoDetectedRoles.status === h) return { role: "status", auto: true };
+
+      if (this.current.notesColumn !== undefined) { if (this.current.notesColumn === h) return { role: "notes", auto: false }; }
+      else if (this.autoDetectedRoles.notes === h) return { role: "notes", auto: true };
+
+      if (this.current.imageColumn !== undefined) { if (this.current.imageColumn === h) return { role: "image", auto: false }; }
+      else if (this.autoDetectedRoles.image === h) return { role: "image", auto: true };
+
+      if (this.current.ankiFrontCol !== undefined) { if (this.current.ankiFrontCol === h) return { role: "anki", auto: false }; }
+      else if (this.autoDetectedRoles.anki === h) return { role: "anki", auto: true };
+
+      return { role: "", auto: false };
     };
     // Only clears the role(s) *this* column currently holds — reassigning a
     // role to a different column evicts its previous holder for free, since
@@ -813,11 +843,20 @@ export class FileConfigModal extends Modal {
         const controls = row.createDiv({ cls: "csv-modal-colcfg-controls" });
 
         const roleSel = controls.createEl("select", { cls: "csv-modal-select csv-modal-colcfg-role" });
-        const currentRole = roleOf(h);
+        // roleOf already reflects an auto-detected role in `role` (not just
+        // `auto`) — e.g. a column literally named "Status" shows "Status"
+        // selected here with no config saved at all, matching what
+        // getStatusCol() already resolves by name at render time. The badge
+        // is just there to distinguish "picked by name" from "picked by you".
+        const { role: currentRole, auto: isAutoRole } = roleOf(h);
         ROLE_OPTIONS.forEach(o => {
           const opt = roleSel.createEl("option", { text: o.label, value: o.value });
           if (o.value === currentRole) opt.selected = true;
         });
+        if (isAutoRole) {
+          roleSel.addClass("auto-detected");
+          controls.createSpan({ cls: "csv-modal-colcfg-auto-badge", text: "auto (by name)" });
+        }
         roleSel.addEventListener("change", () => {
           setRole(h, roleSel.value as Role);
           renderRows();
