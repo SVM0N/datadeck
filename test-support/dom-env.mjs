@@ -41,6 +41,8 @@ export function setupDom() {
   HE.hasClass = function (c) { return this.classList.contains(c); };
   HE.setAttr = function (k, v) { this.setAttribute(k, String(v)); return this; };
   HE.getAttr = function (k) { return this.getAttribute(k); };
+  HE.hide = function () { this.style.display = "none"; return this; };
+  HE.show = function () { this.style.display = ""; return this; };
   // jsdom doesn't implement scrollIntoView (used by the picker's keyboard
   // cursor and the travel detail panel); a no-op is fine for structure tests.
   if (!HE.scrollIntoView) HE.scrollIntoView = function () {};

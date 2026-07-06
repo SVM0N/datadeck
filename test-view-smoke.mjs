@@ -12,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { setupDom } from "./test-support/dom-env.mjs";
+import { App as StubApp } from "./test-support/obsidian-stub.mjs";
 
 let passed = 0, failed = 0;
 async function test(name, fn) {
@@ -640,6 +641,81 @@ await test("looksBoolean: recognizes 0/1/true/false/yes/no/empty vocabularies", 
   assert(looksBoolean(["true", "false"]), "true/false is boolean");
   assert(looksBoolean(["yes", "no", ""]), "yes/no/empty is boolean");
   assert(!looksBoolean(["0", "1", "Task"]), "a non-boolean value disqualifies the column");
+});
+
+// ── Add Entry / Note Expander modals: title column is never categorical ────
+const { AddEntryModal, NoteExpanderModal } = await load("./src/modals.ts");
+
+function openAddModal(headers, rows, overrides = {}) {
+  const isNotesCol = overrides.isNotesCol ?? (() => false);
+  const isSelectCol = overrides.isSelectCol ?? (() => false);
+  const getColumnValues = overrides.getColumnValues
+    ?? ((h) => Array.from(new Set(rows.map(r => r[h] ?? "").filter(Boolean))).sort());
+  const modal = new AddEntryModal(
+    new StubApp(), headers, isNotesCol, isSelectCol, getColumnValues, () => {},
+    overrides.optionPresets ?? {}, overrides.isBooleanCol ?? (() => false),
+  );
+  modal.contentEl = document.body.createDiv();
+  modal.onOpen();
+  return modal;
+}
+
+function fieldRowFor(modal, header) {
+  return Array.from(modal.contentEl.querySelectorAll(".csv-modal-row"))
+    .find(r => r.querySelector(".csv-modal-label")?.textContent.toLowerCase() === header.toLowerCase());
+}
+
+await test("add-entry: title column stays a text input even with few distinct values", async () => {
+  const headers = ["Title", "Type"];
+  const rows = [{ Title: "Alpha", Type: "Task" }, { Title: "Beta", Type: "Task" }];
+  const modal = openAddModal(headers, rows);
+  const titleRow = fieldRowFor(modal, "Title");
+  assert(titleRow.querySelector("input.csv-modal-input"), "title renders as a plain text input");
+  assert(!titleRow.querySelector("select"), "title never renders as a <select>");
+});
+
+await test("add-entry: title column stays text even when configured as a select column", async () => {
+  const headers = ["Title", "Type"];
+  const rows = [{ Title: "Alpha", Type: "Task" }];
+  const modal = openAddModal(headers, rows, { isSelectCol: (h) => h === "Title" });
+  const titleRow = fieldRowFor(modal, "Title");
+  assert(titleRow.querySelector("input.csv-modal-input"), "title stays text even if explicitly marked a select column");
+  assert(!titleRow.querySelector("select"), "no dropdown for title");
+});
+
+await test("add-entry: a genuinely categorical non-title column still gets a dropdown", async () => {
+  const headers = ["Title", "Type"];
+  const rows = [{ Title: "Alpha", Type: "Task" }, { Title: "Beta", Type: "Idea" }];
+  const modal = openAddModal(headers, rows);
+  const typeRow = fieldRowFor(modal, "Type");
+  assert(typeRow.querySelector("select"), "non-title low-cardinality column still auto-categorizes");
+});
+
+function openExpander(row, headers, overrides = {}) {
+  const isNotesCol = overrides.isNotesCol ?? (() => false);
+  const isSelectCol = overrides.isSelectCol ?? (() => false);
+  const getColumnValues = overrides.getColumnValues ?? (() => []);
+  const modal = new NoteExpanderModal(
+    new StubApp(), row, overrides.notesCol ?? "", headers, "test.csv",
+    isNotesCol, isSelectCol, getColumnValues, () => {}, undefined,
+  );
+  modal.contentEl = document.body.createDiv();
+  modal.onOpen();
+  return modal;
+}
+
+await test("note-expander: title column is never rendered as a select chip", async () => {
+  const headers = ["Title", "Type"];
+  const row = { Title: "Alpha", Type: "Task" };
+  const modal = openExpander(row, headers, {
+    isSelectCol: (h) => h === "Title",
+    getColumnValues: () => ["Alpha", "Beta"],
+  });
+  const fieldRows = Array.from(modal.contentEl.querySelectorAll(".csv-expander-field-row"));
+  const titleRow = fieldRows.find(r => r.querySelector(".csv-expander-field-label")?.textContent === "Title");
+  assert(titleRow, "title field row exists");
+  assert(!titleRow.querySelector(".csv-select-chip"), "title never renders as a select chip");
+  assert(titleRow.querySelector(".csv-expander-field-value"), "title renders as a plain value field");
 });
 
 // ── Multi-select picker ──────────────────────────────────────────────────────

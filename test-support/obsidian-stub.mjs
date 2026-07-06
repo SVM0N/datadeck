@@ -8,7 +8,19 @@ class Base { constructor() {} }
 export class App extends Base {}
 export class Component extends Base { load() {} unload() {} registerEvent() {} register() {} }
 export class FileView extends Base {}
-export class Modal extends Base { open() {} close() {} }
+export class Modal extends Base {
+  constructor(app) {
+    super(app);
+    this.app = app;
+    // Real Obsidian creates these on construction; the view code (contentEl.empty(),
+    // modalEl.addClass(...), etc.) expects them to exist without a real Modal.open().
+    this.contentEl = document.createElement("div");
+    this.modalEl = document.createElement("div");
+    this.containerEl = document.createElement("div");
+  }
+  open() {}
+  close() {}
+}
 export class PluginSettingTab extends Base {}
 export class Plugin extends Base {}
 export class Menu extends Base { addItem() { return this; } showAtMouseEvent() {} }

@@ -82,6 +82,9 @@ export async function renderAddEntryForm(app: App, source: string, el: HTMLEleme
     const dateCols = headers.filter(h => isDateCol(h));
     const notesCols = headers.filter(h => isNotesCol(h));
     const otherCols = headers.filter(h => !binaryCols.includes(h) && !dateCols.includes(h) && !notesCols.includes(h));
+    // The title/index column is a free-text identifier — never a categorical
+    // dropdown, even if it happens to have few distinct existing values.
+    const titleCol = headers.find(h => ["title", "name"].includes(h.toLowerCase()));
 
     // Render as one collapsible "menu" (Apple-style grouped card):
     //   - Default state: a single discreet "+ New entry" pill.
@@ -137,7 +140,7 @@ export async function renderAddEntryForm(app: App, source: string, el: HTMLEleme
     otherCols.forEach(h => {
       const row = makeRow(h, "field");
       const uniqueVals = new Set(rows.map(r => (r[h] ?? "").trim()).filter(Boolean));
-      if (looksCategorical(uniqueVals.size)) {
+      if (h !== titleCol && looksCategorical(uniqueVals.size)) {
         const select = row.createEl("select", { cls: "csv-add-row-control" });
         select.createEl("option", { text: "—", value: "" });
         Array.from(uniqueVals).sort().forEach(v => select.createEl("option", { text: v, value: v }));

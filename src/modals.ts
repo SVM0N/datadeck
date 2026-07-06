@@ -107,6 +107,12 @@ export class AddEntryModal extends Modal {
       row.createEl("label", { text: titleCase(h), cls: "csv-modal-label" });
 
       const presets = this.optionPresets[h] ?? [];
+      // The title/index column is always a free-text identifier — never a
+      // dropdown, whether that's inferred (few distinct values / presets) or
+      // configured (settings.selectColumns / a future per-file categorical
+      // list). It's excluded up front so none of the branches below can
+      // route it into a select.
+      const isTitleCol = h === titleCol;
       // Single-value option columns (preset-backed or configured select) render
       // as a native <select>. Crucially this keeps focus *inside* the modal —
       // the body-appended showSelectPicker (used elsewhere) loses focus to the
@@ -117,9 +123,9 @@ export class AddEntryModal extends Modal {
       // few enough to be a closed-ish vocabulary (e.g. Watched, Format) gets a
       // dropdown of its values + "Custom…" too — not just the names listed in
       // settings.selectColumns. Same heuristic as the mobile add form.
-      const autoCategorical = !this.isSelectCol(h) && !isMultiValueColName(h)
+      const autoCategorical = !isTitleCol && !this.isSelectCol(h) && !isMultiValueColName(h)
         && !isDateCol(h) && looksCategorical(this.getColumnValues(h).length);
-      const useNativeSelect = !this.isNotesCol(h) && (presets.length > 0 || (this.isSelectCol(h) && !isMultiValueColName(h)) || autoCategorical);
+      const useNativeSelect = !isTitleCol && !this.isNotesCol(h) && (presets.length > 0 || (this.isSelectCol(h) && !isMultiValueColName(h)) || autoCategorical);
 
       if (this.isBooleanCol(h)) {
         // Habit-style 0/1 column → a toggle. Off writes "0", on "1", so logging
@@ -170,7 +176,7 @@ export class AddEntryModal extends Modal {
           }
         });
 
-      } else if (this.isSelectCol(h)) {
+      } else if (!isTitleCol && this.isSelectCol(h)) {
         // Multi-value select (tags/genres/themes): chip + picker, which the
         // picker's "+ Add" / existing-value clicks drive. Still works inside
         // the modal because the user clicks options rather than typing into a
@@ -324,9 +330,11 @@ export class NoteExpanderModal extends Modal {
 
       // Configured select column, or a pseudo-categorical one (few distinct
       // values, e.g. Watched/Format) — both get the chip + option picker, so
-      // editing offers the same vocabulary the add form does.
-      const selectLike = this.isSelectCol(h)
-        || (!isMultiValueColName(h) && !isDateCol(h) && looksCategorical(this.getColumnValues(h).length));
+      // editing offers the same vocabulary the add form does. The title/index
+      // column is excluded — it's a free-text identifier, never a dropdown,
+      // even if it's short on distinct values or listed in selectColumns.
+      const selectLike = h !== titleKey && (this.isSelectCol(h)
+        || (!isMultiValueColName(h) && !isDateCol(h) && looksCategorical(this.getColumnValues(h).length)));
       if (selectLike) {
         const chip = fieldRow.createDiv({ cls: `csv-select-chip ${this.row[h] ? "" : "empty"}` });
         chip.setText(this.row[h] || "—");
