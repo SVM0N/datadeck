@@ -648,12 +648,13 @@ export class SearchModal extends Modal {
 // ─── File Config Modal ────────────────────────────────────────────────────────
 // Per-file column mapping — which column is the kanban group, notes, status
 
-// What each of the 5 exclusive per-column roles would resolve to with no
-// explicit fileCfg override — i.e. what getCategoryCol/getStatusCol/
+// What each of the 6 exclusive per-column roles would resolve to with no
+// explicit fileCfg override — i.e. what titleKey/getCategoryCol/getStatusCol/
 // getNotesCol/getImageCol/ankiFrontCol already do by name/position at
 // render time. Lets the Config modal show "(auto)" on whichever column is
 // already fulfilling a role, instead of looking like no column does.
 export interface AutoDetectedRoles {
+  title: string | null;
   category: string | null;
   status: string | null;
   notes: string | null;
@@ -734,35 +735,59 @@ export class FileConfigModal extends Modal {
     };
 
     // ── Per-column configuration ────────────────────────────────────────────
-    // One row per CSV column instead of eight separate "which column(s) for
-    // role X?" sections — you look at a column and decide what it does,
-    // rather than hunting through unrelated sections to find where a column
-    // is referenced. Each row has a "Role" — a single exclusive slot a column
-    // can hold at most one of (Category/Status/Notes/Image/Anki front), since
-    // these already only ever point at one column each — plus three
-    // independent toggles a column can hold any combination of.
+    // An actual table — Column | Type | Function | Card field — instead of
+    // separate sections or stacked cards. Type describes the column's data
+    // shape (mutually exclusive: a column is one of Text/Checkbox/
+    // Categorical, never two at once — Habit and Categorical used to be
+    // independent toggles you could both check on the same column, which
+    // never made sense). Function describes the single exclusive role a
+    // column plays across views (Title/Category/Status/Notes/Image/Anki
+    // front — each already only ever pointed at one column). Card field
+    // stays an independent toggle since a column can be shown on cards
+    // regardless of its type or function. Scrolls horizontally on narrow
+    // (phone) widths rather than wrapping, same pattern as the sticky Table
+    // view header.
+    //
+    // Status is deliberately kept as a Function, not folded into a
+    // "Checkmark" Type: the Tasks-view done-checkmark comes from word-
+    // matching (done/completed/closed/…) against whatever multi-valued
+    // vocabulary a real Status column already uses (To Do/In Progress/
+    // Blocked/Done), not from the column being strictly 2-valued. Row
+    // grouping (Kanban subgroups) rides along on the same Function for the
+    // same reason — it groups by whatever discrete values exist, not just
+    // true/false.
     const colSection = form.createDiv({ cls: "csv-modal-row" });
     colSection.createEl("label", { text: "Columns", cls: "csv-modal-label" });
     colSection.createEl("p", {
       cls: "csv-modal-hint",
-      text: "Role is exclusive — picking it for one column clears it from any other. \"auto (by name)\" means it's already playing that role because of its column name, with nothing saved here yet. The three toggles can be combined freely.",
+      text: "Type and Function are each exclusive per column — picking one clears it from whichever column held it before. \"auto\" means it's already doing that by column name, with nothing saved here yet. Card field is independent and can combine with anything.",
     });
 
-    type Role = "category" | "status" | "notes" | "image" | "anki" | "";
+    type ColType = "text" | "checkbox" | "categorical";
+    const TYPE_OPTIONS: { value: ColType; label: string }[] = [
+      { value: "text", label: "Text" },
+      { value: "checkbox", label: "Checkbox" },
+      { value: "categorical", label: "Categorical" },
+    ];
+    type Role = "title" | "category" | "status" | "notes" | "image" | "anki" | "";
     const ROLE_OPTIONS: { value: Role; label: string }[] = [
-      { value: "", label: "— no special role —" },
-      { value: "category", label: "Category (Kanban grouping)" },
-      { value: "status", label: "Status (checkmark / row subgroups)" },
+      { value: "", label: "— no function —" },
+      { value: "title", label: "Title" },
+      { value: "category", label: "Column grouping (Kanban lanes)" },
+      { value: "status", label: "Row grouping / checkmark (Kanban subgroups, Tasks done)" },
       { value: "notes", label: "Notes" },
       { value: "image", label: "Image (card / kanban thumbnail)" },
       { value: "anki", label: "Anki card front" },
     ];
     // Explicit fileCfg fields always win outright over name-based detection —
-    // mirrors getCategoryCol/getStatusCol/getNotesCol/getImageCol/ankiFrontCol,
-    // which never blend an auto guess in once a role has an override, even if
-    // that override points at a column that no longer looks like a great fit.
-    // So `auto: true` only ever appears when the role's field is fully unset.
+    // mirrors titleKey/getCategoryCol/getStatusCol/getNotesCol/getImageCol/
+    // ankiFrontCol, which never blend an auto guess in once a role has an
+    // override, even if that override points at a column that no longer
+    // looks like a great fit. So `auto: true` only appears when fully unset.
     const roleOf = (h: string): { role: Role; auto: boolean } => {
+      if (this.current.titleColumn !== undefined) { if (this.current.titleColumn === h) return { role: "title", auto: false }; }
+      else if (this.autoDetectedRoles.title === h) return { role: "title", auto: true };
+
       if (this.current.categoryColumn !== undefined) { if (this.current.categoryColumn === h) return { role: "category", auto: false }; }
       else if (this.autoDetectedRoles.category === h) return { role: "category", auto: true };
 
@@ -782,8 +807,9 @@ export class FileConfigModal extends Modal {
     };
     // Only clears the role(s) *this* column currently holds — reassigning a
     // role to a different column evicts its previous holder for free, since
-    // categoryColumn/statusColumn/etc. are each a single string field.
+    // titleColumn/categoryColumn/etc. are each a single string field.
     const clearRoleFieldsFor = (h: string) => {
+      if (this.current.titleColumn === h) this.current.titleColumn = undefined;
       if (this.current.categoryColumn === h) this.current.categoryColumn = undefined;
       if (this.current.statusColumn === h) this.current.statusColumn = undefined;
       if (this.current.notesColumn === h) this.current.notesColumn = undefined;
@@ -792,11 +818,35 @@ export class FileConfigModal extends Modal {
     };
     const setRole = (h: string, role: Role) => {
       clearRoleFieldsFor(h);
-      if (role === "category") this.current.categoryColumn = h;
+      if (role === "title") this.current.titleColumn = h;
+      else if (role === "category") this.current.categoryColumn = h;
       else if (role === "status") this.current.statusColumn = h;
       else if (role === "notes") this.current.notesColumn = h;
       else if (role === "image") this.current.imageColumn = h;
       else if (role === "anki") this.current.ankiFrontCol = h;
+    };
+
+    // Type resolution: Checkbox beats Categorical when a column happens to
+    // auto-detect as both (a 2-value 0/1 column is also low-cardinality) —
+    // boolean is the more specific pattern. Each of habitColumns/
+    // categoricalColumns is promoted to an explicit list independently, on
+    // its own first touch, same as before; Type just presents them as one
+    // exclusive picker instead of two independent checkboxes.
+    const typeOf = (h: string): { type: ColType; auto: boolean } => {
+      const habitList = this.current.habitColumns ?? this.autoDetectedHabits;
+      const catList = this.current.categoricalColumns ?? this.autoDetectedCategorical;
+      if (habitList.includes(h)) return { type: "checkbox", auto: !this.current.habitColumns };
+      if (catList.includes(h)) return { type: "categorical", auto: !this.current.categoricalColumns };
+      return { type: "text", auto: false };
+    };
+    const setType = (h: string, type: ColType) => {
+      if (!this.current.habitColumns) this.current.habitColumns = [...this.autoDetectedHabits];
+      if (!this.current.categoricalColumns) this.current.categoricalColumns = [...this.autoDetectedCategorical];
+      this.current.habitColumns = this.current.habitColumns.filter(c => c !== h);
+      this.current.categoricalColumns = this.current.categoricalColumns.filter(c => c !== h);
+      if (type === "checkbox") this.current.habitColumns.push(h);
+      else if (type === "categorical") this.current.categoricalColumns.push(h);
+      // type === "text" leaves h out of both lists — the default.
     };
 
     // Auto-detected card-field defaults — used when cardFields is undefined.
@@ -808,21 +858,24 @@ export class FileConfigModal extends Modal {
       autoDetect(["Rating","Score","Score /5","Stars"]),
       autoDetect(["Theme","Tags","Tag","Mood"]),
     ].filter((c): c is string => !!c);
-    const titleCol = this.headers.find(h => ["title", "name", "Title", "Name"].includes(h)) ?? this.headers[0];
+    const titleCol = this.current.titleColumn ?? this.autoDetectedRoles.title ?? this.headers[0];
 
-    const rowsList = colSection.createDiv({ cls: "csv-modal-column-list" });
+    const tableWrap = colSection.createDiv({ cls: "csv-modal-colcfg-table-wrap" });
+    const table = tableWrap.createEl("table", { cls: "csv-modal-colcfg-table" });
+    const thead = table.createEl("thead").createEl("tr");
+    ["Column", "Type", "Function", "Card field"].forEach(h => thead.createEl("th", { text: h }));
+    const tbody = table.createEl("tbody");
+
     const renderRows = () => {
-      rowsList.empty();
-      const selectedHabits = new Set(this.current.habitColumns ?? this.autoDetectedHabits);
+      tbody.empty();
       const selectedCard = new Set(this.current.cardFields ?? autoCardFields);
-      const selectedCategorical = new Set(this.current.categoricalColumns ?? this.autoDetectedCategorical);
 
       this.headers.forEach(h => {
-        const row = rowsList.createDiv({ cls: "csv-modal-colcfg-row" });
+        const row = tbody.createEl("tr");
 
-        const nameLine = row.createDiv({ cls: "csv-modal-colcfg-name" });
-        nameLine.createSpan({ text: h });
-        const rm = nameLine.createEl("button", {
+        const nameCell = row.createEl("td", { cls: "csv-modal-colcfg-name" });
+        nameCell.createSpan({ text: h });
+        const rm = nameCell.createEl("button", {
           cls: "csv-modal-column-remove", text: "✕",
           attr: { title: `Remove "${h}" — deletes this column's data from every row` },
         });
@@ -834,64 +887,59 @@ export class FileConfigModal extends Modal {
           }
           // Destructive — require a second click within a few seconds rather
           // than a native confirm() dialog, matching the rest of the modal.
-          rowsList.querySelectorAll(".csv-modal-column-remove.confirm").forEach(el => { el.removeClass("confirm"); el.setText("✕"); });
+          tbody.querySelectorAll(".csv-modal-column-remove.confirm").forEach(el => { el.removeClass("confirm"); el.setText("✕"); });
           rm.addClass("confirm");
           rm.setText("Confirm?");
           window.setTimeout(() => { if (rm.isConnected) { rm.removeClass("confirm"); rm.setText("✕"); } }, 3000);
         });
 
-        const controls = row.createDiv({ cls: "csv-modal-colcfg-controls" });
+        // ── Type cell ──
+        const typeCell = row.createEl("td", { cls: "csv-modal-colcfg-type-cell" });
+        if (h === titleCol) {
+          // The title/index column is always a free-text identifier — never
+          // offered a Type picker at all, same as it never got a Categorical
+          // checkbox before.
+          typeCell.createSpan({ cls: "csv-modal-colcfg-fixed", text: "Text" });
+        } else {
+          const typeSel = typeCell.createEl("select", { cls: "csv-modal-select csv-modal-colcfg-type" });
+          const { type: currentType, auto: isAutoType } = typeOf(h);
+          TYPE_OPTIONS.forEach(o => {
+            const opt = typeSel.createEl("option", { text: o.label, value: o.value });
+            if (o.value === currentType) opt.selected = true;
+          });
+          if (isAutoType) typeSel.addClass("auto-detected");
+          typeSel.addEventListener("change", () => {
+            setType(h, typeSel.value as ColType);
+            renderRows();
+          });
+          if (isAutoType) typeCell.createSpan({ cls: "csv-modal-colcfg-auto-badge", text: "auto" });
+        }
 
-        const roleSel = controls.createEl("select", { cls: "csv-modal-select csv-modal-colcfg-role" });
-        // roleOf already reflects an auto-detected role in `role` (not just
-        // `auto`) — e.g. a column literally named "Status" shows "Status"
-        // selected here with no config saved at all, matching what
-        // getStatusCol() already resolves by name at render time. The badge
-        // is just there to distinguish "picked by name" from "picked by you".
+        // ── Function cell ──
+        const fnCell = row.createEl("td", { cls: "csv-modal-colcfg-fn-cell" });
+        const roleSel = fnCell.createEl("select", { cls: "csv-modal-select csv-modal-colcfg-role" });
         const { role: currentRole, auto: isAutoRole } = roleOf(h);
         ROLE_OPTIONS.forEach(o => {
           const opt = roleSel.createEl("option", { text: o.label, value: o.value });
           if (o.value === currentRole) opt.selected = true;
         });
-        if (isAutoRole) {
-          roleSel.addClass("auto-detected");
-          controls.createSpan({ cls: "csv-modal-colcfg-auto-badge", text: "auto (by name)" });
-        }
+        if (isAutoRole) roleSel.addClass("auto-detected");
         roleSel.addEventListener("change", () => {
           setRole(h, roleSel.value as Role);
           renderRows();
         });
+        if (isAutoRole) fnCell.createSpan({ cls: "csv-modal-colcfg-auto-badge", text: "auto" });
 
-        const toggle = (label: string, checked: boolean, autoDetected: boolean, onChange: (v: boolean) => void) => {
-          const lbl = controls.createEl("label", { cls: "csv-modal-checkbox-label csv-modal-colcfg-toggle" });
-          const cb = lbl.createEl("input", { type: "checkbox" });
-          cb.checked = checked;
-          if (autoDetected) lbl.addClass("auto-detected");
-          lbl.createSpan({ text: label });
-          cb.addEventListener("change", () => onChange(cb.checked));
-        };
-
-        toggle("Habit", selectedHabits.has(h), this.autoDetectedHabits.includes(h) && !this.current.habitColumns, checked => {
-          if (!this.current.habitColumns) this.current.habitColumns = [...this.autoDetectedHabits];
-          if (checked) { if (!this.current.habitColumns.includes(h)) this.current.habitColumns.push(h); }
-          else { this.current.habitColumns = this.current.habitColumns.filter(c => c !== h); }
-        });
-
-        toggle("Card field", selectedCard.has(h), autoCardFields.includes(h) && !this.current.cardFields, checked => {
+        // ── Card field cell ──
+        const cardCell = row.createEl("td", { cls: "csv-modal-colcfg-card-cell" });
+        const cardCb = cardCell.createEl("input", { type: "checkbox" });
+        cardCb.checked = selectedCard.has(h);
+        if (autoCardFields.includes(h) && !this.current.cardFields) cardCb.addClass("auto-detected");
+        cardCb.addEventListener("change", () => {
           if (!this.current.cardFields) this.current.cardFields = [...autoCardFields];
-          if (checked) { if (!this.current.cardFields.includes(h)) this.current.cardFields.push(h); }
+          if (cardCb.checked) { if (!this.current.cardFields.includes(h)) this.current.cardFields.push(h); }
           else { this.current.cardFields = this.current.cardFields.filter(c => c !== h); }
         });
-
-        // The title/index column is always a free-text identifier — never
-        // offered as a categorical candidate at all.
-        if (h !== titleCol) {
-          toggle("Categorical", selectedCategorical.has(h), this.autoDetectedCategorical.includes(h) && !this.current.categoricalColumns, checked => {
-            if (!this.current.categoricalColumns) this.current.categoricalColumns = [...this.autoDetectedCategorical];
-            if (checked) { if (!this.current.categoricalColumns.includes(h)) this.current.categoricalColumns.push(h); }
-            else { this.current.categoricalColumns = this.current.categoricalColumns.filter(c => c !== h); }
-          });
-        }
       });
     };
     renderRows();

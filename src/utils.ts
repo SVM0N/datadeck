@@ -6,11 +6,12 @@ import { CSVRow } from "./types";
 // thumbnails. Matched case-insensitively against headers (see getImageCol).
 export const IMAGE_COL_ALIASES = ["Image", "image", "Cover", "cover", "Poster", "poster", "Thumbnail", "thumbnail", "Thumb", "thumb", "Photo", "photo", "Picture", "picture", "Img", "img"];
 
-// Column-name aliases for the three other name-detected roles (see
-// getCategoryCol/getStatusCol/getNotesCol). Shared between main.ts,
+// Column-name aliases for the four other name-detected roles (see
+// titleKey/getCategoryCol/getStatusCol/getNotesCol). Shared between main.ts,
 // inline-view.ts, and the ⚙ Config modal's auto-detected role indicator, so
 // the modal's "this is auto-detected" badge always agrees with what the
 // views actually resolve at render time.
+export const TITLE_COL_ALIASES = ["Title", "title", "Name", "name"];
 export const CATEGORY_COL_ALIASES = [
   "Category","category","Categories","categories",
   "Genre","genre","Genres","genres",

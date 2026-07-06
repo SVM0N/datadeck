@@ -1961,91 +1961,90 @@ td .csv-select-chip {
   line-height: 1.4;
 }
 
-.csv-modal-checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  border-radius: var(--csv-radius-sm);
-  font-size: 12px;
-  color: var(--csv-text);
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.csv-modal-checkbox-label:hover {
-  background: var(--background-modifier-hover);
-}
-
-.csv-modal-checkbox-label.auto-detected {
-  background: rgba(52, 168, 83, 0.08);
-  border: 1px solid rgba(52, 168, 83, 0.2);
-}
-
-.csv-modal-column-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-height: 320px;
-  overflow-y: auto;
-  padding: 4px;
+/* Per-column config table: Column | Type | Function | Card field. A real
+   <table> that scrolls horizontally on narrow (phone) widths rather than
+   wrapping — same pattern as the sticky Table-view header — instead of
+   stacking each column's controls into a vertical card. */
+.csv-modal-colcfg-table-wrap {
+  max-height: 360px;
+  overflow: auto;
   background: var(--background-modifier-form-field);
   border: 1px solid var(--csv-border);
   border-radius: var(--csv-radius-sm);
 }
 
-/* Per-column config row: name + remove on top, role select + toggles below.
-   Vertical layout (not a wide side-by-side table) so it stays usable on a
-   phone-width modal — see handoff notes on DataDeck's mobile-first usage. */
-.csv-modal-colcfg-row {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px;
-  border-radius: var(--csv-radius-sm);
+.csv-modal-colcfg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
 }
 
-.csv-modal-colcfg-row:not(:last-child) {
+.csv-modal-colcfg-table th {
+  position: sticky;
+  top: 0;
+  text-align: left;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--csv-text-muted);
+  background: var(--background-secondary);
   border-bottom: 1px solid var(--csv-border);
+  white-space: nowrap;
+}
+
+.csv-modal-colcfg-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--csv-border);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.csv-modal-colcfg-table tbody tr:last-child td {
+  border-bottom: none;
 }
 
 .csv-modal-colcfg-name {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 6px;
-  font-size: 13px;
   font-weight: 600;
   color: var(--csv-text);
 }
 
-.csv-modal-colcfg-controls {
+.csv-modal-colcfg-type-cell, .csv-modal-colcfg-fn-cell {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
-.csv-modal-colcfg-role {
-  flex: 1 1 auto;
-  min-width: 180px;
+.csv-modal-colcfg-type, .csv-modal-colcfg-role {
+  min-width: 140px;
   width: auto;
 }
 
-.csv-modal-colcfg-role.auto-detected {
+.csv-modal-colcfg-role {
+  min-width: 220px;
+}
+
+.csv-modal-colcfg-fixed {
+  color: var(--csv-text-faint);
+  font-style: italic;
+}
+
+.csv-modal-colcfg-type.auto-detected, .csv-modal-colcfg-role.auto-detected {
   border-color: rgba(52, 168, 83, 0.4);
   background: rgba(52, 168, 83, 0.08);
+}
+
+.csv-modal-colcfg-card-cell input[type="checkbox"].auto-detected {
+  outline: 2px solid rgba(52, 168, 83, 0.35);
+  border-radius: 3px;
 }
 
 .csv-modal-colcfg-auto-badge {
   font-size: 11px;
   font-style: italic;
   color: var(--color-green, #34a853);
-  flex: 0 0 auto;
-}
-
-.csv-modal-colcfg-toggle {
-  padding: 4px 8px;
   flex: 0 0 auto;
 }
 

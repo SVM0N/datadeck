@@ -32,7 +32,7 @@ import {
 import Papa from "papaparse";
 import type { CardView } from "../main";
 import { CSVRow, ViewMode, FileConfig, CardViewSettings } from "./types";
-import { parseCSV, resolvePath, sanitizeFilename, showSelectPicker, IMAGE_COL_ALIASES, CATEGORY_COL_ALIASES, STATUS_COL_ALIASES, NOTES_COL_ALIASES, looksBoolean, looksCategorical, isMultiValueColName } from "./utils";
+import { parseCSV, resolvePath, sanitizeFilename, showSelectPicker, IMAGE_COL_ALIASES, TITLE_COL_ALIASES, CATEGORY_COL_ALIASES, STATUS_COL_ALIASES, NOTES_COL_ALIASES, looksBoolean, looksCategorical, isMultiValueColName } from "./utils";
 import { isDateCol } from "./field-types";
 import { AddEntryModal, NoteExpanderModal } from "./modals";
 import { renderTable } from "./view/table";
@@ -289,7 +289,10 @@ export class InlineCardHost extends MarkdownRenderChild {
     return this.resolveCol(CATEGORY_COL_ALIASES);
   }
   titleKey(): string | undefined {
-    return this.resolveCol(["Title", "title", "Name", "name"]) ?? undefined;
+    if (this.fileCfg.titleColumn) {
+      return this.headers.find(h => h.toLowerCase() === this.fileCfg.titleColumn!.toLowerCase()) ?? undefined;
+    }
+    return this.resolveCol(TITLE_COL_ALIASES) ?? undefined;
   }
   authorKey(): string | undefined {
     return this.resolveCol([

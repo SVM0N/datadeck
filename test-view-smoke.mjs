@@ -824,11 +824,13 @@ await test("note-expander: an explicit isCategoricalCol override wins over auto-
   assert(notesRow.querySelector(".csv-select-chip"), "explicit override renders Notes as a select chip");
 });
 
-// ── FileConfigModal: per-column config rows (⚙ Config panel) ────────────────
+// ── FileConfigModal: per-column config table (⚙ Config panel) ───────────────
+// Column | Type (Text/Checkbox/Categorical, exclusive) | Function
+// (Title/Category/Status/Notes/Image/Anki front, exclusive) | Card field.
 const { FileConfigModal } = await load("./src/modals.ts");
 
 function openFileConfigModal(headers, current, autoDetectedCategorical, overrides = {}) {
-  const autoDetectedRoles = { category: null, status: null, notes: null, image: null, anki: null, ...overrides.autoDetectedRoles };
+  const autoDetectedRoles = { title: null, category: null, status: null, notes: null, image: null, anki: null, ...overrides.autoDetectedRoles };
   const modal = new FileConfigModal(
     new StubApp(), headers, "test.csv", current, overrides.autoDetectedHabits ?? [],
     autoDetectedCategorical, autoDetectedRoles, overrides.availableModes ?? [],
@@ -844,109 +846,115 @@ function openFileConfigModal(headers, current, autoDetectedCategorical, override
 }
 
 function colConfigRowFor(modal, header) {
-  const rows = Array.from(modal.contentEl.querySelectorAll(".csv-modal-colcfg-row"));
+  const rows = Array.from(modal.contentEl.querySelectorAll(".csv-modal-colcfg-table tbody tr"));
   return rows.find(r => r.querySelector(".csv-modal-colcfg-name > span")?.textContent === header);
 }
 
-function toggleFor(modal, header, label) {
-  const row = colConfigRowFor(modal, header);
-  const labels = Array.from(row?.querySelectorAll(".csv-modal-colcfg-toggle") ?? []);
-  return labels.find(l => l.textContent === label)?.querySelector("input[type=checkbox]");
-}
-
-function categoricalCheckboxFor(modal, header) { return toggleFor(modal, header, "Categorical"); }
+function typeSelectFor(modal, header) { return colConfigRowFor(modal, header)?.querySelector(".csv-modal-colcfg-type"); }
 function roleSelectFor(modal, header) { return colConfigRowFor(modal, header)?.querySelector(".csv-modal-colcfg-role"); }
+function cardCheckboxFor(modal, header) { return colConfigRowFor(modal, header)?.querySelector(".csv-modal-colcfg-card-cell input[type=checkbox]"); }
+function typeBadgeFor(modal, header) { return colConfigRowFor(modal, header)?.querySelector(".csv-modal-colcfg-type-cell .csv-modal-colcfg-auto-badge"); }
+function fnBadgeFor(modal, header) { return colConfigRowFor(modal, header)?.querySelector(".csv-modal-colcfg-fn-cell .csv-modal-colcfg-auto-badge"); }
 
-function setRoleSelect(sel, value) {
+function setSelect(sel, value) {
   sel.value = value;
   sel.dispatchEvent(new window.Event("change", { bubbles: true }));
 }
 
-await test("FileConfigModal: categorical toggle pre-checks auto-detected columns and excludes the title", async () => {
+await test("FileConfigModal: Type reflects auto-detected categorical/checkbox; title never gets a picker", async () => {
   const headers = ["Title", "Type", "Notes"];
-  const modal = openFileConfigModal(headers, {}, ["Type"]);
-  assert(categoricalCheckboxFor(modal, "Type")?.checked, "auto-detected column is pre-checked");
-  assert(!categoricalCheckboxFor(modal, "Title"), "title column isn't offered as a categorical candidate at all");
+  const modal = openFileConfigModal(headers, {}, ["Type"], { autoDetectedHabits: ["Notes"] });
+  assert(typeSelectFor(modal, "Type").value === "categorical", "auto-detected categorical column shows Categorical");
+  assert(typeSelectFor(modal, "Type").hasClass("auto-detected"), "auto-detected Type gets the badge styling");
+  assert(typeSelectFor(modal, "Notes").value === "checkbox", "auto-detected boolean column shows Checkbox");
+  assert(!typeSelectFor(modal, "Title"), "title column gets no Type picker at all — it's always Text");
 });
 
-await test("FileConfigModal: toggling a categorical checkbox promotes an explicit list", async () => {
-  const headers = ["Title", "Type", "Notes"];
-  const modal = openFileConfigModal(headers, {}, ["Type"]);
-  const notesBox = categoricalCheckboxFor(modal, "Notes");
-  notesBox.checked = true;
-  notesBox.dispatchEvent(new window.Event("change", { bubbles: true }));
-  assert(modal.current.categoricalColumns.includes("Notes"), "checking Notes adds it to the explicit list");
-  assert(modal.current.categoricalColumns.includes("Type"), "the auto-detected pick is preserved on first touch");
+await test("FileConfigModal: Type is mutually exclusive — switching to Categorical removes a column from the habit list", async () => {
+  const headers = ["Title", "Watched"];
+  const modal = openFileConfigModal(headers, {}, [], { autoDetectedHabits: ["Watched"] });
+  assert(typeSelectFor(modal, "Watched").value === "checkbox", "starts out auto-detected as Checkbox");
 
-  const typeBox = categoricalCheckboxFor(modal, "Type");
-  typeBox.checked = false;
-  typeBox.dispatchEvent(new window.Event("change", { bubbles: true }));
-  assert(!modal.current.categoricalColumns.includes("Type"), "unchecking Type removes it from the explicit list");
+  setSelect(typeSelectFor(modal, "Watched"), "categorical");
+  assert(modal.current.categoricalColumns.includes("Watched"), "now in the explicit categorical list");
+  assert(!modal.current.habitColumns.includes("Watched"), "no longer in the habit list — a column is one Type, not two");
 });
 
-await test("FileConfigModal: an existing categoricalColumns config overrides the auto-detected pre-check", async () => {
+await test("FileConfigModal: an existing categoricalColumns config overrides the auto-detected Type pre-select", async () => {
   const headers = ["Title", "Type", "Notes"];
   const modal = openFileConfigModal(headers, { categoricalColumns: ["Notes"] }, ["Type"]);
-  assert(categoricalCheckboxFor(modal, "Notes")?.checked, "configured column is checked");
-  assert(!categoricalCheckboxFor(modal, "Type")?.checked, "auto-detected-but-not-configured column is unchecked once a config exists");
+  assert(typeSelectFor(modal, "Notes").value === "categorical", "configured column shows Categorical");
+  assert(typeSelectFor(modal, "Type").value === "text", "auto-detected-but-not-configured column falls back to Text once an explicit list exists");
 });
 
-await test("FileConfigModal: assigning a role to one column evicts the previous holder", async () => {
+await test("FileConfigModal: assigning a Function to one column evicts the previous holder", async () => {
   const headers = ["Title", "Genre", "Watched"];
   const modal = openFileConfigModal(headers, { categoryColumn: "Genre" }, []);
-  assert(roleSelectFor(modal, "Genre").value === "category", "Genre starts out holding the Category role");
+  assert(roleSelectFor(modal, "Genre").value === "category", "Genre starts out holding the Category function");
 
-  setRoleSelect(roleSelectFor(modal, "Watched"), "category");
-  assert(modal.current.categoryColumn === "Watched", "Watched now holds the Category role");
-  assert(roleSelectFor(modal, "Genre").value === "", "Genre's role select re-renders back to none");
+  setSelect(roleSelectFor(modal, "Watched"), "category");
+  assert(modal.current.categoryColumn === "Watched", "Watched now holds the Category function");
+  assert(roleSelectFor(modal, "Genre").value === "", "Genre's select re-renders back to none");
 });
 
-await test("FileConfigModal: reassigning a column's own role clears its previous field first", async () => {
+await test("FileConfigModal: reassigning a column's own function clears its previous field first", async () => {
   const headers = ["Title", "Status"];
   const modal = openFileConfigModal(headers, { notesColumn: "Status" }, []);
   assert(roleSelectFor(modal, "Status").value === "notes");
 
-  setRoleSelect(roleSelectFor(modal, "Status"), "status");
-  assert(modal.current.statusColumn === "Status", "Status column now holds the Status role");
+  setSelect(roleSelectFor(modal, "Status"), "status");
+  assert(modal.current.statusColumn === "Status", "Status column now holds the Status function");
   assert(!modal.current.notesColumn, "the old Notes assignment on the same column is cleared, not left dangling");
 });
 
-await test("FileConfigModal: role/toggle edits don't touch disk — only add/remove column does", async () => {
+await test("FileConfigModal: Title is a configurable Function, defaulting to the auto-detected Title/Name column", async () => {
+  const headers = ["Name", "Author", "Rating"];
+  const modal = openFileConfigModal(headers, {}, [], { autoDetectedRoles: { title: "Name" } });
+  assert(roleSelectFor(modal, "Name").value === "title", "Name column shows the Title function with nothing saved");
+  assert(roleSelectFor(modal, "Name").hasClass("auto-detected"));
+
+  setSelect(roleSelectFor(modal, "Author"), "title");
+  assert(modal.current.titleColumn === "Author", "Author now holds the Title function");
+  assert(roleSelectFor(modal, "Name").value === "", "Name's select clears back to none once overridden elsewhere");
+});
+
+await test("FileConfigModal: type/function/card-field edits don't touch disk — only add/remove column does", async () => {
   const headers = ["Title", "Genre", "Watched"];
   let getFileCfgCalls = 0;
   const modal = openFileConfigModal(headers, {}, [], {
     getFileCfg: () => { getFileCfgCalls++; return {}; },
   });
-  setRoleSelect(roleSelectFor(modal, "Genre"), "category");
-  toggleFor(modal, "Watched", "Habit").dispatchEvent(new window.Event("change", { bubbles: true }));
-  assert(getFileCfgCalls === 0, "editing roles/toggles is a pending, in-memory draft until Save — it must not refetch from disk");
+  setSelect(roleSelectFor(modal, "Genre"), "category");
+  setSelect(typeSelectFor(modal, "Watched"), "checkbox");
+  cardCheckboxFor(modal, "Watched").dispatchEvent(new window.Event("change", { bubbles: true }));
+  assert(getFileCfgCalls === 0, "editing type/function/card-field is a pending, in-memory draft until Save — it must not refetch from disk");
 });
 
-await test("FileConfigModal: a name-detected column shows its role with an auto badge, no config needed", async () => {
+await test("FileConfigModal: a name-detected Function column shows an auto badge, no config needed", async () => {
   // Mirrors a real project dash file: nothing in fileCfg, but "Status" already
   // resolves by name at render time (getStatusCol) — the row should show
-  // that, not "— no special role —", which is what prompted this feature.
+  // that, not "— no function —", which is what prompted this feature.
   const headers = ["Title", "Type", "Project", "Status"];
   const modal = openFileConfigModal(headers, {}, [], { autoDetectedRoles: { status: "Status" } });
   const sel = roleSelectFor(modal, "Status");
-  assert(sel.value === "status", "Status column shows the Status role even with nothing saved");
-  assert(sel.hasClass("auto-detected"), "auto-detected role select gets the auto-detected styling");
-  assert(colConfigRowFor(modal, "Status").textContent.includes("auto (by name)"), "row surfaces the auto badge text");
+  assert(sel.value === "status", "Status column shows the Status function even with nothing saved");
+  assert(sel.hasClass("auto-detected"), "auto-detected function select gets the auto-detected styling");
+  assert(fnBadgeFor(modal, "Status"), "row surfaces an auto badge in the Function cell");
 
   const typeSel = roleSelectFor(modal, "Type");
-  assert(typeSel.value === "", "a column with no matching alias and no config shows no role");
-  assert(!typeSel.hasClass("auto-detected"), "no badge when there's nothing auto-detected for this column");
+  assert(typeSel.value === "", "a column with no matching alias and no config shows no function");
+  assert(!fnBadgeFor(modal, "Type"), "no badge when there's nothing auto-detected for this column");
 });
 
 await test("FileConfigModal: an explicit override elsewhere suppresses the auto badge, matching runtime resolution", async () => {
   // getStatusCol() never blends a name-based guess back in once statusColumn
   // is set — even to a different column — so neither the auto pick nor the
-  // explicit pick should show "auto" once an override exists for the role.
+  // explicit pick should show "auto" once an override exists for the function.
   const headers = ["Title", "Status", "Progress"];
   const modal = openFileConfigModal(headers, { statusColumn: "Progress" }, [], { autoDetectedRoles: { status: "Status" } });
-  assert(roleSelectFor(modal, "Progress").value === "status", "the explicit override holds the Status role");
+  assert(roleSelectFor(modal, "Progress").value === "status", "the explicit override holds the Status function");
   assert(!roleSelectFor(modal, "Progress").hasClass("auto-detected"), "explicit picks aren't flagged as auto");
-  assert(roleSelectFor(modal, "Status").value === "", "the name-matched column no longer shows the role once something else is configured");
+  assert(roleSelectFor(modal, "Status").value === "", "the name-matched column no longer shows the function once something else is configured");
 });
 
 // ── Multi-select picker ──────────────────────────────────────────────────────

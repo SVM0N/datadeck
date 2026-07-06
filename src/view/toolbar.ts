@@ -12,7 +12,7 @@ import { syncToAnki, autoAnkiFrontCol } from "./anki";
 import { hasStatsColumns } from "./stats";
 import { hasTaskColumns } from "./tasks";
 import { effectiveGroupCol } from "./kanban";
-import { CATEGORY_COL_ALIASES, STATUS_COL_ALIASES, NOTES_COL_ALIASES, IMAGE_COL_ALIASES } from "../utils";
+import { TITLE_COL_ALIASES, CATEGORY_COL_ALIASES, STATUS_COL_ALIASES, NOTES_COL_ALIASES, IMAGE_COL_ALIASES } from "../utils";
 
 declare const __BUILD_TIME__: string;
 
@@ -203,6 +203,7 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
     // already use at render time — so the modal's "auto (by name)" badge
     // always agrees with what's actually driving the view right now.
     const autoDetectedRoles: AutoDetectedRoles = {
+      title: view.resolveCol(TITLE_COL_ALIASES),
       category: view.resolveCol(CATEGORY_COL_ALIASES),
       status: view.resolveCol(STATUS_COL_ALIASES),
       notes: view.resolveCol(NOTES_COL_ALIASES),

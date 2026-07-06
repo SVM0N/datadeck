@@ -30,6 +30,8 @@ export const DEFAULT_RESIDENCY_RULES: ResidencyRule[] = [
 
 // Per-file overrides, keyed by vault file path
 export interface FileConfig {
+  titleColumn?: string;       // Column treated as the title/primary identifier.
+                              // Unset = auto-detect by name (Title/Name).
   categoryColumn?: string;
   notesColumn?: string;
   statusColumn?: string;
