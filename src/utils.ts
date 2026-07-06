@@ -41,6 +41,17 @@ export function looksCategorical(distinctCount: number): boolean {
   return distinctCount >= 1 && distinctCount <= CATEGORICAL_MAX_DISTINCT;
 }
 
+// Boolean/habit-column value vocabulary — the single source of truth for
+// auto-detecting 0/1-style toggle columns (dashboard habits, add-form
+// toggles). Requires at least one existing row: `[].every(...)` is vacuously
+// true, which would otherwise misclassify every column on a brand-new/empty
+// sheet as boolean (every field would render as a toggle instead of its real
+// input type).
+const BOOLEAN_PATTERNS = ["0", "1", "true", "false", "yes", "no", ""];
+export function looksBoolean(values: string[]): boolean {
+  return values.length > 0 && values.every(v => BOOLEAN_PATTERNS.includes(v));
+}
+
 export function sanitizeFilename(name: string): string {
   return name.replace(/[\\/:*?"<>|#^[\]]/g,"").replace(/\s+/g," ").trim().slice(0,100);
 }

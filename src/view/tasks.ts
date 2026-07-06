@@ -256,20 +256,41 @@ export function renderTasks(view: CardView, container: HTMLElement): void {
   }, ["", "Name", "Due", "Priority"]);
 
   // ── Notes and Ideas sections ── peers of Tasks, each grouped by project.
-  // Same row rendering (type pill + name), just different buckets/titles.
+  // Same row rendering (type pill + name), just different buckets/titles. Gets
+  // the same done checkmark as Tasks rows (only when a status column exists) —
+  // a note/idea is just as markable-done as a task, and rows that land here
+  // (e.g. a miscategorized Type value) shouldn't lose the ability to be closed out.
   const fillNoteLike = (tbody: HTMLElement, items: CSVRow[]) => {
-    items.sort((a, b) => view.getTitle(a).localeCompare(view.getTitle(b)));
+    items.sort((a, b) => {
+      const da = isDone(view, a, statusCol), db = isDone(view, b, statusCol);
+      if (da !== db) return da ? 1 : -1;
+      return view.getTitle(a).localeCompare(view.getTitle(b));
+    });
     items.forEach(row => {
+      const done = isDone(view, row, statusCol);
       const tr = tbody.createEl("tr");
+
+      const checkCell = tr.createEl("td", { cls: "csv-tasks-check-cell" });
+      if (statusCol) {
+        const box = checkCell.createEl("span", { cls: `csv-tasks-check ${done ? "is-done" : ""}`, text: done ? "✓" : "" });
+        box.setAttr("title", done ? "Mark not done" : "Mark done");
+        box.addEventListener("click", e => {
+          e.stopPropagation();
+          row[statusCol] = done ? "" : doneWord;
+          view.scheduleSave();
+          view.renderView(true);
+        });
+      }
+
       const typeVal = typeCol ? (row[typeCol] || "") : "";
       const typeCell = tr.createEl("td", { cls: "csv-tasks-type-cell" });
       if (typeVal) typeCell.createSpan({ cls: "csv-tasks-type-pill", text: typeVal });
-      renderNameCell(view, tr, row, titleCol, false);
+      renderNameCell(view, tr, row, titleCol, done);
       tr.addEventListener("contextmenu", e => view.openRowContextMenu(row, e));
     });
   };
-  renderSection(wrap, "Notes", notesByProject, fillNoteLike, ["Type", "Name"]);
-  renderSection(wrap, "Ideas", ideasByProject, fillNoteLike, ["Type", "Name"]);
+  renderSection(wrap, "Notes", notesByProject, fillNoteLike, ["", "Type", "Name"]);
+  renderSection(wrap, "Ideas", ideasByProject, fillNoteLike, ["", "Type", "Name"]);
 
   if (Object.keys(tasksByProject).length === 0 && Object.keys(notesByProject).length === 0 && Object.keys(ideasByProject).length === 0) {
     const empty = wrap.createDiv({ cls: "csv-empty-state" });

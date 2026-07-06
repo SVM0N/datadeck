@@ -32,7 +32,7 @@ import {
 import Papa from "papaparse";
 import type { CardView } from "../main";
 import { CSVRow, ViewMode, FileConfig, CardViewSettings } from "./types";
-import { parseCSV, resolvePath, sanitizeFilename, showSelectPicker, IMAGE_COL_ALIASES } from "./utils";
+import { parseCSV, resolvePath, sanitizeFilename, showSelectPicker, IMAGE_COL_ALIASES, looksBoolean } from "./utils";
 import { AddEntryModal, NoteExpanderModal } from "./modals";
 import { renderTable } from "./view/table";
 import { renderLibrary } from "./view/library";
@@ -296,10 +296,10 @@ export class InlineCardHost extends MarkdownRenderChild {
   // true/false/yes/no/empty). Drives the add-form toggles.
   getBooleanColumns(): string[] {
     if (this.fileCfg.habitColumns?.length) return this.fileCfg.habitColumns.filter(h => this.headers.includes(h));
-    const boolPatterns = ["0", "1", "true", "false", "yes", "no", ""];
     return this.headers.filter(h => {
       if (h === this.getDateCol() || this.isNotesCol(h)) return false;
-      return this.rows.map(r => (r[h] ?? "").toLowerCase().trim()).every(v => boolPatterns.includes(v));
+      const values = this.rows.map(r => (r[h] ?? "").toLowerCase().trim());
+      return looksBoolean(values);
     });
   }
   getDateCol(): string | null {

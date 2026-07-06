@@ -19,7 +19,7 @@ import type { Chart as ChartType } from "chart.js";
 
 // Import from src modules
 import { CSVRow, ViewMode, FileConfig, CardViewSettings, DEFAULT_SETTINGS, CARD_VIEW_TYPE } from "./src/types";
-import { sanitizeFilename, tagify, titleCase, formatRatingForDisplay, showSelectPicker, parseCSV, migrateFileConfigKey, sortRowsByColumn, isMultiValueColName, IMAGE_COL_ALIASES } from "./src/utils";
+import { sanitizeFilename, tagify, titleCase, formatRatingForDisplay, showSelectPicker, parseCSV, migrateFileConfigKey, sortRowsByColumn, isMultiValueColName, IMAGE_COL_ALIASES, looksBoolean } from "./src/utils";
 import { AddEntryModal, NoteExpanderModal, FileConfigModal, SearchModal, PromptModal } from "./src/modals";
 import { renderTravel } from "./src/travel-view";
 import { CardViewSettingTab } from "./src/settings-tab";
@@ -753,12 +753,11 @@ export class CardView extends FileView {
   }
 
   autoDetectBooleanColumns(): string[] {
-    // Detect columns that look like boolean/habit columns (values are 0/1, true/false, yes/no, or empty)
-    const boolPatterns = ["0", "1", "true", "false", "yes", "no", ""];
+    // Detect columns that look like boolean/habit columns (values are 0/1, true/false, yes/no, or empty).
     return this.headers.filter(h => {
       if (h === this.getDateCol() || this.isNotesCol(h)) return false;
       const values = this.rows.map(r => (r[h] ?? "").toLowerCase().trim());
-      return values.every(v => boolPatterns.includes(v));
+      return looksBoolean(values);
     });
   }
 

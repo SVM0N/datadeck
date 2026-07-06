@@ -626,6 +626,22 @@ await test("table: clicking a header cycles sort asc → desc → off", async ()
   assert(view.tableSortCol === null, "third click clears the sort");
 });
 
+// ── Boolean/habit-column auto-detection ─────────────────────────────────────
+const { looksBoolean } = await load("./src/utils.ts");
+
+await test("looksBoolean: empty column (no rows yet) is never boolean", async () => {
+  // Regression test: [].every(...) is vacuously true in JS, which used to
+  // misclassify every column as a toggle on a brand-new/empty sheet.
+  assert(looksBoolean([]) === false, "an empty sheet's columns should not auto-toggle");
+});
+
+await test("looksBoolean: recognizes 0/1/true/false/yes/no/empty vocabularies", async () => {
+  assert(looksBoolean(["0", "1", "1", ""]), "0/1/empty is boolean");
+  assert(looksBoolean(["true", "false"]), "true/false is boolean");
+  assert(looksBoolean(["yes", "no", ""]), "yes/no/empty is boolean");
+  assert(!looksBoolean(["0", "1", "Task"]), "a non-boolean value disqualifies the column");
+});
+
 // ── Multi-select picker ──────────────────────────────────────────────────────
 const { showSelectPicker, isMultiValueColName } = await load("./src/utils.ts");
 
@@ -890,6 +906,21 @@ await test("tasks: sorts done last, then by priority, then due", async () => {
   assert(order.join(",") === "A-high,D-med,B-low,C-done", `priority order, done last (got ${order})`);
   assert(c.querySelector(".csv-tasks-link").classList.contains("csv-tasks-done") === false, "top row not struck through");
   assert(Array.from(c.querySelectorAll(".csv-tasks-link")).pop().classList.contains("csv-tasks-done"), "done row struck through");
+});
+
+await test("tasks: Notes/Ideas rows get a done checkmark too", async () => {
+  const rows = [
+    { Name: "Idea A", Project: "P", Type: "idea", Status: "", Due: "", Priority: "" },
+    { Name: "Ref B", Project: "P", Type: "reference", Status: "done", Due: "", Priority: "" },
+  ];
+  const c = document.body.createDiv();
+  renderTasks(tasksView(rows), c);
+  const checks = c.querySelectorAll(".csv-tasks-check");
+  assert(checks.length === 2, `Notes + Ideas rows both get a checkbox (got ${checks.length})`);
+  assert(Array.from(checks).some(el => el.classList.contains("is-done")), "the already-done row renders checked");
+  const notDone = Array.from(checks).find(el => !el.classList.contains("is-done"));
+  notDone.click();
+  assert(rows.find(r => r.Name === "Idea A").Status === "done", "clicking marks the idea done");
 });
 
 await test("tasks: not-done past-due rows are flagged overdue", async () => {
