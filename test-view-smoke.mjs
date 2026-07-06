@@ -725,7 +725,7 @@ function openAddModal(headers, rows, overrides = {}) {
   const modal = new AddEntryModal(
     new StubApp(), headers, isNotesCol, isSelectCol, getColumnValues, () => {},
     overrides.optionPresets ?? {}, overrides.isBooleanCol ?? (() => false),
-    overrides.isCategoricalCol,
+    overrides.isCategoricalCol, overrides.titleCol,
   );
   modal.contentEl = document.body.createDiv();
   modal.onOpen();
@@ -791,7 +791,7 @@ function openExpander(row, headers, overrides = {}) {
   const modal = new NoteExpanderModal(
     new StubApp(), row, overrides.notesCol ?? "", headers, "test.csv",
     isNotesCol, isSelectCol, getColumnValues, () => {}, undefined,
-    overrides.isCategoricalCol,
+    overrides.isCategoricalCol, overrides.titleCol,
   );
   modal.contentEl = document.body.createDiv();
   modal.onOpen();
@@ -822,6 +822,33 @@ await test("note-expander: an explicit isCategoricalCol override wins over auto-
   const fieldRows = Array.from(modal.contentEl.querySelectorAll(".csv-expander-field-row"));
   const notesRow = fieldRows.find(r => r.querySelector(".csv-expander-field-label")?.textContent === "Notes");
   assert(notesRow.querySelector(".csv-select-chip"), "explicit override renders Notes as a select chip");
+});
+
+await test("note-expander: an explicit titleCol override drives the header, the field exclusion, and the delete label", async () => {
+  // A file whose real identifier isn't named Title/Name (e.g. "Slug") would
+  // otherwise fall back to headers[0] and get treated as an ordinary field —
+  // this is what ⚙ Config's Title function is for.
+  const headers = ["Slug", "Status"];
+  const row = { Slug: "hello-world", Status: "Open" };
+  let deletedLabel = null;
+  const modal = openExpander(row, headers, {
+    titleCol: "Slug",
+    isCategoricalCol: () => true, // even if it would otherwise be categorical
+    getColumnValues: () => ["Open", "Closed"],
+  });
+  assert(modal.contentEl.querySelector(".csv-expander-title").textContent === "hello-world", "header uses the overridden title column's value");
+  const fieldRows = Array.from(modal.contentEl.querySelectorAll(".csv-expander-field-row"));
+  const slugRow = fieldRows.find(r => r.querySelector(".csv-expander-field-label")?.textContent === "Slug");
+  assert(!slugRow.querySelector(".csv-select-chip"), "the overridden title column is still excluded from the dropdown treatment");
+});
+
+await test("add-entry: an explicit titleCol override excludes a non-conventionally-named identifier from the dropdown", async () => {
+  const headers = ["Slug", "Status"];
+  const rows = [{ Slug: "a", Status: "Open" }, { Slug: "b", Status: "Open" }];
+  const modal = openAddModal(headers, rows, { titleCol: "Slug" });
+  const slugRow = fieldRowFor(modal, "Slug");
+  assert(slugRow.querySelector("input.csv-modal-input"), "the overridden title column stays a plain text input");
+  assert(!slugRow.querySelector("select"), "never a <select>, even with few distinct existing values");
 });
 
 // ── FileConfigModal: per-column config table (⚙ Config panel) ───────────────

@@ -61,6 +61,13 @@ export class AddEntryModal extends Modal {
   // back to the historical auto-detection (configured select column, or a
   // low-cardinality "pseudo-categorical" one).
   isCategoricalCol: (h: string) => boolean;
+  // The title/index column, excluded from every dropdown branch below since
+  // it's always a free-text identifier. Optional so callers that don't have
+  // a resolved titleKey() (or older call sites/tests) fall back to the
+  // historical by-name guess — but a caller passing its own resolved title
+  // (which already honours FileConfig.titleColumn) is what makes a
+  // per-file Title override actually take effect here too.
+  titleCol: string | undefined;
 
   constructor(
     app: App,
@@ -72,6 +79,7 @@ export class AddEntryModal extends Modal {
     optionPresets: Record<string, string[]> = {},
     isBooleanCol: (h: string) => boolean = () => false,
     isCategoricalCol?: (h: string) => boolean,
+    titleCol?: string,
   ) {
     super(app);
     this.headers = headers;
@@ -82,6 +90,7 @@ export class AddEntryModal extends Modal {
     this.optionPresets = optionPresets;
     this.isBooleanCol = isBooleanCol;
     this.isCategoricalCol = isCategoricalCol ?? ((h) => this.isSelectCol(h) || looksCategorical(this.getColumnValues(h).length));
+    this.titleCol = titleCol ?? this.headers.find(h => ["title", "name"].includes(h.toLowerCase()));
   }
 
   onOpen(): void {
@@ -98,7 +107,7 @@ export class AddEntryModal extends Modal {
     // Duplicate check for the title field — typing a title that's already in
     // the file shows a non-blocking hint (the user may genuinely want a
     // duplicate, e.g. a rewatch row, so submission stays allowed).
-    const titleCol = this.headers.find(h => ["title", "name"].includes(h.toLowerCase()));
+    const titleCol = this.titleCol;
     const existingTitles = new Map<string, string>(); // lowercase → original casing
     if (titleCol) {
       this.getColumnValues(titleCol).forEach(v => {
@@ -255,6 +264,13 @@ export class NoteExpanderModal extends Modal {
   private onSave: (row: CSVRow) => void;
   private onDelete?: () => void;
   private isCategoricalCol: (h: string) => boolean;
+  // The title/index column. Optional so callers/tests that don't have a
+  // resolved titleKey() fall back to the historical by-name guess — but a
+  // caller passing its own resolved title (already honouring
+  // FileConfig.titleColumn) is what makes a per-file Title override
+  // actually take effect in the header, the field list, and the delete
+  // confirmation, instead of always re-guessing by name internally.
+  private titleCol: string | undefined;
 
   constructor(
     app: App,
@@ -268,6 +284,7 @@ export class NoteExpanderModal extends Modal {
     onSave: (row: CSVRow) => void,
     onDelete?: () => void,
     isCategoricalCol?: (h: string) => boolean,
+    titleCol?: string,
   ) {
     super(app);
     // Work on a shallow copy so cancel doesn't mutate
@@ -283,6 +300,7 @@ export class NoteExpanderModal extends Modal {
     this.onDelete = onDelete;
     this.isCategoricalCol = isCategoricalCol
       ?? ((h) => this.isSelectCol(h) || (!isDateCol(h) && looksCategorical(this.getColumnValues(h).length)));
+    this.titleCol = titleCol ?? this.headers.find(h => ["title", "name", "Title", "Name"].includes(h));
     this.modalEl.addClass("csv-note-expander-modal");
   }
 
@@ -322,12 +340,12 @@ export class NoteExpanderModal extends Modal {
 
     // ── Header ──────────────────────────────────────────────────────────────
     const header = contentEl.createDiv({ cls: "csv-expander-header" });
-    header.createDiv({ cls: "csv-expander-title", text: this.row[this.headers.find(h => ["title","name","Title","Name"].includes(h)) ?? this.headers[0]] ?? "—" });
+    header.createDiv({ cls: "csv-expander-title", text: this.row[this.titleCol ?? this.headers[0]] ?? "—" });
     const headerBtns = header.createDiv({ cls: "csv-expander-header-btns" });
 
     // ── Fields section (non-notes columns) ──────────────────────────────────
     const fieldsEl = contentEl.createDiv({ cls: "csv-expander-fields" });
-    const titleKey = this.headers.find(h => ["title","name","Title","Name"].includes(h));
+    const titleKey = this.titleCol;
     const authorKey = this.headers.find(h => ["author","Author","director","Director","artist","Artist","creator","Creator"].includes(h));
 
     this.headers.forEach(h => {
@@ -447,7 +465,7 @@ export class NoteExpanderModal extends Modal {
     const footer = contentEl.createDiv({ cls: "csv-expander-footer" });
 
     if (this.onDelete) {
-      const titleVal = String(this.row[this.headers.find(h => ["title","name","Title","Name"].includes(h)) ?? this.headers[0]] ?? "").trim();
+      const titleVal = String(this.row[this.titleCol ?? this.headers[0]] ?? "").trim();
       footer.createEl("button", { cls: "csv-expander-delete-btn", text: "Delete" })
         .addEventListener("click", () => {
           const label = titleVal || "this entry";

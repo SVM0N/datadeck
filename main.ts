@@ -449,7 +449,8 @@ export class CardView extends FileView {
       },
       // Delete with undo: the helper handles splice + save + rerender + Notice.
       () => this.deleteWithUndo(row),
-      this.isCategoricalCol.bind(this)
+      this.isCategoricalCol.bind(this),
+      this.titleKey()
     ).open();
   }
 
@@ -536,7 +537,8 @@ export class CardView extends FileView {
       optionPresets,
       // Habit/0-1 columns render as toggles in the add form.
       (h) => this.getBooleanColumns().includes(h),
-      this.isCategoricalCol.bind(this)
+      this.isCategoricalCol.bind(this),
+      this.titleKey()
     ).open();
   }
 
@@ -776,8 +778,12 @@ export class CardView extends FileView {
   }
 
   getBooleanColumns(): string[] {
-    // Use configured habit columns if set, otherwise auto-detect
-    if (this.fileCfg.habitColumns && this.fileCfg.habitColumns.length > 0) {
+    // Explicit list wins outright once set, even if empty — same semantics
+    // as isCategoricalCol's categoricalColumns check. Previously this used
+    // `.length > 0`, which meant explicitly unchecking every Checkbox column
+    // in ⚙ Config (leaving the list empty) silently fell back to
+    // auto-detection instead of actually turning the habit tracker off.
+    if (this.fileCfg.habitColumns) {
       return this.fileCfg.habitColumns.filter(h => this.headers.includes(h));
     }
     return this.autoDetectBooleanColumns();

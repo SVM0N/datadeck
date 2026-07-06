@@ -88,7 +88,10 @@ export async function renderAddEntryForm(app: App, source: string, el: HTMLEleme
     const otherCols = headers.filter(h => !binaryCols.includes(h) && !dateCols.includes(h) && !notesCols.includes(h));
     // The title/index column is a free-text identifier — never a categorical
     // dropdown, even if it happens to have few distinct existing values.
-    const titleCol = headers.find(h => ["title", "name"].includes(h.toLowerCase()));
+    // Per-file Config override wins, same as titleKey() elsewhere.
+    const titleCol = fileCfg.titleColumn
+      ? headers.find(h => h.toLowerCase() === fileCfg.titleColumn!.toLowerCase())
+      : headers.find(h => ["title", "name"].includes(h.toLowerCase()));
 
     // Render as one collapsible "menu" (Apple-style grouped card):
     //   - Default state: a single discreet "+ New entry" pill.

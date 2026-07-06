@@ -312,7 +312,9 @@ export class InlineCardHost extends MarkdownRenderChild {
   // Habit/0-1 columns — configured list or auto-detected (all values 0/1/
   // true/false/yes/no/empty). Drives the add-form toggles.
   getBooleanColumns(): string[] {
-    if (this.fileCfg.habitColumns?.length) return this.fileCfg.habitColumns.filter(h => this.headers.includes(h));
+    // Explicit list wins outright once set, even if empty — matches
+    // isCategoricalCol's categoricalColumns check and main.ts's CardView.
+    if (this.fileCfg.habitColumns) return this.fileCfg.habitColumns.filter(h => this.headers.includes(h));
     return this.headers.filter(h => {
       if (h === this.getDateCol() || this.isNotesCol(h)) return false;
       const values = this.rows.map(r => (r[h] ?? "").toLowerCase().trim());
@@ -438,6 +440,7 @@ export class InlineCardHost extends MarkdownRenderChild {
       (updatedRow) => { Object.assign(row, updatedRow); this.scheduleSave(); this.renderView(); },
       () => this.deleteWithUndo(row),
       this.isCategoricalCol.bind(this),
+      this.titleKey(),
     ).open();
   }
 
@@ -454,6 +457,7 @@ export class InlineCardHost extends MarkdownRenderChild {
       // Habit/0-1 columns render as toggles in the add form.
       (h) => this.getBooleanColumns().includes(h),
       this.isCategoricalCol.bind(this),
+      this.titleKey(),
     ).open();
   }
 
