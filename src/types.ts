@@ -49,6 +49,13 @@ export interface FileConfig {
   ankiFrontCol?: string;      // Column used as the Anki card front on sync.
                               // Unset = the title/primary field; every other
                               // non-empty column becomes the card back.
+  categoricalColumns?: string[]; // Columns that render as a dropdown (Add
+                              // entry / entry editor / mobile add form)
+                              // instead of free text. Unset = auto-detect
+                              // (settings.selectColumns ∪ low-cardinality
+                              // columns, via looksCategorical). The title/
+                              // index column and date columns are never
+                              // categorical regardless of this list.
 }
 
 export type LibrarySort = "status" | "title" | "rating" | "year";

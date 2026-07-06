@@ -56,6 +56,11 @@ export class AddEntryModal extends Modal {
   // { Type: ["Task","Note","Idea"], Priority: ["Low","Medium","High"] } so a
   // brand-new file offers them before any row exists to harvest values from.
   optionPresets: Record<string, string[]>;
+  // Whether a column should render as a dropdown rather than free text.
+  // Optional so callers that don't have a per-file categorical list fall
+  // back to the historical auto-detection (configured select column, or a
+  // low-cardinality "pseudo-categorical" one).
+  isCategoricalCol: (h: string) => boolean;
 
   constructor(
     app: App,
@@ -65,7 +70,8 @@ export class AddEntryModal extends Modal {
     getColumnValues: (h: string) => string[],
     onSubmit: (row: CSVRow) => void,
     optionPresets: Record<string, string[]> = {},
-    isBooleanCol: (h: string) => boolean = () => false
+    isBooleanCol: (h: string) => boolean = () => false,
+    isCategoricalCol?: (h: string) => boolean,
   ) {
     super(app);
     this.headers = headers;
@@ -75,6 +81,7 @@ export class AddEntryModal extends Modal {
     this.onSubmit = onSubmit;
     this.optionPresets = optionPresets;
     this.isBooleanCol = isBooleanCol;
+    this.isCategoricalCol = isCategoricalCol ?? ((h) => this.isSelectCol(h) || looksCategorical(this.getColumnValues(h).length));
   }
 
   onOpen(): void {
@@ -109,23 +116,20 @@ export class AddEntryModal extends Modal {
       const presets = this.optionPresets[h] ?? [];
       // The title/index column is always a free-text identifier — never a
       // dropdown, whether that's inferred (few distinct values / presets) or
-      // configured (settings.selectColumns / a future per-file categorical
-      // list). It's excluded up front so none of the branches below can
-      // route it into a select.
+      // configured (settings.selectColumns / a per-file categorical list).
+      // It's excluded up front so none of the branches below can route it
+      // into a select.
       const isTitleCol = h === titleCol;
-      // Single-value option columns (preset-backed or configured select) render
-      // as a native <select>. Crucially this keeps focus *inside* the modal —
-      // the body-appended showSelectPicker (used elsewhere) loses focus to the
-      // modal's focus-trap, which on an empty column made the field unfillable
-      // (it bounced back to the title). Multi-value columns (tags/genres) still
+      const isMulti = isMultiValueColName(h);
+      // Single-value categorical columns (preset-backed, or via
+      // isCategoricalCol — configured select / per-file categorical list /
+      // pseudo-categorical low-cardinality) render as a native <select>.
+      // Crucially this keeps focus *inside* the modal — the body-appended
+      // showSelectPicker (used elsewhere) loses focus to the modal's
+      // focus-trap, which on an empty column made the field unfillable (it
+      // bounced back to the title). Multi-value columns (tags/genres) still
       // use the chip picker since a native select can't multi-select cleanly.
-      // Pseudo-categorical: an un-configured column whose existing values are
-      // few enough to be a closed-ish vocabulary (e.g. Watched, Format) gets a
-      // dropdown of its values + "Custom…" too — not just the names listed in
-      // settings.selectColumns. Same heuristic as the mobile add form.
-      const autoCategorical = !isTitleCol && !this.isSelectCol(h) && !isMultiValueColName(h)
-        && !isDateCol(h) && looksCategorical(this.getColumnValues(h).length);
-      const useNativeSelect = !isTitleCol && !this.isNotesCol(h) && (presets.length > 0 || (this.isSelectCol(h) && !isMultiValueColName(h)) || autoCategorical);
+      const useNativeSelect = !isTitleCol && !this.isNotesCol(h) && !isMulti && (presets.length > 0 || this.isCategoricalCol(h));
 
       if (this.isBooleanCol(h)) {
         // Habit-style 0/1 column → a toggle. Off writes "0", on "1", so logging
@@ -176,7 +180,7 @@ export class AddEntryModal extends Modal {
           }
         });
 
-      } else if (!isTitleCol && this.isSelectCol(h)) {
+      } else if (!isTitleCol && isMulti && this.isSelectCol(h)) {
         // Multi-value select (tags/genres/themes): chip + picker, which the
         // picker's "+ Add" / existing-value clicks drive. Still works inside
         // the modal because the user clicks options rather than typing into a
@@ -250,6 +254,7 @@ export class NoteExpanderModal extends Modal {
   private getColumnValues: (h: string) => string[];
   private onSave: (row: CSVRow) => void;
   private onDelete?: () => void;
+  private isCategoricalCol: (h: string) => boolean;
 
   constructor(
     app: App,
@@ -261,7 +266,8 @@ export class NoteExpanderModal extends Modal {
     isSelectCol: (h: string) => boolean,
     getColumnValues: (h: string) => string[],
     onSave: (row: CSVRow) => void,
-    onDelete?: () => void
+    onDelete?: () => void,
+    isCategoricalCol?: (h: string) => boolean,
   ) {
     super(app);
     // Work on a shallow copy so cancel doesn't mutate
@@ -275,6 +281,8 @@ export class NoteExpanderModal extends Modal {
     this.getColumnValues = getColumnValues;
     this.onSave = onSave;
     this.onDelete = onDelete;
+    this.isCategoricalCol = isCategoricalCol
+      ?? ((h) => this.isSelectCol(h) || (!isDateCol(h) && looksCategorical(this.getColumnValues(h).length)));
     this.modalEl.addClass("csv-note-expander-modal");
   }
 
@@ -328,13 +336,16 @@ export class NoteExpanderModal extends Modal {
       // titleCase: Apple-style row labels, independent of CSV header casing.
       fieldRow.createDiv({ cls: "csv-expander-field-label", text: titleCase(h) });
 
-      // Configured select column, or a pseudo-categorical one (few distinct
-      // values, e.g. Watched/Format) — both get the chip + option picker, so
-      // editing offers the same vocabulary the add form does. The title/index
-      // column is excluded — it's a free-text identifier, never a dropdown,
-      // even if it's short on distinct values or listed in selectColumns.
-      const selectLike = h !== titleKey && (this.isSelectCol(h)
-        || (!isMultiValueColName(h) && !isDateCol(h) && looksCategorical(this.getColumnValues(h).length)));
+      // Configured select column, per-file categorical list, or a
+      // pseudo-categorical one (few distinct values, e.g. Watched/Format) —
+      // all get the chip + option picker, so editing offers the same
+      // vocabulary the add form does. The title/index column is excluded —
+      // it's a free-text identifier, never a dropdown, even if it's short on
+      // distinct values or listed in selectColumns. Multi-value columns
+      // (tags/genres) key off isSelectCol directly — isCategoricalCol never
+      // treats them as categorical (a native select can't multi-select).
+      const isMulti = isMultiValueColName(h);
+      const selectLike = h !== titleKey && (isMulti ? this.isSelectCol(h) : this.isCategoricalCol(h));
       if (selectLike) {
         const chip = fieldRow.createDiv({ cls: `csv-select-chip ${this.row[h] ? "" : "empty"}` });
         chip.setText(this.row[h] || "—");
@@ -642,6 +653,7 @@ export class FileConfigModal extends Modal {
   filePath: string;
   current: FileConfig;
   autoDetectedHabits: string[];
+  autoDetectedCategorical: string[];
   availableModes: { id: ViewMode; label: string }[];
   onSave: (cfg: FileConfig) => void;
   // Column-structure ops (add/remove the CSV column itself, not its role).
@@ -654,6 +666,7 @@ export class FileConfigModal extends Modal {
 
   constructor(
     app: App, headers: string[], filePath: string, current: FileConfig, autoDetectedHabits: string[],
+    autoDetectedCategorical: string[],
     availableModes: { id: ViewMode; label: string }[], onSave: (cfg: FileConfig) => void,
     getHeaders: () => string[], getFileCfg: () => FileConfig,
     onAddColumn: (name: string) => string | null, onRemoveColumn: (header: string) => void,
@@ -661,8 +674,13 @@ export class FileConfigModal extends Modal {
     super(app);
     this.headers = headers;
     this.filePath = filePath;
-    this.current = { ...current, habitColumns: current.habitColumns ? [...current.habitColumns] : undefined };
+    this.current = {
+      ...current,
+      habitColumns: current.habitColumns ? [...current.habitColumns] : undefined,
+      categoricalColumns: current.categoricalColumns ? [...current.categoricalColumns] : undefined,
+    };
     this.autoDetectedHabits = autoDetectedHabits;
+    this.autoDetectedCategorical = autoDetectedCategorical;
     this.availableModes = availableModes;
     this.onSave = onSave;
     this.getHeaders = getHeaders;
@@ -689,7 +707,11 @@ export class FileConfigModal extends Modal {
     const refresh = () => {
       this.headers = this.getHeaders();
       const cfg = this.getFileCfg();
-      this.current = { ...cfg, habitColumns: cfg.habitColumns ? [...cfg.habitColumns] : undefined };
+      this.current = {
+        ...cfg,
+        habitColumns: cfg.habitColumns ? [...cfg.habitColumns] : undefined,
+        categoricalColumns: cfg.categoricalColumns ? [...cfg.categoricalColumns] : undefined,
+      };
       this.onOpen();
     };
 
@@ -809,6 +831,44 @@ export class FileConfigModal extends Modal {
           if (!this.current.cardFields.includes(h)) this.current.cardFields.push(h);
         } else {
           this.current.cardFields = this.current.cardFields.filter(c => c !== h);
+        }
+      });
+    });
+
+    // Categorical columns — which columns render as a dropdown (Add entry /
+    // entry editor / mobile add form) instead of free text. If never set,
+    // defaults to auto-detected (a configured select column, or a
+    // low-cardinality "pseudo-categorical" one — same heuristic as the add
+    // form). The title/index column can't be made categorical — it's always
+    // a free-text identifier — so it's left out of the list entirely.
+    const catRow = form.createDiv({ cls: "csv-modal-row" });
+    catRow.createEl("label", { text: "Categorical columns (dropdown in Add / Edit)", cls: "csv-modal-label" });
+    catRow.createEl("p", { cls: "csv-modal-hint", text: "Columns offered as a picker instead of free text when adding or editing an entry. Auto-detected low-cardinality columns are pre-selected." });
+    const catGrid = catRow.createDiv({ cls: "csv-modal-checkbox-grid csv-modal-categorical-grid" });
+
+    const titleCol = this.headers.find(h => ["title", "name", "Title", "Name"].includes(h)) ?? this.headers[0];
+    const categoricalCandidates = this.headers.filter(h => h !== titleCol);
+    const selectedCategorical = new Set(this.current.categoricalColumns ?? this.autoDetectedCategorical);
+
+    categoricalCandidates.forEach(h => {
+      const label = catGrid.createEl("label", { cls: "csv-modal-checkbox-label" });
+      const checkbox = label.createEl("input", { type: "checkbox" });
+      checkbox.checked = selectedCategorical.has(h);
+      if (this.autoDetectedCategorical.includes(h) && !this.current.categoricalColumns) {
+        label.addClass("auto-detected");
+      }
+      label.createSpan({ text: h });
+
+      checkbox.addEventListener("change", () => {
+        if (!this.current.categoricalColumns) {
+          this.current.categoricalColumns = [...this.autoDetectedCategorical];
+        }
+        if (checkbox.checked) {
+          if (!this.current.categoricalColumns.includes(h)) {
+            this.current.categoricalColumns.push(h);
+          }
+        } else {
+          this.current.categoricalColumns = this.current.categoricalColumns.filter(c => c !== h);
         }
       });
     });

@@ -198,7 +198,8 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
   // single place to maintain behaviour.
   const openColumns = () => {
     new FileConfigModal(
-      view.app, view.headers, view.file?.path ?? "", view.fileCfg, view.autoDetectBooleanColumns(), availableModes(view),
+      view.app, view.headers, view.file?.path ?? "", view.fileCfg, view.autoDetectBooleanColumns(),
+      view.autoDetectCategoricalColumns(), availableModes(view),
       (cfg) => {
         view.saveFileCfg(cfg);
         if (cfg.defaultMode) view.mode = cfg.defaultMode;

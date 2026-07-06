@@ -1,13 +1,15 @@
 import { App, Notice, TFile, MarkdownPostProcessorContext } from "obsidian";
 import Papa from "papaparse";
-import { CSVRow } from "./types";
+import { CSVRow, FileConfig } from "./types";
 import { parseCSV, resolvePath, titleCase, looksCategorical } from "./utils";
 
 // ─── csv-add code block (mobile entry form) ──────────────────────────────────
 // Extracted from CardViewPlugin. Depends only on `app` (vault/workspace),
 // passed in explicitly. Renders the in-note add/update form and writes the
-// new/updated row back to the target CSV.
-export async function renderAddEntryForm(app: App, source: string, el: HTMLElement, ctx: MarkdownPostProcessorContext): Promise<void> {
+// new/updated row back to the target CSV. `fileConfigs` (settings.fileConfigs,
+// keyed by vault path) is optional so callers/tests that don't track per-file
+// config can omit it — the categorical decision then falls back to auto-detect.
+export async function renderAddEntryForm(app: App, source: string, el: HTMLElement, ctx: MarkdownPostProcessorContext, fileConfigs: Record<string, FileConfig> = {}): Promise<void> {
     // Parse source to get file path
     const lines = source.split("\n").map(l => l.trim()).filter(Boolean);
     let filePath = "";
@@ -38,6 +40,8 @@ export async function renderAddEntryForm(app: App, source: string, el: HTMLEleme
       el.createEl("p", { text: `Error: File not found: ${fullPath}`, cls: "csv-add-error" });
       return;
     }
+
+    const fileCfg = fileConfigs[fullPath] ?? {};
 
     // Read the file to get headers
     let headers: string[] = [];
@@ -140,7 +144,12 @@ export async function renderAddEntryForm(app: App, source: string, el: HTMLEleme
     otherCols.forEach(h => {
       const row = makeRow(h, "field");
       const uniqueVals = new Set(rows.map(r => (r[h] ?? "").trim()).filter(Boolean));
-      if (h !== titleCol && looksCategorical(uniqueVals.size)) {
+      // Per-file categorical list wins outright when set (configured in ⚙
+      // Columns); otherwise auto-detect from distinct value count, same
+      // heuristic as the full-page add form.
+      const isCategorical = h !== titleCol
+        && (fileCfg.categoricalColumns ? fileCfg.categoricalColumns.includes(h) : looksCategorical(uniqueVals.size));
+      if (isCategorical) {
         const select = row.createEl("select", { cls: "csv-add-row-control" });
         select.createEl("option", { text: "—", value: "" });
         Array.from(uniqueVals).sort().forEach(v => select.createEl("option", { text: v, value: v }));

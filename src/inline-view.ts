@@ -32,7 +32,8 @@ import {
 import Papa from "papaparse";
 import type { CardView } from "../main";
 import { CSVRow, ViewMode, FileConfig, CardViewSettings } from "./types";
-import { parseCSV, resolvePath, sanitizeFilename, showSelectPicker, IMAGE_COL_ALIASES, looksBoolean } from "./utils";
+import { parseCSV, resolvePath, sanitizeFilename, showSelectPicker, IMAGE_COL_ALIASES, looksBoolean, looksCategorical, isMultiValueColName } from "./utils";
+import { isDateCol } from "./field-types";
 import { AddEntryModal, NoteExpanderModal } from "./modals";
 import { renderTable } from "./view/table";
 import { renderLibrary } from "./view/library";
@@ -255,6 +256,15 @@ export class InlineCardHost extends MarkdownRenderChild {
   isSelectCol(h: string): boolean {
     return this.settings.selectColumns.some(s => s.toLowerCase() === h.toLowerCase());
   }
+  // Mirrors CardView.isCategoricalCol (main.ts) — same per-file categorical
+  // list, same title/date/multi-value exclusions, so the inline block offers
+  // the same dropdowns the full-page view and ⚙ Columns modal configure.
+  isCategoricalCol(h: string): boolean {
+    const titleCol = this.titleKey() ?? this.headers[0];
+    if (h === titleCol || isDateCol(h) || isMultiValueColName(h)) return false;
+    if (this.fileCfg.categoricalColumns) return this.fileCfg.categoricalColumns.includes(h);
+    return this.isSelectCol(h) || looksCategorical(this.getColumnValues(h).length);
+  }
   getStatusCol(): string | null {
     if (this.fileCfg.statusColumn) {
       return this.headers.find(h => h.toLowerCase() === this.fileCfg.statusColumn!.toLowerCase()) ?? null;
@@ -416,6 +426,7 @@ export class InlineCardHost extends MarkdownRenderChild {
       this.isNotesCol.bind(this), this.isSelectCol.bind(this), this.getColumnValues.bind(this),
       (updatedRow) => { Object.assign(row, updatedRow); this.scheduleSave(); this.renderView(); },
       () => this.deleteWithUndo(row),
+      this.isCategoricalCol.bind(this),
     ).open();
   }
 
@@ -431,6 +442,7 @@ export class InlineCardHost extends MarkdownRenderChild {
       {},
       // Habit/0-1 columns render as toggles in the add form.
       (h) => this.getBooleanColumns().includes(h),
+      this.isCategoricalCol.bind(this),
     ).open();
   }
 

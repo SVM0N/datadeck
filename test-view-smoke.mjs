@@ -654,6 +654,7 @@ function openAddModal(headers, rows, overrides = {}) {
   const modal = new AddEntryModal(
     new StubApp(), headers, isNotesCol, isSelectCol, getColumnValues, () => {},
     overrides.optionPresets ?? {}, overrides.isBooleanCol ?? (() => false),
+    overrides.isCategoricalCol,
   );
   modal.contentEl = document.body.createDiv();
   modal.onOpen();
@@ -691,6 +692,27 @@ await test("add-entry: a genuinely categorical non-title column still gets a dro
   assert(typeRow.querySelector("select"), "non-title low-cardinality column still auto-categorizes");
 });
 
+await test("add-entry: an explicit isCategoricalCol override wins over auto-detection", async () => {
+  // Notes gets 20 distinct values (would never auto-categorize), but an
+  // explicit per-file override says it's categorical → dropdown.
+  const headers = ["Title", "Notes"];
+  const rows = Array.from({ length: 20 }, (_, i) => ({ Title: `T${i}`, Notes: `n${i}` }));
+  const modal = openAddModal(headers, rows, { isCategoricalCol: (h) => h === "Notes" });
+  const notesRow = fieldRowFor(modal, "Notes");
+  assert(notesRow.querySelector("select"), "explicit override forces a dropdown even with many distinct values");
+});
+
+await test("add-entry: an explicit isCategoricalCol override can suppress auto-categorization", async () => {
+  // Type would normally auto-categorize (2 distinct values), but an explicit
+  // override that excludes it should keep it a plain text field.
+  const headers = ["Title", "Type"];
+  const rows = [{ Title: "Alpha", Type: "Task" }, { Title: "Beta", Type: "Idea" }];
+  const modal = openAddModal(headers, rows, { isCategoricalCol: () => false });
+  const typeRow = fieldRowFor(modal, "Type");
+  assert(!typeRow.querySelector("select"), "override can un-categorize a naturally low-cardinality column");
+  assert(typeRow.querySelector("input.csv-modal-input"), "falls back to a plain text field");
+});
+
 function openExpander(row, headers, overrides = {}) {
   const isNotesCol = overrides.isNotesCol ?? (() => false);
   const isSelectCol = overrides.isSelectCol ?? (() => false);
@@ -698,6 +720,7 @@ function openExpander(row, headers, overrides = {}) {
   const modal = new NoteExpanderModal(
     new StubApp(), row, overrides.notesCol ?? "", headers, "test.csv",
     isNotesCol, isSelectCol, getColumnValues, () => {}, undefined,
+    overrides.isCategoricalCol,
   );
   modal.contentEl = document.body.createDiv();
   modal.onOpen();
@@ -716,6 +739,70 @@ await test("note-expander: title column is never rendered as a select chip", asy
   assert(titleRow, "title field row exists");
   assert(!titleRow.querySelector(".csv-select-chip"), "title never renders as a select chip");
   assert(titleRow.querySelector(".csv-expander-field-value"), "title renders as a plain value field");
+});
+
+await test("note-expander: an explicit isCategoricalCol override wins over auto-detection", async () => {
+  const headers = ["Title", "Notes"];
+  const row = { Title: "Alpha", Notes: "some long free text" };
+  const modal = openExpander(row, headers, {
+    isCategoricalCol: (h) => h === "Notes",
+    getColumnValues: () => ["a", "b", "c"],
+  });
+  const fieldRows = Array.from(modal.contentEl.querySelectorAll(".csv-expander-field-row"));
+  const notesRow = fieldRows.find(r => r.querySelector(".csv-expander-field-label")?.textContent === "Notes");
+  assert(notesRow.querySelector(".csv-select-chip"), "explicit override renders Notes as a select chip");
+});
+
+// ── FileConfigModal: categorical-column selector (⚙ Columns panel) ─────────
+const { FileConfigModal } = await load("./src/modals.ts");
+
+function openFileConfigModal(headers, current, autoDetectedCategorical, overrides = {}) {
+  const modal = new FileConfigModal(
+    new StubApp(), headers, "test.csv", current, overrides.autoDetectedHabits ?? [],
+    autoDetectedCategorical, overrides.availableModes ?? [],
+    overrides.onSave ?? (() => {}),
+    overrides.getHeaders ?? (() => headers),
+    overrides.getFileCfg ?? (() => current),
+    overrides.onAddColumn ?? (() => null),
+    overrides.onRemoveColumn ?? (() => {}),
+  );
+  modal.contentEl = document.body.createDiv();
+  modal.onOpen();
+  return modal;
+}
+
+function categoricalCheckboxFor(modal, header) {
+  const labels = Array.from(modal.contentEl.querySelectorAll(".csv-modal-categorical-grid .csv-modal-checkbox-label"));
+  return labels.find(l => l.textContent === header)?.querySelector("input[type=checkbox]");
+}
+
+await test("FileConfigModal: categorical grid pre-checks auto-detected columns and excludes the title", async () => {
+  const headers = ["Title", "Type", "Notes"];
+  const modal = openFileConfigModal(headers, {}, ["Type"]);
+  assert(categoricalCheckboxFor(modal, "Type")?.checked, "auto-detected column is pre-checked");
+  assert(!categoricalCheckboxFor(modal, "Title"), "title column isn't offered as a categorical candidate at all");
+});
+
+await test("FileConfigModal: toggling a categorical checkbox promotes an explicit list", async () => {
+  const headers = ["Title", "Type", "Notes"];
+  const modal = openFileConfigModal(headers, {}, ["Type"]);
+  const notesBox = categoricalCheckboxFor(modal, "Notes");
+  notesBox.checked = true;
+  notesBox.dispatchEvent(new window.Event("change", { bubbles: true }));
+  assert(modal.current.categoricalColumns.includes("Notes"), "checking Notes adds it to the explicit list");
+  assert(modal.current.categoricalColumns.includes("Type"), "the auto-detected pick is preserved on first touch");
+
+  const typeBox = categoricalCheckboxFor(modal, "Type");
+  typeBox.checked = false;
+  typeBox.dispatchEvent(new window.Event("change", { bubbles: true }));
+  assert(!modal.current.categoricalColumns.includes("Type"), "unchecking Type removes it from the explicit list");
+});
+
+await test("FileConfigModal: an existing categoricalColumns config overrides the auto-detected pre-check", async () => {
+  const headers = ["Title", "Type", "Notes"];
+  const modal = openFileConfigModal(headers, { categoricalColumns: ["Notes"] }, ["Type"]);
+  assert(categoricalCheckboxFor(modal, "Notes")?.checked, "configured column is checked");
+  assert(!categoricalCheckboxFor(modal, "Type")?.checked, "auto-detected-but-not-configured column is unchecked once a config exists");
 });
 
 // ── Multi-select picker ──────────────────────────────────────────────────────

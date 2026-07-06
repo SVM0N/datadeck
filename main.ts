@@ -19,7 +19,8 @@ import type { Chart as ChartType } from "chart.js";
 
 // Import from src modules
 import { CSVRow, ViewMode, FileConfig, CardViewSettings, DEFAULT_SETTINGS, CARD_VIEW_TYPE } from "./src/types";
-import { sanitizeFilename, tagify, titleCase, formatRatingForDisplay, showSelectPicker, parseCSV, migrateFileConfigKey, sortRowsByColumn, isMultiValueColName, IMAGE_COL_ALIASES, looksBoolean } from "./src/utils";
+import { sanitizeFilename, tagify, titleCase, formatRatingForDisplay, showSelectPicker, parseCSV, migrateFileConfigKey, sortRowsByColumn, isMultiValueColName, IMAGE_COL_ALIASES, looksBoolean, looksCategorical } from "./src/utils";
+import { isDateCol } from "./src/field-types";
 import { AddEntryModal, NoteExpanderModal, FileConfigModal, SearchModal, PromptModal } from "./src/modals";
 import { renderTravel } from "./src/travel-view";
 import { CardViewSettingTab } from "./src/settings-tab";
@@ -174,9 +175,9 @@ export class CardView extends FileView {
 
   /**
    * Deletes a column and its data from every row. Also clears any per-file
-   * config pointing at it (category/status/notes/anki/card-fields/habits) so
-   * a stale reference doesn't silently break kanban grouping, the Add form,
-   * etc. after the column is gone.
+   * config pointing at it (category/status/notes/anki/card-fields/habits/
+   * categorical) so a stale reference doesn't silently break kanban
+   * grouping, the Add form, etc. after the column is gone.
    */
   removeColumn(header: string): void {
     this.headers = this.headers.filter(h => h !== header);
@@ -189,6 +190,7 @@ export class CardView extends FileView {
     if (cfg.kanbanGroupCol === header) cfg.kanbanGroupCol = undefined;
     if (cfg.habitColumns) cfg.habitColumns = cfg.habitColumns.filter(h => h !== header);
     if (cfg.cardFields) cfg.cardFields = cfg.cardFields.filter(h => h !== header);
+    if (cfg.categoricalColumns) cfg.categoricalColumns = cfg.categoricalColumns.filter(h => h !== header);
     this.saveFileCfg(cfg);
     this.scheduleSave();
     this.renderViewPreservingScroll();
@@ -231,6 +233,31 @@ export class CardView extends FileView {
   }
 
   isSelectCol(h: string) { return this.settings.selectColumns.some(s => s.toLowerCase()===h.toLowerCase()); }
+
+  /**
+   * Whether a column should render as a dropdown (Add entry / entry editor /
+   * mobile add form) rather than free text. Single source of truth: an
+   * explicit per-file `categoricalColumns` list wins outright when set;
+   * otherwise falls back to the historical auto-detection (a configured
+   * select column, or a low-cardinality "pseudo-categorical" one). The
+   * title/index column and date columns are never categorical, regardless
+   * of the list — a free-text identifier or a date picker, never a select.
+   */
+  isCategoricalCol(h: string): boolean {
+    const titleCol = this.titleKey() ?? this.headers[0];
+    if (h === titleCol || isDateCol(h) || isMultiValueColName(h)) return false;
+    if (this.fileCfg.categoricalColumns) return this.fileCfg.categoricalColumns.includes(h);
+    return this.isSelectCol(h) || looksCategorical(this.getColumnValues(h).length);
+  }
+
+  /** What isCategoricalCol would auto-detect with no per-file override — drives the ⚙ Columns checkbox pre-check. */
+  autoDetectCategoricalColumns(): string[] {
+    const titleCol = this.titleKey() ?? this.headers[0];
+    return this.headers.filter(h => {
+      if (h === titleCol || isDateCol(h) || isMultiValueColName(h) || this.isNotesCol(h)) return false;
+      return this.isSelectCol(h) || looksCategorical(this.getColumnValues(h).length);
+    });
+  }
 
   getStatusCol(): string | null {
     if (this.fileCfg.statusColumn) {
@@ -419,7 +446,8 @@ export class CardView extends FileView {
         this.renderViewPreservingScroll();
       },
       // Delete with undo: the helper handles splice + save + rerender + Notice.
-      () => this.deleteWithUndo(row)
+      () => this.deleteWithUndo(row),
+      this.isCategoricalCol.bind(this)
     ).open();
   }
 
@@ -505,7 +533,8 @@ export class CardView extends FileView {
       },
       optionPresets,
       // Habit/0-1 columns render as toggles in the add form.
-      (h) => this.getBooleanColumns().includes(h)
+      (h) => this.getBooleanColumns().includes(h),
+      this.isCategoricalCol.bind(this)
     ).open();
   }
 
@@ -888,7 +917,7 @@ export default class CardViewPlugin extends Plugin {
 
     // Register csv-add code block for mobile entry
     this.registerMarkdownCodeBlockProcessor("csv-add", async (source, el, ctx) => {
-      await renderAddEntryForm(this.app, source.trim(), el, ctx);
+      await renderAddEntryForm(this.app, source.trim(), el, ctx, this.settings.fileConfigs);
     });
 
     // csv-random: a random entry from a CSV — quote/word of the day for
