@@ -337,7 +337,8 @@ function renderSection(
 // the Library view established.
 function renderNameCell(view: CardView, tr: HTMLElement, row: CSVRow, titleCol: string, done: boolean): void {
   const nameCell = tr.createEl("td", { cls: "csv-tasks-name-cell" });
-  const link = nameCell.createSpan({ cls: `csv-tasks-link ${done ? "csv-tasks-done" : ""}`, text: row[titleCol] || "Untitled" });
+  const highlightCls = view.isHighlighted?.(row) ? "csv-title-highlight" : "";
+  const link = nameCell.createSpan({ cls: `csv-tasks-link ${done ? "csv-tasks-done" : ""} ${highlightCls}`, text: row[titleCol] || "Untitled" });
   const notesCol = view.getNotesCol();
   link.addEventListener("click", () => {
     // Expander needs a notes column to host its body editor; if the file has

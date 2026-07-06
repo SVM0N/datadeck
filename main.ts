@@ -156,6 +156,26 @@ export class CardView extends FileView {
     void this.persistSettings();
   }
 
+  // ── Title highlight ────────────────────────────────────────────────────────
+  // Per-file, keyed by the title-column value (like collapsedGroups) rather
+  // than a row index/id — the CSV has no stable identity column (see the
+  // optimistic-concurrency TODO in handoff.md), and a value-based key is
+  // resilient to row reordering/sort changes.
+
+  isHighlighted(row: CSVRow): boolean {
+    return (this.fileCfg.highlightedTitles ?? []).includes(this.getTitle(row));
+  }
+
+  toggleHighlight(row: CSVRow): void {
+    const title = this.getTitle(row);
+    const cfg = this.fileCfg;
+    const list = cfg.highlightedTitles ? [...cfg.highlightedTitles] : [];
+    const idx = list.indexOf(title);
+    if (idx >= 0) list.splice(idx, 1); else list.push(title);
+    cfg.highlightedTitles = list;
+    this.saveFileCfg(cfg);
+  }
+
   // ── Column structure ───────────────────────────────────────────────────────
   // Add/remove a CSV column itself (not just its role). Used by the ⚙ Columns
   // modal. `doSave` writes with `columns: this.headers`, so pushing/filtering
@@ -386,6 +406,10 @@ export class CardView extends FileView {
         });
       }
     }
+    menu.addSeparator();
+    const highlighted = this.isHighlighted(row);
+    menu.addItem(i => i.setTitle(highlighted ? "Remove highlight" : "Highlight").setIcon("highlighter")
+      .onClick(() => { this.toggleHighlight(row); this.renderViewPreservingScroll(); }));
     menu.addSeparator();
     menu.addItem(i => i.setTitle("Delete").setIcon("trash").onClick(() => this.deleteWithUndo(row)));
     menu.showAtMouseEvent(e);

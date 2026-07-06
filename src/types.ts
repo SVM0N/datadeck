@@ -56,6 +56,10 @@ export interface FileConfig {
                               // columns, via looksCategorical). The title/
                               // index column and date columns are never
                               // categorical regardless of this list.
+  highlightedTitles?: string[]; // Title-column values marked highlighted via
+                              // the row context menu. Keyed by value (like
+                              // collapsedGroups) rather than a row id — the
+                              // CSV has no stable identity column.
 }
 
 export type LibrarySort = "status" | "title" | "rating" | "year";

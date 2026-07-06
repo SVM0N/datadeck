@@ -231,6 +231,21 @@ export class InlineCardHost extends MarkdownRenderChild {
     void this.persistSettings();
   }
 
+  // Mirrors CardView's title-highlight (main.ts) — keyed by the title-column
+  // value, shared with the full-page view via the same settings.fileConfigs entry.
+  isHighlighted(row: CSVRow): boolean {
+    return (this.fileCfg.highlightedTitles ?? []).includes(this.getTitle(row));
+  }
+  toggleHighlight(row: CSVRow): void {
+    const title = this.getTitle(row);
+    const cfg = this.fileCfg;
+    const list = cfg.highlightedTitles ? [...cfg.highlightedTitles] : [];
+    const idx = list.indexOf(title);
+    if (idx >= 0) list.splice(idx, 1); else list.push(title);
+    cfg.highlightedTitles = list;
+    this.saveFileCfg(cfg);
+  }
+
   // ── Column detection (mirrors CardView) ────────────────────────────────────
 
   resolveCol(candidates: string[]): string | null {
@@ -415,6 +430,10 @@ export class InlineCardHost extends MarkdownRenderChild {
         });
       }
     }
+    menu.addSeparator();
+    const highlighted = this.isHighlighted(row);
+    menu.addItem(i => i.setTitle(highlighted ? "Remove highlight" : "Highlight").setIcon("highlighter")
+      .onClick(() => { this.toggleHighlight(row); this.renderView(); }));
     menu.addSeparator();
     menu.addItem(i => i.setTitle("Delete").setIcon("trash").onClick(() => this.deleteWithUndo(row)));
     menu.showAtMouseEvent(e);

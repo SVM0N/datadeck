@@ -38,6 +38,18 @@
   background: var(--csv-bg);
 }
 
+/* ─── Title highlight (shared across Tasks/Library/Kanban/Focus) ────────────── */
+/* Toggled per-entry via the row context menu ("Highlight"/"Remove highlight").
+   Reuses Obsidian's own --text-highlight-bg — the same variable behind
+   ==markdown highlight== — so it matches the user's theme automatically
+   instead of a hardcoded color. */
+.csv-title-highlight {
+  background: var(--text-highlight-bg);
+  border-radius: 3px;
+  padding: 0 4px;
+  margin: 0 -4px;
+}
+
 /* ─── Toolbar ─────────────────────────────────────────────────────────────── */
 
 .csv-toolbar {

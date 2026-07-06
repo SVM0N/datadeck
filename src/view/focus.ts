@@ -46,7 +46,7 @@ export function renderFocus(view: CardView, container: HTMLElement): void {
   const card = wrap.createDiv({ cls: "csv-focus-card" });
   card.createDiv({ cls: "csv-focus-position", text: `${view.focusIndex + 1} / ${rows.length}` });
 
-  const titleEl = card.createDiv({ cls: "csv-focus-title", text: view.getTitle(row) });
+  const titleEl = card.createDiv({ cls: `csv-focus-title ${view.isHighlighted?.(row) ? "csv-title-highlight" : ""}`, text: view.getTitle(row) });
   if (notesCol) {
     titleEl.addClass("is-clickable");
     titleEl.title = "Open entry";

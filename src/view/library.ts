@@ -262,7 +262,7 @@ export function renderLibrary(view: CardView, container: HTMLElement): void {
       }
 
       // Title with green dot for "done"-style status (watched, read, finished, etc.)
-      const titleWrap = card.createDiv({ cls: "csv-library-card-title" });
+      const titleWrap = card.createDiv({ cls: `csv-library-card-title ${view.isHighlighted?.(row) ? "csv-title-highlight" : ""}` });
       if (sc) {
         const status = (row[sc] ?? "").toLowerCase();
         if (commonDone.includes(status)) {

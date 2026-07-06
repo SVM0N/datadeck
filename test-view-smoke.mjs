@@ -199,6 +199,27 @@ await test("library: groups cards by category", async () => {
   assert(c.querySelectorAll(".csv-library-card").length === 2, "2 cards");
 });
 
+await test("library: highlighted entry gets the highlight class on its title", async () => {
+  const rows = [
+    { Title: "Dune", Category: "SciFi", Status: "Read" },
+    { Title: "It", Category: "Horror", Status: "" },
+  ];
+  const view = {
+    headers: ["Title", "Category", "Status"], rows, searchQuery: "",
+    libraryStatusFilter: "all", libraryGenreFilter: "all", fileCfg: {},
+    getCategoryCol: () => "Category", getStatusCol: () => "Status",
+    titleKey: () => "Title", authorKey: () => undefined,
+    resolveCol: () => null, getNotesCol: () => null,
+    renderView: () => {}, openNoteExpander: () => {}, openRowContextMenu: () => {},
+    isHighlighted: (r) => r.Title === "Dune",
+  };
+  const c = document.body.createDiv();
+  renderLibrary(view, c);
+  const titles = Array.from(c.querySelectorAll(".csv-library-card-title"));
+  assert(titles.find(t => t.textContent.includes("Dune")).classList.contains("csv-title-highlight"), "highlighted card's title carries the class");
+  assert(!titles.find(t => t.textContent.includes("It")).classList.contains("csv-title-highlight"), "non-highlighted card's title doesn't");
+});
+
 await test("library: nothing groupable shows empty state", async () => {
   const view = {
     headers: [], rows: [], fileCfg: {}, getCategoryCol: () => null, getStatusCol: () => null,
@@ -265,6 +286,18 @@ await test("kanban: builds a column per genre with cards", async () => {
   assert(c.querySelectorAll(".csv-kanban-col").length === 2, "2 genre columns");
   assert(c.querySelectorAll(".csv-kanban-card").length === 2, "2 cards");
   assert(c.querySelector(".csv-kanban-groupbar select"), "group-by selector present");
+});
+
+await test("kanban: highlighted entry gets the highlight class on its title", async () => {
+  const rows = [
+    { Title: "Dune", Category: "SciFi", Status: "Finished" },
+    { Title: "It", Category: "Horror", Status: "Not started" },
+  ];
+  const c = document.body.createDiv();
+  renderKanbanGenre(kanbanView(rows, { isHighlighted: (r) => r.Title === "Dune" }), c);
+  const titles = Array.from(c.querySelectorAll(".csv-kanban-card-title"));
+  assert(titles.find(t => t.textContent === "Dune").classList.contains("csv-title-highlight"), "highlighted card's title carries the class");
+  assert(!titles.find(t => t.textContent === "It").classList.contains("csv-title-highlight"), "non-highlighted card's title doesn't");
 });
 
 await test("kanban: nothing groupable shows empty state", async () => {
@@ -550,6 +583,13 @@ await test("focus: renders one card with title, notes, position, nav", async () 
   assert(c.querySelectorAll(".csv-focus-nav-btn").length === 3, "prev / random / next buttons");
   // Status renders as a chip; Title/Author/Notes don't.
   assert(c.querySelectorAll(".csv-kanban-chip").length === 1, "one meta chip (Status)");
+});
+
+await test("focus: highlighted entry gets the highlight class on its title", async () => {
+  const rows = [{ Title: "Dune", Author: "Herbert", Notes: "" }];
+  const c = document.body.createDiv();
+  renderFocus(focusView(rows, { isHighlighted: () => true }), c);
+  assert(c.querySelector(".csv-focus-title").classList.contains("csv-title-highlight"), "highlighted entry's title carries the class");
 });
 
 await test("focus: next button advances and wraps", async () => {
@@ -1084,6 +1124,18 @@ await test("tasks: Notes/Ideas rows get a done checkmark too", async () => {
   const notDone = Array.from(checks).find(el => !el.classList.contains("is-done"));
   notDone.click();
   assert(rows.find(r => r.Name === "Idea A").Status === "done", "clicking marks the idea done");
+});
+
+await test("tasks: highlighted entry gets the highlight class on its name link", async () => {
+  const rows = [
+    { Name: "A-high", Project: "P", Type: "task", Status: "", Priority: "high", Due: "" },
+    { Name: "B-low", Project: "P", Type: "task", Status: "", Priority: "low", Due: "" },
+  ];
+  const c = document.body.createDiv();
+  renderTasks(tasksView(rows, { isHighlighted: (r) => r.Name === "A-high" }), c);
+  const links = Array.from(c.querySelectorAll(".csv-tasks-link"));
+  assert(links.find(l => l.textContent === "A-high").classList.contains("csv-title-highlight"), "highlighted row's name carries the class");
+  assert(!links.find(l => l.textContent === "B-low").classList.contains("csv-title-highlight"), "non-highlighted row's name doesn't");
 });
 
 await test("tasks: not-done past-due rows are flagged overdue", async () => {

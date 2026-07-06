@@ -148,7 +148,7 @@ function renderKanbanCard(view: CardView, container: HTMLElement, row: CSVRow, s
   // Tapping the title opens the entry expander; the small icon creates or
   // opens the sidecar .md. Replaces the old hover-revealed bottom button row.
   const titleRow = card.createDiv({cls:"csv-kanban-card-title-row"});
-  const titleEl = titleRow.createDiv({cls:"csv-kanban-card-title", text:view.getTitle(row)});
+  const titleEl = titleRow.createDiv({cls:`csv-kanban-card-title ${view.isHighlighted?.(row) ? "csv-title-highlight" : ""}`, text:view.getTitle(row)});
   // Tapping the title opens the entry editor. Works even when the file has no
   // notes column (e.g. an applications tracker) — the expander still edits
   // every structured field; its notes section just doesn't render.
