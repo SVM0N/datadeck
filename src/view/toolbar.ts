@@ -222,6 +222,7 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
       () => view.fileCfg,
       (name) => view.addColumn(name),
       (header) => view.removeColumn(header),
+      (header) => view.cleanupBooleanColumn(header),
     ).open();
   };
   const openMobile = () => generateMobileFiles(view);

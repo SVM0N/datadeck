@@ -790,6 +790,29 @@ export class CardView extends FileView {
     return this.autoDetectBooleanColumns();
   }
 
+  /**
+   * ⚙ Config's "Clean up" action for a Checkbox-typed column: rewrites every
+   * row's raw value in `header` to exactly "1" (isTruthy match) or "0"
+   * (everything else) — the same rule the toggle itself already uses to
+   * decide checked/unchecked, applied to the whole column at once instead of
+   * one row at a time as each happens to get touched. Acts on the real CSV
+   * data immediately (like addColumn/removeColumn), not deferred to Save.
+   * Returns how many cells actually changed, for the confirmation Notice.
+   */
+  cleanupBooleanColumn(header: string): number {
+    let changed = 0;
+    this.rows.forEach(row => {
+      const normalized = this.isTruthy(row[header] ?? "") ? "1" : "0";
+      if (row[header] !== normalized) changed++;
+      row[header] = normalized;
+    });
+    if (changed > 0) {
+      this.scheduleSave();
+      this.renderViewPreservingScroll();
+    }
+    return changed;
+  }
+
   autoDetectBooleanColumns(): string[] {
     // Detect columns that look like boolean/habit columns (values are 0/1, true/false, yes/no, or empty).
     return this.headers.filter(h => {

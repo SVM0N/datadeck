@@ -893,6 +893,7 @@ function openFileConfigModal(headers, current, autoDetectedCategorical, override
     overrides.getFileCfg ?? (() => current),
     overrides.onAddColumn ?? (() => null),
     overrides.onRemoveColumn ?? (() => {}),
+    overrides.onCleanupBooleanColumn ?? (() => 0),
   );
   modal.contentEl = document.body.createDiv();
   modal.onOpen();
@@ -909,6 +910,7 @@ function roleSelectFor(modal, header) { return colConfigRowFor(modal, header)?.q
 function cardCheckboxFor(modal, header) { return colConfigRowFor(modal, header)?.querySelector(".csv-modal-colcfg-card-cell input[type=checkbox]"); }
 function typeBadgeFor(modal, header) { return colConfigRowFor(modal, header)?.querySelector(".csv-modal-colcfg-type-cell .csv-modal-colcfg-auto-badge"); }
 function fnBadgeFor(modal, header) { return colConfigRowFor(modal, header)?.querySelector(".csv-modal-colcfg-fn-cell .csv-modal-colcfg-auto-badge"); }
+function cleanupBtnFor(modal, header) { return colConfigRowFor(modal, header)?.querySelector(".csv-modal-colcfg-cleanup-btn"); }
 
 function setSelect(sel, value) {
   sel.value = value;
@@ -932,6 +934,30 @@ await test("FileConfigModal: Type is mutually exclusive — switching to Categor
   setSelect(typeSelectFor(modal, "Watched"), "categorical");
   assert(modal.current.categoricalColumns.includes("Watched"), "now in the explicit categorical list");
   assert(!modal.current.habitColumns.includes("Watched"), "no longer in the habit list — a column is one Type, not two");
+});
+
+await test("FileConfigModal: a Checkbox column gets a Clean up action; other Types don't", async () => {
+  const headers = ["Title", "Watched", "Genre"];
+  const modal = openFileConfigModal(headers, {}, ["Genre"], { autoDetectedHabits: ["Watched"] });
+  assert(cleanupBtnFor(modal, "Watched"), "Checkbox-typed column offers Clean up");
+  assert(!cleanupBtnFor(modal, "Genre"), "Categorical-typed column does not");
+  assert(!cleanupBtnFor(modal, "Title"), "the title column (no Type picker at all) does not");
+});
+
+await test("FileConfigModal: Clean up requires a confirm click, then calls onCleanupBooleanColumn once", async () => {
+  const headers = ["Title", "Watched"];
+  let calls = [];
+  const modal = openFileConfigModal(headers, {}, [], {
+    autoDetectedHabits: ["Watched"],
+    onCleanupBooleanColumn: (h) => { calls.push(h); return 3; },
+  });
+  const btn = cleanupBtnFor(modal, "Watched");
+  btn.dispatchEvent(new window.Event("click", { bubbles: true }));
+  assert(calls.length === 0, "first click only asks for confirmation, doesn't act yet");
+  assert(btn.textContent === "Confirm?", "button flips to a confirm state");
+
+  btn.dispatchEvent(new window.Event("click", { bubbles: true }));
+  assert(calls.length === 1 && calls[0] === "Watched", "second click actually runs the cleanup, for the right column");
 });
 
 await test("FileConfigModal: an existing categoricalColumns config overrides the auto-detected Type pre-select", async () => {

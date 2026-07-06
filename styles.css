@@ -2041,6 +2041,31 @@ td .csv-select-chip {
   border-radius: 3px;
 }
 
+.csv-modal-colcfg-cleanup-btn {
+  border: 1px solid var(--csv-border);
+  background: transparent;
+  color: var(--csv-text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: var(--csv-radius-sm);
+  transition: all 0.15s;
+  flex: 0 0 auto;
+}
+
+.csv-modal-colcfg-cleanup-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--csv-text);
+}
+
+.csv-modal-colcfg-cleanup-btn.confirm {
+  background: var(--csv-accent);
+  border-color: var(--csv-accent);
+  color: white;
+  font-weight: 600;
+}
+
 .csv-modal-colcfg-auto-badge {
   font-size: 11px;
   font-style: italic;

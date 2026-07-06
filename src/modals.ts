@@ -722,6 +722,14 @@ export class FileConfigModal extends Modal {
   getFileCfg: () => FileConfig;
   onAddColumn: (name: string) => string | null;
   onRemoveColumn: (header: string) => void;
+  // Rewrites every row's value in one Checkbox-typed column to exactly "1"
+  // (isTruthyVal match) or "0" (everything else), in place on the real CSV
+  // data — unlike everything else in this modal, this isn't a pending
+  // fileCfg edit deferred to Save; it mutates rows immediately, the same as
+  // onAddColumn/onRemoveColumn. Returns how many cells actually changed, for
+  // the confirmation Notice. Optional so older callers/tests default to a
+  // no-op.
+  onCleanupBooleanColumn: (header: string) => number;
 
   constructor(
     app: App, headers: string[], filePath: string, current: FileConfig, autoDetectedHabits: string[],
@@ -729,6 +737,7 @@ export class FileConfigModal extends Modal {
     availableModes: { id: ViewMode; label: string }[], onSave: (cfg: FileConfig) => void,
     getHeaders: () => string[], getFileCfg: () => FileConfig,
     onAddColumn: (name: string) => string | null, onRemoveColumn: (header: string) => void,
+    onCleanupBooleanColumn: (header: string) => number = () => 0,
   ) {
     super(app);
     this.headers = headers;
@@ -747,6 +756,7 @@ export class FileConfigModal extends Modal {
     this.getFileCfg = getFileCfg;
     this.onAddColumn = onAddColumn;
     this.onRemoveColumn = onRemoveColumn;
+    this.onCleanupBooleanColumn = onCleanupBooleanColumn;
   }
 
   onOpen(): void {
@@ -804,7 +814,7 @@ export class FileConfigModal extends Modal {
     colSection.createEl("label", { text: "Columns", cls: "csv-modal-label" });
     colSection.createEl("p", {
       cls: "csv-modal-hint",
-      text: "Type and Function are each exclusive per column — picking one clears it from whichever column held it before. \"auto\" means it's already doing that by column name, with nothing saved here yet. Card field is independent and can combine with anything.",
+      text: "Type and Function are each exclusive per column — picking one clears it from whichever column held it before. \"auto\" means it's already doing that by column name, with nothing saved here yet. Card field is independent and can combine with anything. Checkbox columns get a \"Clean up\" action that rewrites every row to strict 1/0 right away — not deferred to Save.",
     });
 
     type ColType = "text" | "checkbox" | "categorical";
@@ -957,6 +967,32 @@ export class FileConfigModal extends Modal {
             renderRows();
           });
           if (isAutoType) typeCell.createSpan({ cls: "csv-modal-colcfg-auto-badge", text: "auto" });
+
+          // Clean up: rewrites every row's raw value in this column to
+          // exactly "1" (yes/true/1) or "0" (everything else) — the same
+          // isTruthyVal rule the toggle itself uses to decide checked/
+          // unchecked, just applied to the whole column at once instead of
+          // one row at a time as you happen to click through them. Only
+          // offered once a column is actually Checkbox-typed — this acts on
+          // real row data immediately, not a pending Save-deferred edit, so
+          // it gets the same two-click confirm as removing a column.
+          if (currentType === "checkbox") {
+            const cleanupBtn = typeCell.createEl("button", {
+              cls: "csv-modal-colcfg-cleanup-btn", text: "Clean up",
+              attr: { title: `Rewrite every row in "${h}" to strict 1/0 (yes/true/1 → 1, everything else → 0)` },
+            });
+            cleanupBtn.addEventListener("click", () => {
+              if (cleanupBtn.hasClass("confirm")) {
+                const changed = this.onCleanupBooleanColumn(h);
+                new Notice(changed > 0 ? `"${h}": normalized ${changed} row${changed === 1 ? "" : "s"} to 1/0.` : `"${h}" is already strict 1/0 — nothing to change.`);
+                return;
+              }
+              tbody.querySelectorAll(".csv-modal-colcfg-cleanup-btn.confirm").forEach(el => { el.removeClass("confirm"); el.setText("Clean up"); });
+              cleanupBtn.addClass("confirm");
+              cleanupBtn.setText("Confirm?");
+              window.setTimeout(() => { if (cleanupBtn.isConnected) { cleanupBtn.removeClass("confirm"); cleanupBtn.setText("Clean up"); } }, 3000);
+            });
+          }
         }
 
         // ── Function cell ──
