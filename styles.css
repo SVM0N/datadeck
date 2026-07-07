@@ -3893,6 +3893,10 @@ select.csv-add-row-control {
 
 .csv-tasks-count { opacity: 0.55; font-weight: 400; }
 
+.csv-tasks-table-wrapper {
+  overflow-x: auto;
+  width: 100%;
+}
 .csv-tasks-table {
   width: 100%;
   border-collapse: collapse;
@@ -3934,6 +3938,9 @@ select.csv-add-row-control {
 .csv-tasks-check.is-done { border-color: var(--csv-accent); background: var(--csv-accent); color: var(--text-on-accent); }
 
 .csv-tasks-name-cell { display: flex; align-items: center; gap: 6px; }
+.csv-tasks-name-cell {
+  min-width: 180px;
+}
 .csv-tasks-link { color: var(--csv-accent); cursor: pointer; }
 .csv-tasks-link:hover { text-decoration: underline; }
 .csv-tasks-done { text-decoration: line-through; opacity: 0.45; }
@@ -3966,7 +3973,7 @@ select.csv-add-row-control {
   text-overflow: ellipsis;
 }
 .csv-tasks-notes-cell {
-  width: 260px;
+  width: 140px;
 }
 
 .csv-tasks-type-cell { width: 90px; }

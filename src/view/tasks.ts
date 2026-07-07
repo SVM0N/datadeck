@@ -309,7 +309,19 @@ function renderSection(
     details.open = true;
     const summary = details.createEl("summary", { cls: "csv-tasks-group-header" });
     summary.innerHTML = `<span class="csv-tasks-arrow">▶</span> ${project} <span class="csv-tasks-count">${items.length}</span>`;
-    const table = details.createEl("table", { cls: "csv-tasks-table" });
+    const wrapper = details.createDiv({ cls: "csv-tasks-table-wrapper" });
+    const table = wrapper.createEl("table", { cls: "csv-tasks-table" });
+    
+    let minTableWidth = 120; // Guaranteed space for Name/Title column
+    cols.forEach(col => {
+      if (col.cls.includes("check-cell")) minTableWidth += 30;
+      else if (col.cls.includes("priority")) minTableWidth += 90;
+      else if (col.cls.includes("due")) minTableWidth += 150;
+      else if (col.cls.includes("notes-cell")) minTableWidth += 140;
+      else if (col.cls.includes("generic-cell")) minTableWidth += 150;
+    });
+    table.style.minWidth = `${minTableWidth}px`;
+    
     const thead = table.createEl("thead");
     const tr = thead.createEl("tr");
     cols.forEach(col => tr.createEl("th", { text: col.name, cls: col.cls }));
