@@ -58,6 +58,7 @@ export interface FileConfig {
                               // columns, via looksCategorical). The title/
                               // index column and date columns are never
                               // categorical regardless of this list.
+  dateColumns?: string[];     // Columns that should be explicitly treated as dates.
   highlightedTitles?: string[]; // Title-column values marked highlighted via
                               // the row context menu. Keyed by value (like
                               // collapsedGroups) rather than a row id — the

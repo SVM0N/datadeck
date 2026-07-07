@@ -24,9 +24,10 @@ import { suggestionsFor, isDateCol, ISO_DATE } from "./field-types";
  *  - everything else is a plain text input
  * Empty values stay allowed throughout (intentional for undated trips).
  */
-export function makeFieldInput(parent: HTMLElement, header: string, initial: string, cls: string): HTMLInputElement {
-  const useDate = isDateCol(header) && (initial === "" || ISO_DATE.test(initial));
-  const input = parent.createEl("input", { cls, type: useDate ? "date" : "text", value: initial });
+export function makeFieldInput(parent: HTMLElement, header: string, initial: string, cls: string, isDateFn: (h: string) => boolean = isDateCol): HTMLInputElement {
+  const useDate = isDateFn(header) && (initial === "" || ISO_DATE.test(initial.slice(0, 10)));
+  const pickerValue = useDate ? initial.slice(0, 10) : initial;
+  const input = parent.createEl("input", { cls, type: useDate ? "date" : "text", value: pickerValue });
   if (!useDate) input.placeholder = header;
   const sugg = suggestionsFor(header);
   if (sugg) {
@@ -68,6 +69,7 @@ export class AddEntryModal extends Modal {
   // (which already honours FileConfig.titleColumn) is what makes a
   // per-file Title override actually take effect here too.
   titleCol: string | undefined;
+  isDateCol: (h: string) => boolean;
 
   constructor(
     app: App,
@@ -80,6 +82,7 @@ export class AddEntryModal extends Modal {
     isBooleanCol: (h: string) => boolean = () => false,
     isCategoricalCol?: (h: string) => boolean,
     titleCol?: string,
+    isDateColFn: (h: string) => boolean = isDateCol,
   ) {
     super(app);
     this.headers = headers;
@@ -91,6 +94,7 @@ export class AddEntryModal extends Modal {
     this.isBooleanCol = isBooleanCol;
     this.isCategoricalCol = isCategoricalCol ?? ((h) => this.isSelectCol(h) || looksCategorical(this.getColumnValues(h).length));
     this.titleCol = titleCol ?? this.headers.find(h => ["title", "name"].includes(h.toLowerCase()));
+    this.isDateCol = isDateColFn;
   }
 
   onOpen(): void {
@@ -207,7 +211,7 @@ export class AddEntryModal extends Modal {
         });
 
       } else {
-        const input = makeFieldInput(row, h, "", "csv-modal-input");
+        const input = makeFieldInput(row, h, "", "csv-modal-input", c => this.isDateCol(c));
         input.addEventListener("input", () => { values[h] = input.value; });
         // Submit on Enter for non-textarea fields
         input.addEventListener("keydown", e => { if (e.key === "Enter") submit(); });
@@ -279,6 +283,7 @@ export class NoteExpanderModal extends Modal {
   // any string back into it. Optional so callers/tests that don't track
   // habit columns default to never-boolean (unchanged behaviour).
   private isBooleanCol: (h: string) => boolean;
+  private isDateCol: (h: string) => boolean;
 
   constructor(
     app: App,
@@ -294,6 +299,7 @@ export class NoteExpanderModal extends Modal {
     isCategoricalCol?: (h: string) => boolean,
     titleCol?: string,
     isBooleanCol: (h: string) => boolean = () => false,
+    isDateColArg: (h: string) => boolean = isDateCol,
   ) {
     super(app);
     // Work on a shallow copy so cancel doesn't mutate
@@ -311,6 +317,7 @@ export class NoteExpanderModal extends Modal {
       ?? ((h) => this.isSelectCol(h) || (!isDateCol(h) && looksCategorical(this.getColumnValues(h).length)));
     this.titleCol = titleCol ?? this.headers.find(h => ["title", "name", "Title", "Name"].includes(h));
     this.isBooleanCol = isBooleanCol;
+    this.isDateCol = isDateColArg;
     this.modalEl.addClass("csv-note-expander-modal");
   }
 
@@ -404,9 +411,11 @@ export class NoteExpanderModal extends Modal {
       } else {
         const val = fieldRow.createDiv({ cls: "csv-expander-field-value", text: this.row[h] || "—" });
         val.addEventListener("click", () => {
+          if (val.querySelector("input")) return;
           val.empty();
-          const input = makeFieldInput(val, h, this.row[h] ?? "", "csv-inline-input");
+          const input = makeFieldInput(val, h, this.row[h] ?? "", "csv-inline-input", this.isDateCol);
           input.focus(); if (input.type === "text") input.select();
+          input.addEventListener("click", ev => ev.stopPropagation());
           const commit = () => { this.row[h] = input.value; val.empty(); val.setText(input.value || "—"); };
           input.addEventListener("blur", commit);
           input.addEventListener("keydown", e => { if (e.key === "Enter") input.blur(); if (e.key === "Escape") { val.empty(); val.setText(this.row[h] || "—"); } });
@@ -817,68 +826,25 @@ export class FileConfigModal extends Modal {
       text: "Type and Function are each exclusive per column — picking one clears it from whichever column held it before. \"auto\" means it's already doing that by column name, with nothing saved here yet. Card field is independent and can combine with anything. Checkbox columns get a \"Clean up\" action that rewrites every row to strict 1/0 right away — not deferred to Save.",
     });
 
-    type ColType = "text" | "checkbox" | "categorical";
+    type ColType = "text" | "checkbox" | "categorical" | "date";
     const TYPE_OPTIONS: { value: ColType; label: string }[] = [
       { value: "text", label: "Text" },
       { value: "checkbox", label: "Checkbox" },
       { value: "categorical", label: "Categorical" },
+      { value: "date", label: "Date" },
     ];
     type Role = "title" | "category" | "status" | "notes" | "image" | "anki" | "";
     const ROLE_OPTIONS: { value: Role; label: string }[] = [
       { value: "", label: "— no function —" },
       { value: "title", label: "Title" },
-      { value: "category", label: "Column grouping (Kanban lanes)" },
-      { value: "status", label: "Row grouping / checkmark (Kanban subgroups, Tasks done)" },
+      { value: "category", label: "Column group (Kanban lanes)" },
+      { value: "status", label: "Row group / Status / Checkmark" },
       { value: "notes", label: "Notes" },
       { value: "image", label: "Image (card / kanban thumbnail)" },
       { value: "anki", label: "Anki card front" },
     ];
-    // Explicit fileCfg fields always win outright over name-based detection —
-    // mirrors titleKey/getCategoryCol/getStatusCol/getNotesCol/getImageCol/
-    // ankiFrontCol, which never blend an auto guess in once a role has an
-    // override, even if that override points at a column that no longer
-    // looks like a great fit. So `auto: true` only appears when fully unset.
-    const roleOf = (h: string): { role: Role; auto: boolean } => {
-      if (this.current.titleColumn !== undefined) { if (this.current.titleColumn === h) return { role: "title", auto: false }; }
-      else if (this.autoDetectedRoles.title === h) return { role: "title", auto: true };
-
-      if (this.current.categoryColumn !== undefined) { if (this.current.categoryColumn === h) return { role: "category", auto: false }; }
-      else if (this.autoDetectedRoles.category === h) return { role: "category", auto: true };
-
-      if (this.current.statusColumn !== undefined) { if (this.current.statusColumn === h) return { role: "status", auto: false }; }
-      else if (this.autoDetectedRoles.status === h) return { role: "status", auto: true };
-
-      if (this.current.notesColumn !== undefined) { if (this.current.notesColumn === h) return { role: "notes", auto: false }; }
-      else if (this.autoDetectedRoles.notes === h) return { role: "notes", auto: true };
-
-      if (this.current.imageColumn !== undefined) { if (this.current.imageColumn === h) return { role: "image", auto: false }; }
-      else if (this.autoDetectedRoles.image === h) return { role: "image", auto: true };
-
-      if (this.current.ankiFrontCol !== undefined) { if (this.current.ankiFrontCol === h) return { role: "anki", auto: false }; }
-      else if (this.autoDetectedRoles.anki === h) return { role: "anki", auto: true };
-
-      return { role: "", auto: false };
-    };
-    // Only clears the role(s) *this* column currently holds — reassigning a
-    // role to a different column evicts its previous holder for free, since
-    // titleColumn/categoryColumn/etc. are each a single string field.
-    const clearRoleFieldsFor = (h: string) => {
-      if (this.current.titleColumn === h) this.current.titleColumn = undefined;
-      if (this.current.categoryColumn === h) this.current.categoryColumn = undefined;
-      if (this.current.statusColumn === h) this.current.statusColumn = undefined;
-      if (this.current.notesColumn === h) this.current.notesColumn = undefined;
-      if (this.current.imageColumn === h) this.current.imageColumn = undefined;
-      if (this.current.ankiFrontCol === h) this.current.ankiFrontCol = undefined;
-    };
-    const setRole = (h: string, role: Role) => {
-      clearRoleFieldsFor(h);
-      if (role === "title") this.current.titleColumn = h;
-      else if (role === "category") this.current.categoryColumn = h;
-      else if (role === "status") this.current.statusColumn = h;
-      else if (role === "notes") this.current.notesColumn = h;
-      else if (role === "image") this.current.imageColumn = h;
-      else if (role === "anki") this.current.ankiFrontCol = h;
-    };
+    // Explicit fileCfg fields always win outright over name-based detection.
+    // Functions are now managed in a separate table below.
 
     // Type resolution: Checkbox beats Categorical when a column happens to
     // auto-detect as both (a 2-value 0/1 column is also low-cardinality) —
@@ -889,40 +855,36 @@ export class FileConfigModal extends Modal {
     const typeOf = (h: string): { type: ColType; auto: boolean } => {
       const habitList = this.current.habitColumns ?? this.autoDetectedHabits;
       const catList = this.current.categoricalColumns ?? this.autoDetectedCategorical;
+      const dateList = this.current.dateColumns ?? this.headers.filter(c => isDateCol(c));
       if (habitList.includes(h)) return { type: "checkbox", auto: !this.current.habitColumns };
       if (catList.includes(h)) return { type: "categorical", auto: !this.current.categoricalColumns };
+      if (dateList.includes(h)) return { type: "date", auto: !this.current.dateColumns };
       return { type: "text", auto: false };
     };
     const setType = (h: string, type: ColType) => {
       if (!this.current.habitColumns) this.current.habitColumns = [...this.autoDetectedHabits];
       if (!this.current.categoricalColumns) this.current.categoricalColumns = [...this.autoDetectedCategorical];
+      if (!this.current.dateColumns) this.current.dateColumns = this.headers.filter(c => isDateCol(c));
       this.current.habitColumns = this.current.habitColumns.filter(c => c !== h);
       this.current.categoricalColumns = this.current.categoricalColumns.filter(c => c !== h);
+      this.current.dateColumns = this.current.dateColumns.filter(c => c !== h);
       if (type === "checkbox") this.current.habitColumns.push(h);
       else if (type === "categorical") this.current.categoricalColumns.push(h);
-      // type === "text" leaves h out of both lists — the default.
+      else if (type === "date") this.current.dateColumns.push(h);
+      // type === "text" leaves h out of all lists — the default.
     };
 
-    // Auto-detected card-field defaults — used when cardFields is undefined.
-    const autoDetect = (candidates: string[]) =>
-      this.headers.find(h => candidates.some(c => c.toLowerCase() === h.toLowerCase()));
-    const autoCardFields = [
-      autoDetect(["Author","Authors","Director","Artist","Creator","By"]),
-      autoDetect(["Year","Date","Released"]),
-      autoDetect(["Rating","Score","Score /5","Stars"]),
-      autoDetect(["Theme","Tags","Tag","Mood"]),
-    ].filter((c): c is string => !!c);
     const titleCol = this.current.titleColumn ?? this.autoDetectedRoles.title ?? this.headers[0];
 
     const tableWrap = colSection.createDiv({ cls: "csv-modal-colcfg-table-wrap" });
     const table = tableWrap.createEl("table", { cls: "csv-modal-colcfg-table" });
     const thead = table.createEl("thead").createEl("tr");
-    ["Column", "Type", "Function", "Card field"].forEach(h => thead.createEl("th", { text: h }));
+    ["Column", "Type", "Visibility"].forEach(h => thead.createEl("th", { text: h }));
     const tbody = table.createEl("tbody");
 
     const renderRows = () => {
       tbody.empty();
-      const selectedCard = new Set(this.current.cardFields ?? autoCardFields);
+      const selectedCard = new Set(this.current.cardFields ?? this.headers);
 
       this.headers.forEach(h => {
         const row = tbody.createEl("tr");
@@ -995,34 +957,93 @@ export class FileConfigModal extends Modal {
           }
         }
 
-        // ── Function cell ──
-        const fnCell = row.createEl("td", { cls: "csv-modal-colcfg-fn-cell" });
-        const roleSel = fnCell.createEl("select", { cls: "csv-modal-select csv-modal-colcfg-role" });
-        const { role: currentRole, auto: isAutoRole } = roleOf(h);
-        ROLE_OPTIONS.forEach(o => {
-          const opt = roleSel.createEl("option", { text: o.label, value: o.value });
-          if (o.value === currentRole) opt.selected = true;
-        });
-        if (isAutoRole) roleSel.addClass("auto-detected");
-        roleSel.addEventListener("change", () => {
-          setRole(h, roleSel.value as Role);
-          renderRows();
-        });
-        if (isAutoRole) fnCell.createSpan({ cls: "csv-modal-colcfg-auto-badge", text: "auto" });
-
         // ── Card field cell ──
         const cardCell = row.createEl("td", { cls: "csv-modal-colcfg-card-cell" });
         const cardCb = cardCell.createEl("input", { type: "checkbox" });
         cardCb.checked = selectedCard.has(h);
-        if (autoCardFields.includes(h) && !this.current.cardFields) cardCb.addClass("auto-detected");
         cardCb.addEventListener("change", () => {
-          if (!this.current.cardFields) this.current.cardFields = [...autoCardFields];
+          if (!this.current.cardFields) this.current.cardFields = [...this.headers];
           if (cardCb.checked) { if (!this.current.cardFields.includes(h)) this.current.cardFields.push(h); }
           else { this.current.cardFields = this.current.cardFields.filter(c => c !== h); }
         });
       });
     };
     renderRows();
+
+    // ── Functions Table ──
+    const funcSection = contentEl.createDiv({ cls: "csv-modal-section", attr: { style: "margin-top: 24px;" } });
+    funcSection.createEl("h3", { text: "Column Functions", cls: "csv-modal-h3" });
+    funcSection.createEl("p", { 
+      cls: "csv-modal-desc", 
+      text: "Assign specific roles to your columns. 'auto' means it's already doing that by column name. Selecting '— none —' disables the function entirely." 
+    });
+    const funcTableWrap = funcSection.createDiv({ cls: "csv-modal-colcfg-table-wrap" });
+    const funcTable = funcTableWrap.createEl("table", { cls: "csv-modal-colcfg-table" });
+    const funcThead = funcTable.createEl("thead").createEl("tr");
+    ["Function", "Column"].forEach(h => funcThead.createEl("th", { text: h }));
+    const funcTbody = funcTable.createEl("tbody");
+
+    const renderFuncRows = () => {
+      funcTbody.empty();
+      ROLE_OPTIONS.forEach(role => {
+        if (role.value === "") return; // Skip the "no function" label
+        const row = funcTbody.createEl("tr");
+
+        const nameCell = row.createEl("td", { cls: "csv-modal-colcfg-name" });
+        nameCell.setText(role.label);
+
+        const selCell = row.createEl("td", { cls: "csv-modal-colcfg-type-cell" });
+        const sel = selCell.createEl("select", { cls: "csv-modal-select csv-modal-colcfg-role" });
+        sel.createEl("option", { text: "— none —", value: "" });
+
+        let currentHolder = "";
+        let isAuto = false;
+
+        if (role.value === "title") {
+          currentHolder = this.current.titleColumn ?? this.autoDetectedRoles.title ?? "";
+          isAuto = this.current.titleColumn === undefined && !!this.autoDetectedRoles.title;
+        } else if (role.value === "category") {
+          currentHolder = this.current.categoryColumn ?? this.autoDetectedRoles.category ?? "";
+          isAuto = this.current.categoryColumn === undefined && !!this.autoDetectedRoles.category;
+        } else if (role.value === "status") {
+          currentHolder = this.current.statusColumn ?? this.autoDetectedRoles.status ?? "";
+          isAuto = this.current.statusColumn === undefined && !!this.autoDetectedRoles.status;
+        } else if (role.value === "notes") {
+          currentHolder = this.current.notesColumn ?? this.autoDetectedRoles.notes ?? "";
+          isAuto = this.current.notesColumn === undefined && !!this.autoDetectedRoles.notes;
+        } else if (role.value === "image") {
+          currentHolder = this.current.imageColumn ?? this.autoDetectedRoles.image ?? "";
+          isAuto = this.current.imageColumn === undefined && !!this.autoDetectedRoles.image;
+        } else if (role.value === "anki") {
+          currentHolder = this.current.ankiFrontCol ?? this.autoDetectedRoles.anki ?? "";
+          isAuto = this.current.ankiFrontCol === undefined && !!this.autoDetectedRoles.anki;
+        }
+
+        this.headers.forEach(h => {
+          const opt = sel.createEl("option", { text: h, value: h });
+          if (h === currentHolder) opt.selected = true;
+        });
+
+        if (isAuto && currentHolder !== "") sel.addClass("auto-detected");
+
+        sel.addEventListener("change", () => {
+          const h = sel.value;
+          if (role.value === "title") this.current.titleColumn = h;
+          else if (role.value === "category") this.current.categoryColumn = h;
+          else if (role.value === "status") this.current.statusColumn = h;
+          else if (role.value === "notes") this.current.notesColumn = h;
+          else if (role.value === "image") this.current.imageColumn = h;
+          else if (role.value === "anki") this.current.ankiFrontCol = h;
+          renderFuncRows();
+        });
+
+        if (isAuto && currentHolder !== "") {
+          selCell.createSpan({ cls: "csv-modal-colcfg-auto-badge", text: "auto" });
+        }
+      });
+    };
+    renderFuncRows();
+
 
     const addColWrap = colSection.createDiv({ cls: "csv-modal-add-column" });
     const addColInput = addColWrap.createEl("input", { cls: "csv-modal-input", type: "text", placeholder: "New column name" });

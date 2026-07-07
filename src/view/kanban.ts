@@ -178,8 +178,11 @@ function renderKanbanCard(view: CardView, container: HTMLElement, row: CSVRow, s
   const tk=view.titleKey(), ak=view.authorKey();
   const skipInCard = new Set([sc, tk, ak, groupCol].filter(Boolean) as string[]);
   const metaEl = card.createDiv({cls:"csv-kanban-card-meta"});
-  view.headers.forEach(h => {
-    if (skipInCard.has(h) || view.isNotesCol(h)) return;
+  
+  const displayCols = view.fileCfg.cardFields ?? view.headers;
+
+  displayCols.forEach(h => {
+    if (!view.headers.includes(h) || skipInCard.has(h) || view.isNotesCol(h)) return;
     const chip = metaEl.createDiv({cls:"csv-kanban-chip"});
     chip.createSpan({cls:"csv-chip-label", text:h+": "});
     if (view.isSelectCol(h)) {

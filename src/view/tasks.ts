@@ -15,6 +15,7 @@ import type { CardView } from "../../main";
 import { CSVRow } from "../types";
 import { showSelectPicker } from "../utils";
 import { effectiveGroupCol } from "./kanban";
+import { makeEditable } from "./table";
 
 // ── Column resolution ─────────────────────────────────────────────────────────
 
@@ -63,21 +64,7 @@ export function hasTaskColumns(view: CardView): boolean {
   return view.rows.some(r => STRUCTURED_WORDS.includes((r[tc] ?? "").trim().toLowerCase()));
 }
 
-function isTaskRow(view: CardView, row: CSVRow, typeCol: string | null): boolean {
-  if (!typeCol) return true;            // no type column → everything is a task
-  return TASK_WORDS.includes((row[typeCol] ?? "").trim().toLowerCase());
-}
 
-// Which of the three sections a row belongs to. Tasks (incl. empty/no-type),
-// Ideas (type "idea"), and Notes (everything else non-task: note, reference,
-// or any other non-task value).
-type TaskBucket = "task" | "note" | "idea";
-function bucketOf(view: CardView, row: CSVRow, typeCol: string | null): TaskBucket {
-  if (isTaskRow(view, row, typeCol)) return "task";
-  const t = (typeCol ? row[typeCol] : "").trim().toLowerCase();
-  if (t === "idea" || t === "ideas") return "idea";
-  return "note";
-}
 
 function isDone(view: CardView, row: CSVRow, statusCol: string | null): boolean {
   if (!statusCol) return false;
@@ -173,30 +160,46 @@ export function renderTasks(view: CardView, container: HTMLElement): void {
     container.createDiv({ cls: "csv-library-result-count", text: `Showing ${filtered.length} of ${view.rows.length} entries` });
   }
 
-  // ── Split into tasks / notes / ideas, each grouped by project ──
-  const tasksByProject: Record<string, CSVRow[]> = {};
-  const notesByProject: Record<string, CSVRow[]> = {};
-  const ideasByProject: Record<string, CSVRow[]> = {};
-  const buckets: Record<TaskBucket, Record<string, CSVRow[]>> = {
-    task: tasksByProject, note: notesByProject, idea: ideasByProject,
-  };
+  // ── Split into sections based on Type, each grouped by project ──
+  const buckets: Record<string, Record<string, CSVRow[]>> = {};
   const projectOf = (row: CSVRow): string => {
     if (!projectCol) return "—";
     const p = (row[projectCol] ?? "").split(",").map(s => s.trim()).filter(Boolean)[0];
     return p || "—";
   };
   filtered.forEach(row => {
-    const bucket = buckets[bucketOf(view, row, typeCol)];
+    const t = typeCol ? (row[typeCol] ?? "").trim() : "";
+    // If no type column exists, bucket everything into "Tasks".
+    // If a type column exists but the row is empty, bucket as "—".
+    const bucketName = typeCol ? (t || "—") : "Tasks";
     const proj = projectOf(row);
-    (bucket[proj] ??= []).push(row);
+    if (!buckets[bucketName]) buckets[bucketName] = {};
+    (buckets[bucketName][proj] ??= []).push(row);
   });
 
   const wrap = container.createDiv({ cls: "csv-tasks" });
   const today = todayISO();
   const doneWord = statusCol ? resolveDoneWord(view, statusCol) : "done";
 
-  // ── Tasks section ──
-  renderSection(wrap, "Tasks", tasksByProject, (tbody, items) => {
+  const visibleCols = view.fileCfg.cardFields ?? view.headers;
+  // Skip the grouping columns themselves from being rendered as standard columns,
+  // and skip the status column since it is always rendered as the interactive checkmark.
+  const displayCols = visibleCols.filter(h => h !== projectCol && h !== typeCol && h !== statusCol);
+
+  const headersList: { name: string, cls: string }[] = [];
+  if (statusCol) headersList.push({ name: "", cls: "csv-tasks-check-cell" });
+  displayCols.forEach(h => {
+    let cls = "";
+    if (h === titleCol) cls = "csv-tasks-name-cell";
+    else if (h === dueCol) cls = "csv-tasks-due";
+    else if (h === priCol) cls = "csv-tasks-priority";
+    else if (view.isNotesCol(h)) cls = "csv-tasks-generic-cell csv-tasks-notes-cell";
+    else cls = "csv-tasks-generic-cell";
+    headersList.push({ name: h, cls });
+  });
+
+  // ── Render each section ──
+  const fillSection = (tbody: HTMLElement, items: CSVRow[]) => {
     items.sort((a, b) => {
       const da = isDone(view, a, statusCol), db = isDone(view, b, statusCol);
       if (da !== db) return da ? 1 : -1;
@@ -217,8 +220,8 @@ export function renderTasks(view: CardView, container: HTMLElement): void {
       const tr = tbody.createEl("tr");
 
       // Done toggle (only when there's a status column to flip).
-      const checkCell = tr.createEl("td", { cls: "csv-tasks-check-cell" });
       if (statusCol) {
+        const checkCell = tr.createEl("td", { cls: "csv-tasks-check-cell" });
         const box = checkCell.createEl("span", { cls: `csv-tasks-check ${done ? "is-done" : ""}`, text: done ? "✓" : "" });
         box.setAttr("title", done ? "Mark not done" : "Mark done");
         box.addEventListener("click", e => {
@@ -229,70 +232,54 @@ export function renderTasks(view: CardView, container: HTMLElement): void {
         });
       }
 
-      renderNameCell(view, tr, row, titleCol, done);
-
-      const dueCell = tr.createEl("td", { cls: "csv-tasks-due" });
-      const dueVal = dueCol ? (row[dueCol] ?? "").slice(0, 10) : "";
-      dueCell.setText(dueVal || "—");
-      if (dueVal && !done && dueVal < today) dueCell.addClass("csv-tasks-overdue");
-
-      const priCell = tr.createEl("td", { cls: "csv-tasks-priority", text: priCol ? (row[priCol] || "—") : "—" });
-      if (priCol) {
-        priCell.addClass("csv-tasks-editable");
-        priCell.addEventListener("click", e => {
-          e.stopPropagation();
-          // Offer the file's own priority values plus the canonical three, so
-          // a click cycles through whatever vocabulary the column already uses.
-          const opts = Array.from(new Set([...view.getColumnValues(priCol), "high", "medium", "low"]));
-          showSelectPicker(priCell, row[priCol] ?? "", opts, val => {
-            row[priCol] = val;
-            view.scheduleSave();
-            view.renderView(true);   // re-sort by the new priority
-          }, view.contentEl);
-        });
-      }
-      tr.addEventListener("contextmenu", e => view.openRowContextMenu(row, e));
-    });
-  }, ["", "Name", "Due", "Priority"]);
-
-  // ── Notes and Ideas sections ── peers of Tasks, each grouped by project.
-  // Same row rendering (type pill + name), just different buckets/titles. Gets
-  // the same done checkmark as Tasks rows (only when a status column exists) —
-  // a note/idea is just as markable-done as a task, and rows that land here
-  // (e.g. a miscategorized Type value) shouldn't lose the ability to be closed out.
-  const fillNoteLike = (tbody: HTMLElement, items: CSVRow[]) => {
-    items.sort((a, b) => {
-      const da = isDone(view, a, statusCol), db = isDone(view, b, statusCol);
-      if (da !== db) return da ? 1 : -1;
-      return view.getTitle(a).localeCompare(view.getTitle(b));
-    });
-    items.forEach(row => {
-      const done = isDone(view, row, statusCol);
-      const tr = tbody.createEl("tr");
-
-      const checkCell = tr.createEl("td", { cls: "csv-tasks-check-cell" });
-      if (statusCol) {
-        const box = checkCell.createEl("span", { cls: `csv-tasks-check ${done ? "is-done" : ""}`, text: done ? "✓" : "" });
-        box.setAttr("title", done ? "Mark not done" : "Mark done");
-        box.addEventListener("click", e => {
-          e.stopPropagation();
-          row[statusCol] = done ? "" : doneWord;
-          view.scheduleSave();
-          view.renderView(true);
-        });
-      }
-
-      const typeVal = typeCol ? (row[typeCol] || "") : "";
-      const typeCell = tr.createEl("td", { cls: "csv-tasks-type-cell" });
-      if (typeVal) typeCell.createSpan({ cls: "csv-tasks-type-pill", text: typeVal });
-      renderNameCell(view, tr, row, titleCol, done);
+      displayCols.forEach(h => {
+        if (h === titleCol) {
+          renderNameCell(view, tr, row, titleCol, done);
+        } else if (h === dueCol) {
+          const dueCell = tr.createEl("td", { cls: "csv-tasks-due csv-tasks-editable" });
+          const dueVal = dueCol ? (row[dueCol] ?? "").slice(0, 10) : "";
+          dueCell.setText(dueVal || "—");
+          if (dueVal && !done && dueVal < today) dueCell.addClass("csv-tasks-overdue");
+          makeEditable(view, dueCell, row, h);
+        } else if (h === priCol) {
+          const priCell = tr.createEl("td", { cls: "csv-tasks-priority csv-tasks-editable", text: priCol ? (row[priCol] || "—") : "—" });
+          priCell.addEventListener("click", e => {
+            e.stopPropagation();
+            const opts = Array.from(new Set([...view.getColumnValues(priCol), "high", "medium", "low"]));
+            showSelectPicker(priCell, row[priCol] ?? "", opts, val => {
+              row[priCol] = val;
+              view.scheduleSave();
+              view.renderView(true);
+            }, view.contentEl);
+          });
+        } else if (view.isNotesCol(h)) {
+          const plain = (row[h] ?? "").replace(/#{1,6}\s/g,"").replace(/[*_>`]/g,"").replace(/\n+/g," ").trim();
+          const display = plain ? (plain.length > 50 ? plain.slice(0, 48) + "…" : plain) : "—";
+          const td = tr.createEl("td", { text: display, cls: "csv-tasks-generic-cell csv-tasks-notes-cell csv-tasks-editable" });
+          makeEditable(view, td, row, h);
+        } else {
+          const val = row[h] ?? "";
+          const display = val.length > 40 ? val.slice(0, 38) + "…" : val;
+          const td = tr.createEl("td", { text: display || "—", cls: "csv-tasks-generic-cell csv-tasks-editable" });
+          makeEditable(view, td, row, h);
+        }
+      });
       tr.addEventListener("contextmenu", e => view.openRowContextMenu(row, e));
     });
   };
-  renderSection(wrap, "Notes", notesByProject, fillNoteLike, ["", "Type", "Name"]);
-  renderSection(wrap, "Ideas", ideasByProject, fillNoteLike, ["", "Type", "Name"]);
 
-  if (Object.keys(tasksByProject).length === 0 && Object.keys(notesByProject).length === 0 && Object.keys(ideasByProject).length === 0) {
+  const typesArray = Object.keys(buckets).sort((a, b) => {
+    // Pin "Tasks" and "—" to the top
+    if (a === "Tasks" || a === "—") return -1;
+    if (b === "Tasks" || b === "—") return 1;
+    return a.localeCompare(b);
+  });
+
+  typesArray.forEach(t => {
+    renderSection(view, wrap, t, buckets[t], fillSection, headersList);
+  });
+
+  if (typesArray.length === 0) {
     const empty = wrap.createDiv({ cls: "csv-empty-state" });
     empty.createEl("p", { text: q || view.taskProjectFilter !== "all" || view.taskTypeFilter !== "all" ? "No entries match your filters." : "No tasks yet." });
     if (q || view.taskProjectFilter !== "all" || view.taskTypeFilter !== "all") {
@@ -306,11 +293,12 @@ export function renderTasks(view: CardView, container: HTMLElement): void {
 
 // A titled group of per-project collapsible tables.
 function renderSection(
+  view: CardView,
   wrap: HTMLElement,
   title: string,
   byProject: Record<string, CSVRow[]>,
   fillBody: (tbody: HTMLElement, items: CSVRow[]) => void,
-  cols: string[],
+  cols: { name: string, cls: string }[],
 ): void {
   if (Object.keys(byProject).length === 0) return;
   wrap.createDiv({ cls: "csv-tasks-section-header", text: title });
@@ -323,8 +311,8 @@ function renderSection(
     summary.innerHTML = `<span class="csv-tasks-arrow">▶</span> ${project} <span class="csv-tasks-count">${items.length}</span>`;
     const table = details.createEl("table", { cls: "csv-tasks-table" });
     const thead = table.createEl("thead");
-    const hr = thead.createEl("tr");
-    cols.forEach(c => hr.createEl("th", { text: c }));
+    const tr = thead.createEl("tr");
+    cols.forEach(col => tr.createEl("th", { text: col.name, cls: col.cls }));
     const tbody = table.createEl("tbody");
     fillBody(tbody, items);
   });

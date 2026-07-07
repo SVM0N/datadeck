@@ -5,6 +5,7 @@
 
 import type { CardView } from "../../main";
 import { CSVRow } from "../types";
+import { isDateCol, ISO_DATE } from "../field-types";
 
 export function renderTable(view: CardView, container: HTMLElement): void {
   const filteredRows = view.getFilteredRows();
@@ -116,12 +117,37 @@ export function renderTable(view: CardView, container: HTMLElement): void {
   }
 }
 
-function makeEditable(view: CardView, el: HTMLElement, row: CSVRow, h: string): void {
-  el.addEventListener("click", () => {
+export function makeEditable(view: CardView, el: HTMLElement, row: CSVRow, h: string): void {
+  el.addEventListener("click", (e) => {
+    // If we're already editing (e.g. user clicked the input), do not reset it
+    if (el.querySelector("input")) return;
+    
     el.empty();
-    const input = el.createEl("input",{cls:"csv-inline-input",value:row[h]??"",type:"text"});
-    input.focus(); input.select();
-    input.addEventListener("blur",()=>{ row[h]=input.value; view.scheduleSave(); el.empty(); el.setText(input.value||"—"); });
-    input.addEventListener("keydown",e=>{ if(e.key==="Enter")input.blur(); if(e.key==="Escape"){el.empty();el.setText(row[h]||"—");} });
+    
+    // Check if the column is explicitly configured as 'date', or auto-detected
+    const isExplicitDate = view.fileCfg.dateColumns?.includes(h);
+    const initial = (row[h] ?? "").trim();
+    // Use native date picker if configured as date, or if it auto-detects as date AND has a clean ISO date (or is empty)
+    const isDate = isExplicitDate || (isDateCol(h) && (initial === "" || ISO_DATE.test(initial)));
+
+    // When writing to a native date input, it demands a strict yyyy-mm-dd ISO string.
+    // If the data has time data or weird formatting, native date picker won't display it.
+    // We enforce truncation to 10 chars for rendering the picker.
+    const pickerValue = isDate ? initial.slice(0, 10) : initial;
+
+    const input = el.createEl("input", { 
+      cls: "csv-inline-input", 
+      value: pickerValue, 
+      type: isDate ? "date" : "text" 
+    });
+    
+    input.focus(); 
+    if (!isDate) input.select(); // selecting text is mostly useful for text inputs, dates have a native picker
+    
+    // Prevent clicks on the input from bubbling up to row/document listeners
+    input.addEventListener("click", ev => ev.stopPropagation());
+    
+    input.addEventListener("blur", () => { row[h] = input.value; view.scheduleSave(); el.empty(); el.setText(input.value || "—"); });
+    input.addEventListener("keydown", ev => { if (ev.key === "Enter") input.blur(); if (ev.key === "Escape") { el.empty(); el.setText(row[h] || "—"); } });
   });
 }

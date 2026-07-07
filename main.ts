@@ -257,7 +257,7 @@ export class CardView extends FileView {
    */
   isCategoricalCol(h: string): boolean {
     const titleCol = this.titleKey() ?? this.headers[0];
-    if (h === titleCol || isDateCol(h) || isMultiValueColName(h)) return false;
+    if (h === titleCol || this.isDateCol(h) || isMultiValueColName(h)) return false;
     if (this.fileCfg.categoricalColumns) return this.fileCfg.categoricalColumns.includes(h);
     return this.isSelectCol(h) || looksCategorical(this.getColumnValues(h).length);
   }
@@ -266,9 +266,14 @@ export class CardView extends FileView {
   autoDetectCategoricalColumns(): string[] {
     const titleCol = this.titleKey() ?? this.headers[0];
     return this.headers.filter(h => {
-      if (h === titleCol || isDateCol(h) || isMultiValueColName(h) || this.isNotesCol(h)) return false;
+      if (h === titleCol || this.isDateCol(h) || isMultiValueColName(h) || this.isNotesCol(h)) return false;
       return this.isSelectCol(h) || looksCategorical(this.getColumnValues(h).length);
     });
+  }
+
+  isDateCol(h: string): boolean {
+    if (this.fileCfg.dateColumns?.includes(h)) return true;
+    return isDateCol(h);
   }
 
   getStatusCol(): string | null {
@@ -449,9 +454,10 @@ export class CardView extends FileView {
       },
       // Delete with undo: the helper handles splice + save + rerender + Notice.
       () => this.deleteWithUndo(row),
-      this.isCategoricalCol.bind(this),
+      c => this.isCategoricalCol(c),
       this.titleKey(),
-      (h) => this.getBooleanColumns().includes(h)
+      c => this.getBooleanColumns().includes(c),
+      c => this.isDateCol(c)
     ).open();
   }
 
@@ -538,8 +544,9 @@ export class CardView extends FileView {
       optionPresets,
       // Habit/0-1 columns render as toggles in the add form.
       (h) => this.getBooleanColumns().includes(h),
-      this.isCategoricalCol.bind(this),
-      this.titleKey()
+      c => this.isCategoricalCol(c),
+      this.titleKey(),
+      c => this.isDateCol(c)
     ).open();
   }
 
@@ -910,6 +917,7 @@ interface FileTemplate {
   defaultName: string;
   headers: string[];
   mode: ViewMode;
+  configOverrides?: Partial<FileConfig>;
 }
 
 const FILE_TEMPLATES: FileTemplate[] = [
@@ -917,8 +925,15 @@ const FILE_TEMPLATES: FileTemplate[] = [
     id: "tasks",
     command: "Create tasks file",
     defaultName: "Tasks",
-    headers: ["Title", "Type", "Project", "Status", "Priority", "Due", "Notes"],
+    headers: ["Title", "Priority", "Notes", "Due", "Status"],
     mode: "tasks",
+    configOverrides: {
+      categoricalColumns: ["Priority"],
+      dateColumns: ["Due"],
+      habitColumns: ["Status"],
+      statusColumn: "Status",
+      notesColumn: "Notes"
+    }
   },
   {
     id: "travel",
@@ -1072,7 +1087,8 @@ export default class CardViewPlugin extends Plugin {
         const file = await this.app.vault.create(path, tpl.headers.join(",") + "\n");
         // Pin the renderer up front so the file opens in its template's view
         // even before the user adds a row that would trigger auto-detection.
-        this.settings.fileConfigs[file.path] = { ...this.settings.fileConfigs[file.path], defaultMode: tpl.mode };
+        const baseConfig = this.settings.fileConfigs[file.path] || {};
+        this.settings.fileConfigs[file.path] = { ...baseConfig, defaultMode: tpl.mode, ...(tpl.configOverrides || {}) };
         await this.saveSettings();
         await this.app.workspace.getLeaf("tab").openFile(file);
         new Notice(`Created: ${file.name}`);

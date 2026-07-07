@@ -272,24 +272,27 @@ export class InlineCardHost extends MarkdownRenderChild {
   // the same dropdowns the full-page view and ⚙ Columns modal configure.
   isCategoricalCol(h: string): boolean {
     const titleCol = this.titleKey() ?? this.headers[0];
-    if (h === titleCol || isDateCol(h) || isMultiValueColName(h)) return false;
+    if (h === titleCol || this.getDateCol() === h || isMultiValueColName(h)) return false;
     if (this.fileCfg.categoricalColumns) return this.fileCfg.categoricalColumns.includes(h);
     return this.isSelectCol(h) || looksCategorical(this.getColumnValues(h).length);
   }
   getStatusCol(): string | null {
-    if (this.fileCfg.statusColumn) {
+    if (this.fileCfg.statusColumn !== undefined) {
+      if (this.fileCfg.statusColumn === "") return null;
       return this.headers.find(h => h.toLowerCase() === this.fileCfg.statusColumn!.toLowerCase()) ?? null;
     }
     return this.resolveCol(STATUS_COL_ALIASES);
   }
   getCategoryCol(): string | null {
-    if (this.fileCfg.categoryColumn) {
+    if (this.fileCfg.categoryColumn !== undefined) {
+      if (this.fileCfg.categoryColumn === "") return null;
       return this.headers.find(h => h.toLowerCase() === this.fileCfg.categoryColumn!.toLowerCase()) ?? null;
     }
     return this.resolveCol(CATEGORY_COL_ALIASES);
   }
   titleKey(): string | undefined {
-    if (this.fileCfg.titleColumn) {
+    if (this.fileCfg.titleColumn !== undefined) {
+      if (this.fileCfg.titleColumn === "") return undefined;
       return this.headers.find(h => h.toLowerCase() === this.fileCfg.titleColumn!.toLowerCase()) ?? undefined;
     }
     return this.resolveCol(TITLE_COL_ALIASES) ?? undefined;
@@ -306,7 +309,10 @@ export class InlineCardHost extends MarkdownRenderChild {
     return Array.from(new Set(this.rows.map(r => r[h] ?? "").filter(Boolean))).sort();
   }
   getImageCol(): string | null {
-    if (this.fileCfg.imageColumn) return this.headers.find(h => h.toLowerCase() === this.fileCfg.imageColumn!.toLowerCase()) ?? null;
+    if (this.fileCfg.imageColumn !== undefined) {
+      if (this.fileCfg.imageColumn === "") return null;
+      return this.headers.find(h => h.toLowerCase() === this.fileCfg.imageColumn!.toLowerCase()) ?? null;
+    }
     return this.resolveCol(IMAGE_COL_ALIASES);
   }
   // Habit/0-1 columns — configured list or auto-detected (all values 0/1/
@@ -322,13 +328,22 @@ export class InlineCardHost extends MarkdownRenderChild {
     });
   }
   getDateCol(): string | null {
+    if (this.fileCfg.dateColumns && this.fileCfg.dateColumns.length > 0) {
+      const h = this.fileCfg.dateColumns[0];
+      return this.headers.find(header => header === h) ?? null;
+    }
     if (this.headers.length === 0) return null;
     const firstCol = this.headers[0];
     if (["date", "day", "datum"].includes(firstCol.toLowerCase())) return firstCol;
     const datePattern = /^\d{4}-\d{2}-\d{2}$/;
     const sample = this.rows.slice(0, 5);
     if (sample.length > 0 && sample.every(r => datePattern.test(r[firstCol] ?? ""))) return firstCol;
-    return null;
+    return this.headers.find(h => this.isDateCol(h)) ?? null;
+  }
+
+  isDateCol(h: string): boolean {
+    if (this.fileCfg.dateColumns?.includes(h)) return true;
+    return isDateCol(h);
   }
 
   getFilteredRows(): CSVRow[] {
@@ -442,6 +457,7 @@ export class InlineCardHost extends MarkdownRenderChild {
       this.isCategoricalCol.bind(this),
       this.titleKey(),
       (h) => this.getBooleanColumns().includes(h),
+      c => this.isDateCol(c)
     ).open();
   }
 
@@ -457,8 +473,9 @@ export class InlineCardHost extends MarkdownRenderChild {
       {},
       // Habit/0-1 columns render as toggles in the add form.
       (h) => this.getBooleanColumns().includes(h),
-      this.isCategoricalCol.bind(this),
+      c => this.isCategoricalCol(c),
       this.titleKey(),
+      c => this.isDateCol(c)
     ).open();
   }
 

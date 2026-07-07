@@ -1940,6 +1940,11 @@ td .csv-select-chip {
   transition: border-color 0.15s;
 }
 
+.csv-modal-colcfg-role, .csv-modal-colcfg-type {
+  max-width: 160px;
+  text-overflow: ellipsis;
+}
+
 .csv-modal-select:focus {
   border-color: var(--csv-accent);
 }
@@ -1974,9 +1979,19 @@ td .csv-select-chip {
 }
 
 .csv-modal-colcfg-table {
+  display: table !important;
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
+}
+.csv-modal-colcfg-table thead {
+  display: table-header-group !important;
+}
+.csv-modal-colcfg-table tbody {
+  display: table-row-group !important;
+}
+.csv-modal-colcfg-table tr {
+  display: table-row !important;
 }
 
 .csv-modal-colcfg-table th {
@@ -1990,9 +2005,11 @@ td .csv-select-chip {
   background: var(--background-secondary);
   border-bottom: 1px solid var(--csv-border);
   white-space: nowrap;
+  display: table-cell !important;
 }
 
 .csv-modal-colcfg-table td {
+  display: table-cell !important;
   padding: 6px 8px;
   border-bottom: 1px solid var(--csv-border);
   white-space: nowrap;
@@ -2004,17 +2021,22 @@ td .csv-select-chip {
 }
 
 .csv-modal-colcfg-name {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   font-weight: 600;
   color: var(--csv-text);
 }
 
-.csv-modal-colcfg-type-cell, .csv-modal-colcfg-fn-cell {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.csv-modal-colcfg-name > * {
+  vertical-align: middle;
+}
+.csv-modal-colcfg-name button {
+  margin-left: 6px;
+}
+
+.csv-modal-colcfg-type-cell > *, .csv-modal-colcfg-fn-cell > * {
+  vertical-align: middle;
+}
+.csv-modal-colcfg-type-cell > :not(:first-child), .csv-modal-colcfg-fn-cell > :not(:first-child) {
+  margin-left: 6px;
 }
 
 .csv-modal-colcfg-type, .csv-modal-colcfg-role {
@@ -3874,6 +3896,7 @@ select.csv-add-row-control {
 .csv-tasks-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
   font-size: 13px;
   margin: 2px 0 8px;
 }
@@ -3930,11 +3953,21 @@ select.csv-add-row-control {
 .csv-tasks-page-icon.exists { opacity: 0.85; }
 .csv-tasks-page-icon:hover { opacity: 1; color: var(--csv-accent); }
 
-.csv-tasks-due { white-space: nowrap; width: 96px; color: var(--csv-text-faint); }
+.csv-tasks-due { white-space: nowrap; width: 140px; color: var(--csv-text-faint); }
 .csv-tasks-overdue { color: var(--text-error); font-weight: 600; }
-.csv-tasks-priority { white-space: nowrap; width: 80px; text-transform: capitalize; }
+.csv-tasks-priority { white-space: nowrap; width: 80px; text-transform: capitalize; overflow: hidden; text-overflow: ellipsis; }
 .csv-tasks-editable { cursor: pointer; border-radius: 4px; }
 .csv-tasks-editable:hover { color: var(--csv-accent); background: var(--background-modifier-hover); }
+
+.csv-tasks-generic-cell {
+  width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.csv-tasks-notes-cell {
+  width: 260px;
+}
 
 .csv-tasks-type-cell { width: 90px; }
 .csv-tasks-type-pill {
