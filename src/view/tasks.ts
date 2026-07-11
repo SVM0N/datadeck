@@ -14,7 +14,7 @@
 
 import type { CardView } from "../../main";
 import { CSVRow } from "../types";
-import { showSelectPicker, titleCase } from "../utils";
+import { showSelectPicker, titleCase, localISODate } from "../utils";
 import { effectiveGroupCol } from "./kanban";
 import { makeEditable } from "./table";
 
@@ -83,9 +83,10 @@ function dueRank(val: string): number {
   return s ? 0 : 1;
 }
 
-// Today as YYYY-MM-DD, for overdue comparison.
+// Today as YYYY-MM-DD (local — the UTC date is wrong near midnight), for
+// overdue comparison.
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localISODate();
 }
 
 // The word the done-toggle writes when checking a row. Respect the file's

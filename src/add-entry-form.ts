@@ -1,7 +1,7 @@
 import { App, Notice, TFile, MarkdownPostProcessorContext } from "obsidian";
 import Papa from "papaparse";
 import { CSVRow, FileConfig } from "./types";
-import { parseCSV, resolvePath, titleCase, looksCategorical, looksBoolean, isTruthyVal } from "./utils";
+import { parseCSV, resolvePath, titleCase, looksCategorical, looksBoolean, isTruthyVal, localISODate } from "./utils";
 
 // ─── csv-add code block (mobile entry form) ──────────────────────────────────
 // Extracted from CardViewPlugin. Depends only on `app` (vault/workspace),
@@ -129,7 +129,7 @@ export async function renderAddEntryForm(app: App, source: string, el: HTMLEleme
     dateCols.forEach(h => {
       const row = makeRow(h, "date");
       const dateInput = row.createEl("input", { cls: "csv-add-row-control", type: "date" });
-      dateInput.value = new Date().toISOString().split("T")[0];
+      dateInput.value = localISODate();
       inputs[h] = dateInput;
     });
 
@@ -233,13 +233,24 @@ export async function renderAddEntryForm(app: App, source: string, el: HTMLEleme
           // "—" and put the value into the custom input slot. Otherwise pick
           // the matching option.
           const opt = Array.from(input.options).find(o => o.value === val);
+          const customInput = inputs[`${h}__custom`] as HTMLInputElement | undefined;
+          const customRow = customInput?.closest(".csv-add-row-custom") as HTMLElement | null;
           if (opt) {
             input.value = val;
             // Hide any custom-row that was previously open.
-            const customRow = (inputs[`${h}__custom`] as HTMLInputElement | undefined)?.closest(".csv-add-row-custom") as HTMLElement | null;
             if (customRow) customRow.style.display = "none";
+            if (customInput) customInput.value = "";
+          } else if (val) {
+            // Existing value isn't a known option — show it in the custom
+            // slot so the form reflects what's saved (a select stuck on "—"
+            // read as "nothing recorded" even when something was).
+            input.value = "__custom__";
+            if (customInput) customInput.value = val;
+            if (customRow) customRow.style.display = "flex";
           } else {
-            input.value = val ? "" : "";
+            input.value = "";
+            if (customRow) customRow.style.display = "none";
+            if (customInput) customInput.value = "";
           }
         } else if (input instanceof HTMLTextAreaElement) {
           input.value = val;

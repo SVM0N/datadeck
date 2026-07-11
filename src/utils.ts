@@ -100,6 +100,16 @@ export function isTruthyVal(val: string): boolean {
   return v === "1" || v === "true" || v === "yes";
 }
 
+/**
+ * yyyy-mm-dd in *local* time. Everything user-facing must use this rather
+ * than toISOString().slice(0,10) — that's the UTC date, which is yesterday/
+ * tomorrow near midnight in any non-UTC timezone (a habit logged at 00:30
+ * CEST landed on the previous day's row).
+ */
+export function localISODate(d: Date = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export function sanitizeFilename(name: string): string {
   return name.replace(/[\\/:*?"<>|#^[\]]/g,"").replace(/\s+/g," ").trim().slice(0,100);
 }

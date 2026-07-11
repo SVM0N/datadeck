@@ -698,7 +698,7 @@ export class CardView extends FileView {
     if (!await this.app.vault.adapter.exists(archiveFolder)) {
       await this.app.vault.adapter.mkdir(archiveFolder);
     }
-    const date = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const date = this.formatDate(new Date()); // local YYYY-MM-DD
     const dest = `${archiveFolder}/${this.file.basename}_${date}.${this.file.extension}`;
     if (await this.app.vault.adapter.exists(dest)) {
       new Notice(`Backup already exists for today: ${dest}`);

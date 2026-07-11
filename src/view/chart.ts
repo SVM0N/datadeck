@@ -12,6 +12,7 @@ import type { CardView } from "../../main";
 import { CSVRow } from "../types";
 import { loadChart } from "../chartjs-loader";
 import { compileFormula } from "../formula";
+import { localISODate } from "../utils";
 
 // ── Numeric parsing / column detection ──────────────────────────────────────
 
@@ -112,7 +113,9 @@ const fmtNum = (n: number): string => {
 
 const fmtDate = (ms: number): string => {
   const d = new Date(ms);
-  return isNaN(d.getTime()) ? String(ms) : d.toISOString().slice(0, 10);
+  // Local, not toISOString — the timestamps come from local-midnight Date
+  // parses, so the UTC date would read one day early in UTC+ timezones.
+  return isNaN(d.getTime()) ? String(ms) : localISODate(d);
 };
 
 export interface BuiltChart {
