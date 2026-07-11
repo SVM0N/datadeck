@@ -256,7 +256,10 @@ export class InlineCardHost extends MarkdownRenderChild {
     return null;
   }
   getNotesCol(): string | null {
-    if (this.fileCfg.notesColumn) return this.fileCfg.notesColumn;
+    // "" = explicitly disabled via ⚙ Config, like the other role getters.
+    if (this.fileCfg.notesColumn !== undefined) {
+      return this.fileCfg.notesColumn === "" ? null : this.fileCfg.notesColumn;
+    }
     return this.resolveCol(NOTES_COL_ALIASES);
   }
   isNotesCol(h: string): boolean {

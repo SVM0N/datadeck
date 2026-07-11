@@ -782,6 +782,16 @@ export class CardView extends FileView {
   }
 
   getDateCol(): string | null {
+    // An explicit per-file Date pick (⚙ Config, Type = Date) wins — the
+    // inline csv-view host already honoured it; the full view ignored it,
+    // so a configured date column off in position 2+ never drove the
+    // dashboard/date sort here. Deliberately NOT falling back to name-based
+    // isDateCol like the inline host does: "Due" is date-named, and that
+    // fallback would auto-default every tasks file to Dashboard mode.
+    if (this.fileCfg.dateColumns && this.fileCfg.dateColumns.length > 0) {
+      const h = this.fileCfg.dateColumns[0];
+      return this.headers.find(header => header === h) ?? null;
+    }
     // Check first column - if it looks like dates, use it
     if (this.headers.length === 0) return null;
     const firstCol = this.headers[0];
