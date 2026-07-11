@@ -235,8 +235,18 @@ function renderKanbanCard(view: CardView, container: HTMLElement, row: CSVRow, s
     ta.addEventListener("click", e => e.stopPropagation());
     ta.addEventListener("mousedown", e => e.stopPropagation());
     ta.addEventListener("input", () => { ta.style.height="auto"; ta.style.height=ta.scrollHeight+"px"; });
-    ta.addEventListener("keydown", e => { if (e.key==="Escape") closeInlineEditor(ta.value, contentArea, scrollLeft, scrollTop); });
-    ta.addEventListener("blur", () => closeInlineEditor(ta.value, contentArea, scrollLeft, scrollTop));
+    // One close per open: Escape discards (closes with the original text) and
+    // the hide triggers a blur, which must not commit a second time — without
+    // the guard, Escape saved the edit anyway via the follow-up blur.
+    const original = ta.value;
+    let closed = false;
+    const close = (newVal: string) => {
+      if (closed) return;
+      closed = true;
+      closeInlineEditor(newVal, contentArea, scrollLeft, scrollTop);
+    };
+    ta.addEventListener("keydown", e => { if (e.key==="Escape") close(original); });
+    ta.addEventListener("blur", () => close(ta.value));
     // Use preventScroll to avoid browser auto-scrolling the content area
     ta.focus({ preventScroll: true });
     // Cursor at the start of the text, not the end. Setting .value on a
@@ -256,7 +266,9 @@ function renderKanbanCard(view: CardView, container: HTMLElement, row: CSVRow, s
   };
 
   const closeInlineEditor = (newVal: string, contentArea: HTMLElement | null, scrollLeft: number, scrollTop: number) => {
-    if (notesCol) { row[notesCol]=newVal; view.scheduleSave(); }
+    // Only dirty the file on a real change — open-then-close shouldn't queue
+    // a vault write (and the sync churn that follows).
+    if (notesCol && newVal !== (row[notesCol] ?? "")) { row[notesCol]=newVal; view.scheduleSave(); }
     notesEditorEl.style.display = "none";
     notesPreviewEl.style.display = "";
     if (newVal.trim()) {
