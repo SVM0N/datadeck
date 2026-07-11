@@ -1489,6 +1489,140 @@ await test("anki: surfaces a transport failure instead of throwing", async () =>
   delete globalThis.__ankiRequestUrl;
 });
 
+// ── Formula evaluator ────────────────────────────────────────────────────────
+const { compileFormula } = await load("./src/formula.ts");
+
+await test("formula: polynomial, implicit multiplication, constants, functions", async () => {
+  assert(compileFormula("2x^2 - 3x + 1")(2) === 3, "2x^2-3x+1 at x=2");
+  assert(compileFormula("3(x+1)")(2) === 9, "implicit mult over parens");
+  assert(Math.abs(compileFormula("sin(pi/2)")(0) - 1) < 1e-12, "sin(pi/2) = 1");
+  assert(compileFormula("2^3^2")(0) === 512, "^ is right-associative");
+  assert(compileFormula("y = -x^2")(3) === -9, "leading y= allowed; -x^2 = -(x^2)");
+  assert(compileFormula("max(x, 5)")(2) === 5, "two-arg function");
+  assert(compileFormula("10 sin(x)")(0) === 0, "implicit mult before function call");
+});
+
+await test("formula: bad input throws readable errors", async () => {
+  for (const bad of ["", "2 +", "(x", "foo(x)", "x $ 2", "sin x"]) {
+    let threw = false;
+    try { compileFormula(bad); } catch { threw = true; }
+    assert(threw, `"${bad}" should throw`);
+  }
+});
+
+// ── Chart view ───────────────────────────────────────────────────────────────
+const { renderChart, hasChartColumns, parseNumeric, numericColumns, linearFit, buildChartConfig } =
+  await load("./src/view/chart.ts");
+
+await test("chart: parseNumeric handles separators and rejects text", async () => {
+  assert(parseNumeric("1,234") === 1234, "thousands comma");
+  assert(parseNumeric("1 234") === 1234, "thousands space");
+  assert(parseNumeric("3,5") === 3.5, "decimal comma");
+  assert(parseNumeric("-2.5e3") === -2500, "scientific");
+  assert(parseNumeric("abc") === null, "text rejected");
+  assert(parseNumeric("") === null, "empty rejected");
+});
+
+await test("chart: numericColumns needs 2+ values at a 70%+ hit rate", async () => {
+  const rows = [
+    { title: "A", score: "1", year: "n/a" },
+    { title: "B", score: "2", year: "1999" },
+    { title: "C", score: "3", year: "" },
+  ];
+  const cols = numericColumns(["title", "score", "year"], rows);
+  assert(cols.join(",") === "score", `only score qualifies (got ${cols})`);
+});
+
+await test("chart: linearFit recovers an exact line with R² = 1", async () => {
+  const fit = linearFit([{ x: 0, y: 1 }, { x: 1, y: 3 }, { x: 2, y: 5 }]);
+  assert(Math.abs(fit.slope - 2) < 1e-12 && Math.abs(fit.intercept - 1) < 1e-12, "y = 2x + 1");
+  assert(fit.r2 === 1, "perfect fit");
+  assert(linearFit([{ x: 1, y: 1 }, { x: 1, y: 2 }]) === null, "no X spread → null");
+});
+
+const chartColors = { accent: "#38d", muted: "#888", grid: "#ccc", fitLine: "#999", formula: "#e83" };
+
+await test("chart: buildChartConfig adds fit + formula datasets and fit text", async () => {
+  const built = buildChartConfig({
+    points: [{ x: 0, y: 1 }, { x: 1, y: 3 }, { x: 2, y: 5 }],
+    xIsDate: false, xLabel: "x", yLabel: "score", connect: false,
+    fit: "linear", formula: "2x + 1",
+  }, chartColors);
+  assert(built.config.data.datasets.length === 3, "points + fit + formula datasets");
+  assert(built.fitText.startsWith("y = 2x + 1"), `fit equation (got "${built.fitText}")`);
+  assert(built.fitText.includes("R² = 1.000"), "R² shown");
+  assert(built.formulaError === null, "formula compiled");
+});
+
+await test("chart: date X gets per-day trend text; bad formula surfaces error", async () => {
+  const day = 86_400_000;
+  const built = buildChartConfig({
+    points: [{ x: 0, y: 0 }, { x: day, y: 2 }, { x: 2 * day, y: 4 }],
+    xIsDate: true, xLabel: "date", yLabel: "km", connect: true,
+    fit: "linear", formula: "foo(x)",
+  }, chartColors);
+  assert(built.fitText.startsWith("Trend: +2 km/day"), `per-day phrasing (got "${built.fitText}")`);
+  assert(built.formulaError !== null, "bad formula reported, not thrown");
+});
+
+function chartView(rows, cfg = {}) {
+  let savedCfg = null;
+  const view = {
+    rows, headers: Object.keys(rows[0] ?? {}), searchQuery: "",
+    getFilteredRows: () => rows,
+    fileCfg: cfg, saveFileCfg: (c) => { savedCfg = c; view.fileCfg = c; },
+    getDateCol: () => (Object.keys(rows[0] ?? {}).includes("date") ? "date" : null),
+    isDateCol: (h) => h === "date",
+    parseDate: (s) => (/^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s + "T00:00:00") : null),
+    getTitle: (r) => r[Object.keys(r)[0]] ?? "—",
+    chartInstance: null,
+    renderView: () => {}, renderViewPreservingScroll: () => {},
+    getSavedCfg: () => savedCfg,
+  };
+  return view;
+}
+
+await test("chart: renders controls, canvas, and fit text over a numeric file", async () => {
+  const rows = [
+    { title: "A", year: "2000", rating: "2" },
+    { title: "B", year: "2010", rating: "3" },
+    { title: "C", year: "2020", rating: "4" },
+  ];
+  const view = chartView(rows, { chartXCol: "year", chartYCol: "rating", chartFit: "linear" });
+  assert(hasChartColumns(view), "file is chartable");
+  const c = document.body.createDiv();
+  await renderChart(view, c);
+  assert(c.querySelectorAll(".csv-chart-select").length === 2, "X and Y selects present");
+  assert(c.querySelector(".csv-chart-fit-btn.active"), "fit toggle reflects saved state");
+  assert(c.querySelector(".csv-chart-formula-input"), "formula input present");
+  assert(c.querySelector("canvas.csv-chart-canvas"), "canvas present");
+  assert(c.querySelector(".csv-chart-fit-text"), "fit equation shown");
+  assert(view.chartInstance, "Chart instance created");
+});
+
+await test("chart: changing the Y select persists to fileCfg and re-renders", async () => {
+  const rows = [
+    { title: "A", pages: "100", rating: "2" },
+    { title: "B", pages: "200", rating: "5" },
+  ];
+  const view = chartView(rows);
+  const c = document.body.createDiv();
+  await renderChart(view, c);
+  const ySel = c.querySelectorAll(".csv-chart-select")[1];
+  ySel.value = "rating";
+  ySel.dispatchEvent(new window.Event("change", { bubbles: true }));
+  assert(view.getSavedCfg()?.chartYCol === "rating", "Y pick saved to fileCfg");
+});
+
+await test("chart: non-numeric file is not chartable; empty pair shows empty state", async () => {
+  assert(!hasChartColumns(chartView([{ title: "A" }, { title: "B" }])), "no numeric column");
+  const view = chartView([{ title: "A", score: "1" }, { title: "B", score: "2" }], { chartFormula: "" });
+  view.getFilteredRows = () => []; // search filtered everything out
+  const c = document.body.createDiv();
+  await renderChart(view, c);
+  assert(c.querySelector(".csv-empty-state"), "empty state when nothing plots");
+});
+
 console.log(`\n${"=".repeat(50)}`);
 console.log(`View smoke tests: ${passed} passed, ${failed} failed`);
 console.log(`${"=".repeat(50)}`);

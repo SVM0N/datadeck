@@ -4135,3 +4135,82 @@ select.csv-add-row-control {
   transition: left 0.15s ease;
 }
 .csv-toggle.is-on .csv-toggle-knob { left: 18px; }
+
+/* ─── Chart view + csv-chart block ─────────────────────────────────────── */
+
+.csv-chart-view {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 8px 4px;
+}
+
+.csv-chart-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-bottom: 12px;
+}
+
+.csv-chart-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.csv-chart-control-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--csv-text-muted);
+}
+
+.csv-chart-select {
+  font-size: 13px;
+  max-width: 180px;
+}
+
+.csv-chart-fit-btn.active {
+  background: var(--csv-accent);
+  color: var(--text-on-accent, #fff);
+  border-color: var(--csv-accent);
+}
+
+.csv-chart-formula-wrap { flex: 1 1 180px; min-width: 160px; }
+
+.csv-chart-formula-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-family: var(--font-monospace);
+  padding: 4px 8px;
+}
+
+.csv-chart-wrap {
+  height: 340px;
+  position: relative;
+}
+
+.csv-chart-block .csv-chart-wrap { height: 280px; }
+
+.csv-chart-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.csv-chart-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--csv-text-muted);
+}
+
+.csv-chart-fit-text { font-family: var(--font-monospace); }
+
+.csv-chart-formula-error { color: var(--text-error, #e05252); }
+
+@media (max-width: 600px) {
+  .csv-chart-wrap { height: 260px; }
+  .csv-chart-select { max-width: 130px; }
+}

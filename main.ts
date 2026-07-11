@@ -32,9 +32,11 @@ import { renderToolbar, availableModes } from "./src/view/toolbar";
 import { renderRandomCard } from "./src/random-block";
 import { renderDashboard } from "./src/view/dashboard";
 import { renderStats, hasStatsColumns } from "./src/view/stats";
+import { renderChart, hasChartColumns } from "./src/view/chart";
 import { renderFocus } from "./src/view/focus";
 import { renderTasks, hasTaskColumns, taskProjectCol, taskTypeCol, taskPriorityCol } from "./src/view/tasks";
 import { registerCsvViewBlock } from "./src/inline-view";
+import { registerCsvChartBlock } from "./src/chart-block";
 
 // World-map SVG asset, loaded lazily from the plugin dir and cached for the
 // session (undefined = not yet read, null = read failed/missing).
@@ -111,6 +113,7 @@ export class CardView extends FileView {
     if ((needsCategory && !effectiveGroupCol(this)) || (needsDate && !this.hasDateColumn())
         || (this.mode === "travel" && !this.isTravelFile())
         || (this.mode === "stats" && !hasStatsColumns(this))
+        || (this.mode === "chart" && !hasChartColumns(this))
         || (this.mode === "tasks" && !hasTaskColumns(this))) {
       this.mode = "table";
     }
@@ -628,6 +631,7 @@ export class CardView extends FileView {
     else if (this.mode === "library") renderLibrary(this, content);
     else if (this.mode === "kanban-genre") renderKanbanGenre(this, content);
     else if (this.mode === "stats") renderStats(this, content);
+    else if (this.mode === "chart") void renderChart(this, content);
     else if (this.mode === "focus") renderFocus(this, content);
     else if (this.mode === "tasks") renderTasks(this, content);
     else renderTable(this, content);
@@ -979,6 +983,14 @@ export default class CardViewPlugin extends Plugin {
       this.app,
       this.settings,
       () => this.saveSettings(),
+      (lang, handler) => this.registerMarkdownCodeBlockProcessor(lang, handler),
+    );
+
+    // csv-chart: an inline read-only chart of a CSV (or a pure y = f(x)
+    // formula plot) — scatter/line, best-fit, formula overlay. See
+    // src/chart-block.ts.
+    registerCsvChartBlock(
+      this.app,
       (lang, handler) => this.registerMarkdownCodeBlockProcessor(lang, handler),
     );
 

@@ -1,0 +1,201 @@
+// ─── csv-chart code block: an inline chart in any note ───────────────────────
+//
+// Embeds a Chart.js scatter/line plot of a CSV's columns — or a pure formula
+// curve with no data at all — inside a note, the way csv-view embeds a table.
+//
+//   ```csv-chart
+//   file: ../health.csv     (sibling / ../ walked / vault-relative, like csv-view;
+//                            omit entirely for a formula-only plot)
+//   x: date                 (optional — default: date column → first numeric)
+//   y: weight               (optional — default: first numeric column ≠ x)
+//   fit: linear             (optional best-fit line with equation + R²)
+//   formula: 0.5x + 2       (optional y = f(x) overlay; the whole plot when
+//                            there's no file. See src/formula.ts for syntax.)
+//   xmin: -10               (formula-only plots: domain, default -10 … 10)
+//   xmax: 10
+//   height: 280             (optional px height)
+//   ```
+//
+// Read-only: it re-renders off the vault `modify` event when the source CSV
+// changes (edited in a DataDeck tab, a csv-view block, or external sync), but
+// never writes. Reuses the extraction / fit / config core from src/view/chart.ts
+// and the shared lazy Chart.js loader. Covered by test-view-smoke.mjs.
+
+import { App, MarkdownPostProcessorContext, MarkdownRenderChild, TFile } from "obsidian";
+import { CSVRow } from "./types";
+import { parseCSV, resolvePath } from "./utils";
+import { isDateCol } from "./field-types";
+import { loadChart } from "./chartjs-loader";
+import {
+  buildChartConfig, extractPoints, numericColumns, resolveChartColors,
+  ChartSpec,
+} from "./view/chart";
+
+interface ChartBlockOptions {
+  file: string;
+  x: string;
+  y: string;
+  fit: "none" | "linear";
+  formula: string;
+  xmin: number | null;
+  xmax: number | null;
+  height: number | null;
+}
+
+/** Parse the `key: value` lines of a csv-chart block. Forgiving, like csv-view. */
+function parseBlockSource(source: string): ChartBlockOptions {
+  const lines = source.split("\n").map(l => l.trim()).filter(Boolean);
+  const opt = (key: string) =>
+    lines.find(l => l.toLowerCase().startsWith(key + ":"))?.slice(key.length + 1).trim() ?? "";
+  const num = (key: string): number | null => {
+    const n = parseFloat(opt(key));
+    return Number.isFinite(n) ? n : null;
+  };
+  return {
+    file: opt("file"),
+    x: opt("x"),
+    y: opt("y"),
+    fit: opt("fit").toLowerCase() === "linear" ? "linear" : "none",
+    formula: opt("formula"),
+    xmin: num("xmin"),
+    xmax: num("xmax"),
+    height: num("height"),
+  };
+}
+
+/** Duck-typed TFile check — mirrors inline-view.ts (cross-bundle instanceof is unreliable). */
+function asFile(f: unknown): TFile | null {
+  return f && typeof f === "object" && "basename" in (f as object) ? (f as TFile) : null;
+}
+
+function parseIsoDate(s: string): Date | null {
+  const m = (s ?? "").trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  return new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
+}
+
+class ChartBlock extends MarkdownRenderChild {
+  private chart: { destroy(): void } | null = null;
+
+  constructor(
+    containerEl: HTMLElement,
+    private app: App,
+    private opts: ChartBlockOptions,
+  ) {
+    super(containerEl);
+  }
+
+  async onload(): Promise<void> {
+    this.containerEl.addClass("csv-chart-block");
+    await this.render();
+    if (this.opts.file) {
+      this.registerEvent(this.app.vault.on("modify", (f) => {
+        if (f.path === this.opts.file) void this.render();
+      }));
+      this.registerEvent(this.app.vault.on("rename", (f, oldPath) => {
+        if (oldPath === this.opts.file) this.opts.file = f.path;
+      }));
+    }
+  }
+
+  onunload(): void {
+    if (this.chart) { this.chart.destroy(); this.chart = null; }
+  }
+
+  private renderError(msg: string): void {
+    this.containerEl.empty();
+    this.containerEl.createEl("p", { text: `csv-chart: ${msg}`, cls: "csv-add-error" });
+  }
+
+  private async render(): Promise<void> {
+    const root = this.containerEl;
+    if (this.chart) { this.chart.destroy(); this.chart = null; }
+    root.empty();
+
+    let spec: ChartSpec;
+    let skipped = 0;
+
+    if (this.opts.file) {
+      const file = asFile(this.app.vault.getAbstractFileByPath(this.opts.file));
+      if (!file) return this.renderError(`File not found: ${this.opts.file}`);
+      let headers: string[], rows: CSVRow[];
+      try {
+        ({ headers, rows } = parseCSV(await this.app.vault.read(file)));
+      } catch (e) {
+        return this.renderError(`Error reading file: ${e instanceof Error ? e.message : String(e)}`);
+      }
+
+      const findCol = (name: string) => headers.find(h => h.toLowerCase() === name.toLowerCase()) ?? null;
+      const numCols = numericColumns(headers, rows);
+      // Same date heuristic as the views: a date-named column, or a first
+      // column whose sample values are yyyy-mm-dd.
+      const dateCol = headers.find(h => isDateCol(h))
+        ?? (rows.slice(0, 5).length && rows.slice(0, 5).every(r => parseIsoDate(r[headers[0]] ?? "")) ? headers[0] : null);
+
+      const xCol = this.opts.x ? findCol(this.opts.x) : (dateCol ?? numCols[0] ?? null);
+      if (this.opts.x && !xCol) return this.renderError(`No column "${this.opts.x}" in ${file.basename}`);
+      const yCol = this.opts.y ? findCol(this.opts.y) : numCols.find(c => c !== xCol) ?? null;
+      if (this.opts.y && !yCol) return this.renderError(`No column "${this.opts.y}" in ${file.basename}`);
+      if (!xCol || !yCol) return this.renderError(`Couldn't auto-pick x/y columns — add "x:" and "y:" lines`);
+
+      const isDateX = xCol === dateCol || isDateCol(xCol);
+      const extracted = extractPoints(rows, xCol, yCol, isDateX, parseIsoDate, r => r[headers[0]] ?? "");
+      skipped = extracted.skipped;
+      if (!extracted.points.length) return this.renderError(`No rows with numeric "${xCol}" and "${yCol}" values`);
+
+      spec = {
+        points: extracted.points,
+        xIsDate: isDateX,
+        xLabel: xCol,
+        yLabel: yCol,
+        connect: isDateX,
+        fit: this.opts.fit,
+        formula: this.opts.formula,
+      };
+    } else {
+      // Formula-only plot: no data, just the curve over an explicit domain.
+      if (!this.opts.formula.trim()) return this.renderError(`Give a "file:" line, a "formula:" line, or both`);
+      spec = {
+        points: [],
+        xIsDate: false,
+        xLabel: "x",
+        yLabel: "y",
+        connect: false,
+        fit: "none",
+        formula: this.opts.formula,
+        xMin: this.opts.xmin ?? -10,
+        xMax: this.opts.xmax ?? 10,
+      };
+    }
+
+    const built = buildChartConfig(spec, resolveChartColors(root));
+    if (built.formulaError) return this.renderError(`formula: ${built.formulaError}`);
+
+    const wrap = root.createDiv({ cls: "csv-chart-wrap" });
+    if (this.opts.height) wrap.style.height = this.opts.height + "px";
+    const canvas = wrap.createEl("canvas", { cls: "csv-chart-canvas" });
+
+    if (built.fitText || skipped > 0) {
+      const footer = root.createDiv({ cls: "csv-chart-footer" });
+      if (built.fitText) footer.createSpan({ cls: "csv-chart-fit-text", text: built.fitText });
+      if (skipped > 0) footer.createSpan({ cls: "csv-chart-skipped", text: `${skipped} row${skipped === 1 ? "" : "s"} skipped (no numeric value)` });
+    }
+
+    const { Chart } = await loadChart();
+    if (!canvas.isConnected) return;
+    this.chart = new Chart(canvas, built.config);
+  }
+}
+
+/** csv-chart block processor. Each block gets its own child tied to the block's lifecycle. */
+export function registerCsvChartBlock(
+  app: App,
+  register: (lang: string, handler: (source: string, el: HTMLElement, ctx: MarkdownPostProcessorContext) => void) => void,
+): void {
+  register("csv-chart", (source, el, ctx) => {
+    const opts = parseBlockSource(source);
+    const noteFolder = app.vault.getAbstractFileByPath(ctx.sourcePath)?.parent?.path ?? "";
+    const resolved = opts.file ? resolvePath(opts.file, noteFolder) : opts.file;
+    ctx.addChild(new ChartBlock(el, app, { ...opts, file: resolved }));
+  });
+}

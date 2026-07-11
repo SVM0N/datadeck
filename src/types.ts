@@ -1,7 +1,7 @@
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface CSVRow { [key: string]: string; }
-export type ViewMode = "kanban-genre" | "table" | "dashboard" | "library" | "travel" | "stats" | "focus" | "tasks";
+export type ViewMode = "kanban-genre" | "table" | "dashboard" | "library" | "travel" | "stats" | "focus" | "tasks" | "chart";
 
 // ─── Residency / threshold rules (travel view) ──────────────────────────────
 // A declarative rule: count days a person was in `scope` within `window`,
@@ -63,6 +63,11 @@ export interface FileConfig {
                               // the row context menu. Keyed by value (like
                               // collapsedGroups) rather than a row id — the
                               // CSV has no stable identity column.
+  chartXCol?: string;         // Chart view X column. Unset = date col → first
+                              // numeric → row number (see src/view/chart.ts).
+  chartYCol?: string;         // Chart view Y column. Unset = first numeric ≠ X.
+  chartFit?: "none" | "linear"; // Chart view best-fit line toggle.
+  chartFormula?: string;      // Chart view y = f(x) overlay (src/formula.ts).
 }
 
 export type LibrarySort = "status" | "title" | "rating" | "year";

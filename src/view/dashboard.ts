@@ -6,19 +6,9 @@
 import type { CardView } from "../../main";
 import { CSVRow } from "../types";
 import { titleCase } from "../utils";
-
-// Lazy-load Chart.js + register the bits we use. Only paid when the dashboard
-// view first renders. Sessions that only touch books/movies/quotes/dictionary
-// never load Chart.js at all.
-type ChartModule = typeof import("chart.js");
-let chartModule: ChartModule | null = null;
-async function loadChart(): Promise<ChartModule> {
-  if (chartModule) return chartModule;
-  const mod = await import("chart.js");
-  mod.Chart.register(mod.LineController, mod.LineElement, mod.PointElement, mod.LinearScale, mod.CategoryScale, mod.Filler, mod.Tooltip);
-  chartModule = mod;
-  return mod;
-}
+// Chart.js stays a lazy load (shared with the Chart view / csv-chart blocks) —
+// only paid when a chart actually renders. See src/chartjs-loader.ts.
+import { loadChart } from "../chartjs-loader";
 
 export async function renderDashboard(view: CardView, container: HTMLElement): Promise<void> {
   const dateCol = view.getDateCol();

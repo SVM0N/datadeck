@@ -10,6 +10,7 @@ import { FileConfigModal, AutoDetectedRoles } from "../modals";
 import { generateMobileFiles } from "./mobile";
 import { syncToAnki, autoAnkiFrontCol } from "./anki";
 import { hasStatsColumns } from "./stats";
+import { hasChartColumns } from "./chart";
 import { hasTaskColumns } from "./tasks";
 import { effectiveGroupCol } from "./kanban";
 import { TITLE_COL_ALIASES, CATEGORY_COL_ALIASES, STATUS_COL_ALIASES, NOTES_COL_ALIASES, IMAGE_COL_ALIASES } from "../utils";
@@ -43,6 +44,9 @@ export function availableModes(view: CardView): {id: ViewMode, label: string}[] 
   // render fine just made the dropdown feel arbitrarily short.)
   if (view.rows.length > 0) modes.push({id: "focus", label: "Focus"});
   if (hasStatsColumns(view)) modes.push({id: "stats", label: "Stats"});
+  // Chart: scatter/line plots of numeric column pairs, with best-fit and
+  // formula overlays. Needs at least one numeric column (see hasChartColumns).
+  if (hasChartColumns(view)) modes.push({id: "chart", label: "Chart"});
   return modes;
 }
 
