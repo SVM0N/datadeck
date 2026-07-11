@@ -1268,16 +1268,15 @@ await test("tasks: splits tasks / notes / ideas into peer sections, grouped by p
   const c = document.body.createDiv();
   renderTasks(tasksView(rows), c);
   const headers = Array.from(c.querySelectorAll(".csv-tasks-section-header")).map(h => h.textContent);
-  // reference is non-task, non-idea → Notes; idea → Ideas.
-  assert(headers.join(",") === "Tasks,Notes,Ideas", `three peer sections present (got ${headers})`);
-  // 2 task groups (Web, Craft) + 1 notes group (Craft) + 1 ideas group (Web)
+  // Tasks pinned first; every other type value gets its own section, A→Z.
+  assert(headers.join(",") === "Tasks,Idea,Reference", `three peer sections, Tasks first (got ${headers})`);
+  // 2 task groups (Web, Craft) + 1 idea group (Web) + 1 reference group (Craft)
   assert(c.querySelectorAll(".csv-tasks-group").length === 4, "4 project groups across the three sections");
   assert(c.querySelectorAll(".csv-tasks-table tbody tr").length === 4, "4 rows total");
-  assert(c.querySelectorAll(".csv-tasks-type-pill").length === 2, "idea + reference render type pills");
 });
 
-await test("tasks: empty Ideas/Notes sections are omitted, not shown blank", async () => {
-  // All rows are tasks → only the Tasks section header renders.
+await test("tasks: empty type folds into Tasks; no other sections rendered blank", async () => {
+  // All rows are task-like (incl. the empty type) → only the Tasks header.
   const rows = [
     { Name: "A", Project: "P", Type: "task", Status: "", Due: "", Priority: "" },
     { Name: "B", Project: "P", Type: "", Status: "", Due: "", Priority: "" },

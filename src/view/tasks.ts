@@ -2,7 +2,8 @@
 // DataviewJS "project dashboard" pattern (vault-wide tag scan → per-project
 // task/note tables). Here the CSV *is* the source of truth: one row = one
 // task/note/idea/reference, grouped by a project column, split into a Tasks
-// section (sorted done → priority → due) and a Notes & Ideas section. Each row
+// section (sorted done → priority → due) plus one section per other type
+// value (Idea, Note, Reference, …). Each row
 // can spawn an optional backing .md page on demand (same infra the Library
 // view uses). Extracted-style module: reached CardView members are public,
 // type-only import → no runtime cycle. Covered by test-view-smoke.mjs.
@@ -13,7 +14,7 @@
 
 import type { CardView } from "../../main";
 import { CSVRow } from "../types";
-import { showSelectPicker } from "../utils";
+import { showSelectPicker, titleCase } from "../utils";
 import { effectiveGroupCol } from "./kanban";
 import { makeEditable } from "./table";
 
@@ -169,9 +170,10 @@ export function renderTasks(view: CardView, container: HTMLElement): void {
   };
   filtered.forEach(row => {
     const t = typeCol ? (row[typeCol] ?? "").trim() : "";
-    // If no type column exists, bucket everything into "Tasks".
-    // If a type column exists but the row is empty, bucket as "—".
-    const bucketName = typeCol ? (t || "—") : "Tasks";
+    // Task-like values (task/todo/action — and empty, see TASK_WORDS) all
+    // land in one pinned "Tasks" bucket; every other type value gets its own
+    // section keyed by the raw value ("idea", "reference", …).
+    const bucketName = TASK_WORDS.includes(t.toLowerCase()) ? "Tasks" : t;
     const proj = projectOf(row);
     if (!buckets[bucketName]) buckets[bucketName] = {};
     (buckets[bucketName][proj] ??= []).push(row);
@@ -269,14 +271,14 @@ export function renderTasks(view: CardView, container: HTMLElement): void {
   };
 
   const typesArray = Object.keys(buckets).sort((a, b) => {
-    // Pin "Tasks" and "—" to the top
-    if (a === "Tasks" || a === "—") return -1;
-    if (b === "Tasks" || b === "—") return 1;
+    // Actionable tasks always come first; other type sections alphabetical.
+    if (a === "Tasks") return -1;
+    if (b === "Tasks") return 1;
     return a.localeCompare(b);
   });
 
   typesArray.forEach(t => {
-    renderSection(view, wrap, t, buckets[t], fillSection, headersList);
+    renderSection(view, wrap, t === "Tasks" ? t : titleCase(t), buckets[t], fillSection, headersList);
   });
 
   if (typesArray.length === 0) {
