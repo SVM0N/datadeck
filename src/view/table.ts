@@ -141,13 +141,29 @@ export function makeEditable(view: CardView, el: HTMLElement, row: CSVRow, h: st
       type: isDate ? "date" : "text" 
     });
     
-    input.focus(); 
+    input.focus();
     if (!isDate) input.select(); // selecting text is mostly useful for text inputs, dates have a native picker
-    
+
     // Prevent clicks on the input from bubbling up to row/document listeners
     input.addEventListener("click", ev => ev.stopPropagation());
-    
-    input.addEventListener("blur", () => { row[h] = input.value; view.scheduleSave(); el.empty(); el.setText(input.value || "—"); });
-    input.addEventListener("keydown", ev => { if (ev.key === "Enter") input.blur(); if (ev.key === "Escape") { el.empty(); el.setText(row[h] || "—"); } });
+
+    // Commit on blur — but only when the value actually changed from what we
+    // put into the input. Saving unconditionally meant every click-in/
+    // click-out dirtied the file (debounced vault write + sync churn), and
+    // for a date cell the write-back was the 10-char truncated pickerValue —
+    // silently clobbering any extra data just by touching the cell.
+    let cancelled = false;
+    input.addEventListener("blur", () => {
+      if (!cancelled && input.value !== pickerValue) {
+        row[h] = input.value;
+        view.scheduleSave();
+      }
+      el.empty();
+      el.setText((row[h] ?? "") || "—");
+    });
+    input.addEventListener("keydown", ev => {
+      if (ev.key === "Enter") input.blur();
+      if (ev.key === "Escape") { cancelled = true; input.blur(); }
+    });
   });
 }
