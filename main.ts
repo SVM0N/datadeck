@@ -232,10 +232,15 @@ export class CardView extends FileView {
     return null;
   }
 
+  // Role getters: an explicit per-file override wins outright — including the
+  // empty string, which the ⚙ Config modal stores for "— no function —" and
+  // which must read as *disabled*, not "fall back to name detection" (that's
+  // what InlineCardHost already does; the two views must agree on the same
+  // fileCfg entry).
   getNotesCol(): string | null {
-    // 1. Per-file override
-    if (this.fileCfg.notesColumn) return this.fileCfg.notesColumn;
-    // 2. Fallback chain
+    if (this.fileCfg.notesColumn !== undefined) {
+      return this.fileCfg.notesColumn === "" ? null : this.fileCfg.notesColumn;
+    }
     return this.resolveCol(NOTES_COL_ALIASES);
   }
 
@@ -280,21 +285,24 @@ export class CardView extends FileView {
   }
 
   getStatusCol(): string | null {
-    if (this.fileCfg.statusColumn) {
+    if (this.fileCfg.statusColumn !== undefined) {
+      if (this.fileCfg.statusColumn === "") return null;
       return this.headers.find(h => h.toLowerCase() === this.fileCfg.statusColumn!.toLowerCase()) ?? null;
     }
     return this.resolveCol(STATUS_COL_ALIASES);
   }
 
   getCategoryCol(): string | null {
-    if (this.fileCfg.categoryColumn) {
+    if (this.fileCfg.categoryColumn !== undefined) {
+      if (this.fileCfg.categoryColumn === "") return null;
       return this.headers.find(h => h.toLowerCase() === this.fileCfg.categoryColumn!.toLowerCase()) ?? null;
     }
     return this.resolveCol(CATEGORY_COL_ALIASES);
   }
 
   titleKey(): string | undefined {
-    if (this.fileCfg.titleColumn) {
+    if (this.fileCfg.titleColumn !== undefined) {
+      if (this.fileCfg.titleColumn === "") return undefined;
       return this.headers.find(h => h.toLowerCase() === this.fileCfg.titleColumn!.toLowerCase()) ?? undefined;
     }
     return this.resolveCol(TITLE_COL_ALIASES) ?? undefined;
@@ -315,7 +323,10 @@ export class CardView extends FileView {
   // Image column for card/kanban thumbnails — per-file override (reuses the
   // cardImageColumn config) or detected by name (Image/Cover/Poster/…).
   getImageCol(): string | null {
-    if (this.fileCfg.imageColumn) return this.headers.find(h => h.toLowerCase() === this.fileCfg.imageColumn!.toLowerCase()) ?? null;
+    if (this.fileCfg.imageColumn !== undefined) {
+      if (this.fileCfg.imageColumn === "") return null;
+      return this.headers.find(h => h.toLowerCase() === this.fileCfg.imageColumn!.toLowerCase()) ?? null;
+    }
     return this.resolveCol(IMAGE_COL_ALIASES);
   }
 

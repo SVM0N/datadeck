@@ -1028,6 +1028,17 @@ export class FileConfigModal extends Modal {
 
         sel.addEventListener("change", () => {
           const h = sel.value;
+          // Functions stay exclusive per column (runtime resolution and the
+          // views assume it — a column can't be both Notes and Status):
+          // pointing this role at h clears any other explicit role on h.
+          if (h) {
+            if (role.value !== "title" && this.current.titleColumn === h) this.current.titleColumn = undefined;
+            if (role.value !== "category" && this.current.categoryColumn === h) this.current.categoryColumn = undefined;
+            if (role.value !== "status" && this.current.statusColumn === h) this.current.statusColumn = undefined;
+            if (role.value !== "notes" && this.current.notesColumn === h) this.current.notesColumn = undefined;
+            if (role.value !== "image" && this.current.imageColumn === h) this.current.imageColumn = undefined;
+            if (role.value !== "anki" && this.current.ankiFrontCol === h) this.current.ankiFrontCol = undefined;
+          }
           if (role.value === "title") this.current.titleColumn = h;
           else if (role.value === "category") this.current.categoryColumn = h;
           else if (role.value === "status") this.current.statusColumn = h;
