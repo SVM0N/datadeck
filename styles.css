@@ -1978,6 +1978,24 @@ td .csv-select-chip {
   border-radius: var(--csv-radius-sm);
 }
 
+/* Phones: one scroll surface. The modal stacked three nested y-scrollers —
+   Obsidian's modal content, .csv-modal-form (60vh), and this table wrap
+   (360px) — all fighting the same swipe. Let both inner regions grow to
+   full height so the modal itself is the only vertical scroller; the table
+   keeps only its horizontal swipe for wide column sets. */
+@media (max-width: 600px) {
+  .csv-modal-form {
+    max-height: none;
+    overflow-y: visible;
+    padding-right: 0;
+  }
+  .csv-modal-colcfg-table-wrap {
+    max-height: none;
+    overflow-y: visible;
+    overflow-x: auto;
+  }
+}
+
 .csv-modal-colcfg-table {
   display: table !important;
   width: 100%;
