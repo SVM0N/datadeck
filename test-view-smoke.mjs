@@ -1029,7 +1029,7 @@ await test("FileConfigModal: type/function/card-field edits don't touch disk —
 });
 
 await test("FileConfigModal: a name-detected Function shows an auto badge, no config needed", async () => {
-  // Mirrors a real project dash file: nothing in fileCfg, but "Status" already
+  // Mirrors a real project-dashboard file: nothing in fileCfg, but "Status" already
   // resolves by name at render time (getStatusCol) — the row should show
   // that, not "— none —", which is what prompted this feature.
   const headers = ["Title", "Type", "Project", "Status"];

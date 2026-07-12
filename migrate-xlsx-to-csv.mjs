@@ -24,10 +24,9 @@ import path from "node:path";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
 
-const VAULT = process.env.OBSIDIAN_VAULT
-  ?? `${process.env.HOME}/Library/Mobile Documents/iCloud~md~obsidian/Documents/Vault`;
+const VAULT = process.env.OBSIDIAN_VAULT;
 const [LIB, ...FILES] = process.argv.slice(2);
-if (!LIB || !FILES.length) {
+if (!VAULT || !LIB || !FILES.length) {
   console.error('Usage: OBSIDIAN_VAULT="<vault path>" node migrate-xlsx-to-csv.mjs <folder> <basename...>');
   console.error('  e.g. node migrate-xlsx-to-csv.mjs "Library" books movies');
   process.exit(1);

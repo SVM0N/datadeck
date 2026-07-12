@@ -1,6 +1,6 @@
 // ─── csv-tasks code block: a cross-file tasks board ──────────────────────────
 //
-// The phase-2 replacement for the old vault-wide DataviewJS "project dashboard":
+// The phase-2 replacement for the old vault-wide DataviewJS project dashboard:
 // merge task rows from many CSVs into one board, rendered with the same
 // renderTasks the full-page Tasks view uses.
 //

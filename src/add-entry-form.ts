@@ -28,7 +28,7 @@ export async function renderAddEntryForm(app: App, source: string, el: HTMLEleme
     // Resolve path relative to current note. Three forms accepted:
     //   "books.csv"                         → sibling of current note
     //   "../books.csv" or "../../foo.csv"   → walked up from current folder
-    //   "Library/books.csv"       → vault-relative (any path containing
+    //   "Notes/Library/books.csv"       → vault-relative (any path containing
     //                                          "/" without a leading ".." is treated
     //                                          as vault-relative for back-compat)
     const currentFile = app.vault.getAbstractFileByPath(ctx.sourcePath);

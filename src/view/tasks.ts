@@ -1,5 +1,5 @@
 // Tasks view renderer. A native, CSV-backed replacement for the old
-// DataviewJS "project dashboard" pattern (vault-wide tag scan → per-project
+// DataviewJS project-dashboard pattern (vault-wide tag scan → per-project
 // task/note tables). Here the CSV *is* the source of truth: one row = one
 // task/note/idea/reference, grouped by a project column, split into a Tasks
 // section (sorted done → priority → due) plus one section per other type
