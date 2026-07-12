@@ -1528,7 +1528,7 @@ await test("formula: bad input throws readable errors", async () => {
 });
 
 // ── Chart view ───────────────────────────────────────────────────────────────
-const { renderChart, hasChartColumns, parseNumeric, numericColumns, linearFit, buildChartConfig, extractSeries, hueColumns } =
+const { renderChart, hasChartColumns, parseNumeric, numericColumns, linearFit, buildChartConfig, extractSeries, hueColumns, aggregateBars, buildBarConfig } =
   await load("./src/view/chart.ts");
 
 await test("chart: parseNumeric handles separators and rejects text", async () => {
@@ -1612,11 +1612,69 @@ await test("chart: extractSeries buckets by hue (empty → —); hueColumns need
     { name: "b", who: "Ben", val: "2" },
     { name: "c", who: "", val: "3" },
   ];
-  const { series, skipped } = extractSeries(rows, "(row number)", "val", "who", false, () => null, r => r.name);
+  const { series, skipped } = extractSeries(rows, "(row number)", "val", "who", null, false, () => null, r => r.name);
   assert(skipped === 0, "all rows numeric");
   assert(series.map(s => s.label).join(",") === "Anna,Ben,—", `A→Z with — bucket (got ${series.map(s => s.label)})`);
   assert(hueColumns(["name", "who", "val"], rows, new Set(["name"])).join(",") === "who,val",
     "low-cardinality columns qualify, excluded ones don't");
+});
+
+await test("chart: size-by maps values to sqrt-scaled radii; tooltip label wired", async () => {
+  const rows = [
+    { name: "a", val: "1", weight: "0" },
+    { name: "b", val: "2", weight: "25" },
+    { name: "c", val: "3", weight: "100" },
+  ];
+  const { series } = extractSeries(rows, "(row number)", "val", null, "weight", false, () => null, r => r.name);
+  const built = buildChartConfig({
+    series, xIsDate: false, xLabel: "x", yLabel: "val", connect: false, fit: "none", formula: "", sizeLabel: "weight",
+  }, chartColors);
+  const radii = built.config.data.datasets[0].pointRadius;
+  assert(Array.isArray(radii), "per-point radii when size-by set");
+  assert(radii[0] === 3 && radii[2] === 14, `sqrt scale endpoints 3→14 (got ${radii})`);
+  assert(Math.abs(radii[1] - 8.5) < 0.01, `25 of 100 → sqrt(0.25)=half-way radius (got ${radii[1]})`);
+});
+
+await test("chart: aggregateBars counts/sums/averages per category, hue → grouped, multi-value X splits", async () => {
+  const rows = [
+    { Genre: "Drama, Crime", Rating: "4", Who: "Anna" },
+    { Genre: "Drama", Rating: "2", Who: "Ben" },
+    { Genre: "Crime", Rating: "3", Who: "Anna" },
+    { Genre: "", Rating: "5", Who: "Ben" },
+  ];
+  const count = aggregateBars(rows, "Genre", null, null, "count");
+  assert(count.categories.join(",") === "Crime,Drama,—", `A→Z with — last (got ${count.categories})`);
+  assert(count.series[0].values.join(",") === "2,2,1", "multi-value row counts once per genre");
+
+  const avg = aggregateBars(rows, "Genre", "Rating", null, "avg");
+  assert(avg.series[0].values.join(",") === "3.5,3,5", `avg per category (got ${avg.series[0].values})`);
+
+  const sum = aggregateBars(rows, "Genre", "Rating", "Who", "sum");
+  assert(sum.series.map(s => s.label).join(",") === "Anna,Ben", "hue split into grouped series");
+  assert(sum.series[0].values.join(",") === "7,4,0", `Anna's sums (got ${sum.series[0].values})`);
+  assert(sum.series[1].values.join(",") === "0,2,5", `Ben's sums (got ${sum.series[1].values})`);
+
+  const cfg = buildBarConfig(sum, "Genre", "sum(Rating)", chartColors);
+  assert(cfg.type === "bar" && cfg.data.labels.join(",") === "Crime,Drama,—", "bar config carries categories");
+  assert(cfg.data.datasets.length === 2 && cfg.data.datasets[0].backgroundColor !== cfg.data.datasets[1].backgroundColor,
+    "grouped bars with distinct colors");
+});
+
+await test("chart: picking a categorical X renders bar mode with an Agg control", async () => {
+  const rows = [
+    { title: "A", genre: "Drama", rating: "4" },
+    { title: "B", genre: "Crime", rating: "2" },
+    { title: "C", genre: "Drama", rating: "5" },
+  ];
+  const view = chartView(rows, { chartXCol: "genre", chartAgg: "avg", chartYCol: "rating" });
+  const c = document.body.createDiv();
+  await renderChart(view, c);
+  const labels = Array.from(c.querySelectorAll(".csv-chart-control-label")).map(l => l.textContent);
+  assert(labels.includes("Agg"), `Agg select present in bar mode (got ${labels})`);
+  assert(!c.querySelector(".csv-chart-fit-btn"), "no fit toggle in bar mode");
+  assert(!c.querySelector(".csv-chart-formula-input"), "no formula overlay in bar mode");
+  assert(c.querySelector("canvas.csv-chart-canvas"), "canvas present");
+  assert(view.chartInstance, "Chart instance created");
 });
 
 function chartView(rows, cfg = {}) {

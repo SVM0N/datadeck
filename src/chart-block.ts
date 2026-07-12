@@ -10,6 +10,10 @@
 //   y: weight               (optional — default: first numeric column ≠ x)
 //   hue: person             (optional — ggplot-style color-by: one colored
 //                            series per distinct value; alias: color:)
+//   size: effort            (optional — numeric column mapped to point radius)
+//   agg: sum                (bar mode only: count | sum | avg, default count.
+//                            Bar mode kicks in when x: is a categorical
+//                            column — one bar per value, hue → grouped bars)
 //   fit: linear             (optional per-series best-fit with equation + R²)
 //   formula: 0.5x + 2       (optional y = f(x) overlay; the whole plot when
 //                            there's no file. See src/formula.ts for syntax.)
@@ -24,13 +28,14 @@
 // and the shared lazy Chart.js loader. Covered by test-view-smoke.mjs.
 
 import { App, MarkdownPostProcessorContext, MarkdownRenderChild, TFile } from "obsidian";
+import type { ChartConfiguration } from "chart.js";
 import { CSVRow } from "./types";
 import { parseCSV, resolvePath } from "./utils";
 import { isDateCol } from "./field-types";
 import { loadChart } from "./chartjs-loader";
 import {
-  buildChartConfig, extractSeries, numericColumns, resolveChartColors,
-  ChartSpec,
+  buildChartConfig, buildBarConfig, aggregateBars, extractSeries, numericColumns,
+  resolveChartColors, ChartSpec, BarAgg,
 } from "./view/chart";
 
 interface ChartBlockOptions {
@@ -38,6 +43,8 @@ interface ChartBlockOptions {
   x: string;
   y: string;
   hue: string;
+  size: string;
+  agg: BarAgg | "";
   fit: "none" | "linear";
   formula: string;
   xmin: number | null;
@@ -59,6 +66,8 @@ function parseBlockSource(source: string): ChartBlockOptions {
     x: opt("x"),
     y: opt("y"),
     hue: opt("hue") || opt("color"),
+    size: opt("size"),
+    agg: (["count", "sum", "avg"].includes(opt("agg").toLowerCase()) ? opt("agg").toLowerCase() : "") as BarAgg | "",
     fit: opt("fit").toLowerCase() === "linear" ? "linear" : "none",
     formula: opt("formula"),
     xmin: num("xmin"),
@@ -116,7 +125,7 @@ class ChartBlock extends MarkdownRenderChild {
     if (this.chart) { this.chart.destroy(); this.chart = null; }
     root.empty();
 
-    let spec: ChartSpec;
+    let built: { config: ChartConfiguration; fitText: string | null; formulaError: string | null };
     let skipped = 0;
 
     if (this.opts.file) {
@@ -143,25 +152,40 @@ class ChartBlock extends MarkdownRenderChild {
       if (!xCol || !yCol) return this.renderError(`Couldn't auto-pick x/y columns — add "x:" and "y:" lines`);
       const hueCol = this.opts.hue ? findCol(this.opts.hue) : null;
       if (this.opts.hue && !hueCol) return this.renderError(`No column "${this.opts.hue}" in ${file.basename}`);
+      const sizeCol = this.opts.size ? findCol(this.opts.size) : null;
+      if (this.opts.size && !sizeCol) return this.renderError(`No column "${this.opts.size}" in ${file.basename}`);
 
       const isDateX = xCol === dateCol || isDateCol(xCol);
-      const extracted = extractSeries(rows, xCol, yCol, hueCol, isDateX, parseIsoDate, r => r[headers[0]] ?? "");
-      skipped = extracted.skipped;
-      if (!extracted.series.some(s => s.points.length)) return this.renderError(`No rows with numeric "${xCol}" and "${yCol}" values`);
+      // A categorical X (not numeric, not a date) flips into bar/aggregate
+      // mode — same rule as the Chart view's X picker.
+      if (!isDateX && !numCols.includes(xCol)) {
+        const agg: BarAgg = this.opts.agg || "count";
+        const data = aggregateBars(rows, xCol, agg === "count" ? null : yCol, hueCol, agg);
+        skipped = data.skipped;
+        if (!data.categories.length) return this.renderError(`No rows with a "${xCol}" value to chart`);
+        const yLabel = agg === "count" ? "count" : `${agg}(${yCol})`;
+        built = { config: buildBarConfig(data, xCol, yLabel, resolveChartColors(root)), fitText: null, formulaError: null };
+      } else {
+        const extracted = extractSeries(rows, xCol, yCol, hueCol, sizeCol, isDateX, parseIsoDate, r => r[headers[0]] ?? "");
+        skipped = extracted.skipped;
+        if (!extracted.series.some(s => s.points.length)) return this.renderError(`No rows with numeric "${xCol}" and "${yCol}" values`);
 
-      spec = {
-        series: extracted.series,
-        xIsDate: isDateX,
-        xLabel: xCol,
-        yLabel: yCol,
-        connect: isDateX,
-        fit: this.opts.fit,
-        formula: this.opts.formula,
-      };
+        const spec: ChartSpec = {
+          series: extracted.series,
+          xIsDate: isDateX,
+          xLabel: xCol,
+          yLabel: yCol,
+          connect: isDateX,
+          fit: this.opts.fit,
+          formula: this.opts.formula,
+          sizeLabel: sizeCol ?? "",
+        };
+        built = buildChartConfig(spec, resolveChartColors(root));
+      }
     } else {
       // Formula-only plot: no data, just the curve over an explicit domain.
       if (!this.opts.formula.trim()) return this.renderError(`Give a "file:" line, a "formula:" line, or both`);
-      spec = {
+      built = buildChartConfig({
         series: [],
         xIsDate: false,
         xLabel: "x",
@@ -171,10 +195,9 @@ class ChartBlock extends MarkdownRenderChild {
         formula: this.opts.formula,
         xMin: this.opts.xmin ?? -10,
         xMax: this.opts.xmax ?? 10,
-      };
+      }, resolveChartColors(root));
     }
 
-    const built = buildChartConfig(spec, resolveChartColors(root));
     if (built.formulaError) return this.renderError(`formula: ${built.formulaError}`);
 
     const wrap = root.createDiv({ cls: "csv-chart-wrap" });

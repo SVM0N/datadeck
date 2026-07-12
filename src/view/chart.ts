@@ -12,7 +12,7 @@ import type { CardView } from "../../main";
 import { CSVRow } from "../types";
 import { loadChart } from "../chartjs-loader";
 import { compileFormula } from "../formula";
-import { localISODate } from "../utils";
+import { localISODate, isMultiValueColName } from "../utils";
 
 // ── Numeric parsing / column detection ──────────────────────────────────────
 
@@ -73,7 +73,13 @@ export function linearFit(pts: { x: number; y: number }[]): LinearFit | null {
   return { slope, intercept, r2: ssTot === 0 ? 1 : 1 - ssRes / ssTot };
 }
 
-export interface ChartPoint { x: number; y: number; label?: string; }
+export interface ChartPoint {
+  x: number;
+  y: number;
+  label?: string;
+  /** Raw size-by value — mapped to point radius in buildChartConfig. */
+  size?: number;
+}
 
 /** One plotted series — a hue-split bucket, or the whole file when no hue. */
 export interface ChartSeries { label: string; points: ChartPoint[]; }
@@ -88,6 +94,8 @@ export interface ChartSpec {
   connect: boolean;        // draw each series as a line (sorted by x) vs dots
   fit: "none" | "linear";  // per-series least-squares line(s)
   formula: string;         // raw y=f(x) text, "" = none
+  /** Column name behind ChartPoint.size, for the tooltip. "" = no size-by. */
+  sizeLabel?: string;
   // Domain for a pure-formula plot with no data points.
   xMin?: number;
   xMax?: number;
@@ -164,11 +172,24 @@ export function buildChartConfig(spec: ChartSpec, colors: ChartColors): BuiltCha
   const xMin = allPoints.length ? Math.min(...xs) : (spec.xMin ?? 0);
   const xMax = allPoints.length ? Math.max(...xs) : (spec.xMax ?? 10);
 
+  // Size-by: map the raw values onto 3–14 px radii with a sqrt scale, so
+  // *area* (what the eye reads) tracks the value. Constant columns collapse
+  // to a middle size instead of dividing by zero.
+  const sized = allPoints.filter(p => p.size !== undefined);
+  const sizeMin = sized.length ? Math.min(...sized.map(p => p.size as number)) : 0;
+  const sizeMax = sized.length ? Math.max(...sized.map(p => p.size as number)) : 0;
+  const radiusOf = (p: ChartPoint, fallback: number): number => {
+    if (p.size === undefined) return fallback;
+    if (sizeMax === sizeMin) return 7;
+    return 3 + 11 * Math.sqrt((p.size - sizeMin) / (sizeMax - sizeMin));
+  };
+
   const fitTexts: string[] = [];
   spec.series.forEach((s, i) => {
     const pts = spec.connect ? [...s.points].sort((a, b) => a.x - b.x) : s.points;
     if (!pts.length) return;
     const color = multi ? colors.series[i % colors.series.length] : colors.accent;
+    const baseRadius = spec.connect ? 3 : 4;
     datasets.push({
       type: spec.connect ? "line" : "scatter",
       label: s.label || spec.yLabel,
@@ -176,8 +197,8 @@ export function buildChartConfig(spec: ChartSpec, colors: ChartColors): BuiltCha
       backgroundColor: color,
       borderColor: color,
       borderWidth: 1.5,
-      pointRadius: spec.connect ? 3 : 4,
-      pointHoverRadius: 6,
+      pointRadius: sized.length ? pts.map(p => radiusOf(p, baseRadius)) : baseRadius,
+      pointHoverRadius: sized.length ? pts.map(p => radiusOf(p, baseRadius) + 2) : 6,
       tension: 0.3,
     });
 
@@ -284,7 +305,8 @@ export function buildChartConfig(spec: ChartSpec, colors: ChartColors): BuiltCha
               const x = spec.xIsDate ? fmtDate(p.x) : fmtNum(p.x);
               const series = multi && item.dataset.label ? `[${item.dataset.label}] ` : "";
               const head = p.label ? `${p.label}: ` : "";
-              return `${series}${head}(${x}, ${fmtNum(p.y)})`;
+              const size = p.size !== undefined && spec.sizeLabel ? ` · ${spec.sizeLabel}: ${fmtNum(p.size)}` : "";
+              return `${series}${head}(${x}, ${fmtNum(p.y)})${size}`;
             },
           },
         },
@@ -310,6 +332,7 @@ export function extractSeries(
   xCol: string,
   yCol: string,
   hueCol: string | null,
+  sizeCol: string | null,
   isDateX: boolean,
   parseDate: (s: string) => Date | null,
   labelOf: (row: CSVRow) => string,
@@ -328,7 +351,12 @@ export function extractSeries(
     const key = hueCol ? ((r[hueCol] ?? "").trim() || "—") : "";
     let bucket = buckets.get(key);
     if (!bucket) { bucket = []; buckets.set(key, bucket); }
-    bucket.push({ x, y, label: labelOf(r) });
+    const point: ChartPoint = { x, y, label: labelOf(r) };
+    if (sizeCol) {
+      const size = parseNumeric(r[sizeCol] ?? "");
+      if (size !== null) point.size = size;
+    }
+    bucket.push(point);
   });
   const series = [...buckets.entries()]
     // A→Z, with the empty-value "—" catch-all pinned last.
@@ -347,6 +375,122 @@ export function hueColumns(headers: string[], rows: CSVRow[], exclude: Set<strin
     const distinct = new Set(rows.map(r => (r[h] ?? "").trim()).filter(Boolean));
     return distinct.size >= 2 && distinct.size <= 10;
   });
+}
+
+/**
+ * Columns usable as a *categorical X* (bar mode): like hue but roomier —
+ * up to 30 bars still read fine — and empty cells count as a "—" bar.
+ */
+export function categoricalXColumns(headers: string[], rows: CSVRow[], exclude: Set<string>): string[] {
+  return headers.filter(h => {
+    if (exclude.has(h)) return false;
+    const distinct = new Set(rows.map(r => (r[h] ?? "").trim()).filter(Boolean));
+    return distinct.size >= 1 && distinct.size <= 30;
+  });
+}
+
+// ── Bar mode (categorical X + aggregate) ─────────────────────────────────────
+
+export type BarAgg = "count" | "sum" | "avg";
+
+export interface BarData {
+  categories: string[];
+  /** One entry per hue value (single entry, label "", when no hue). Values align with categories. */
+  series: { label: string; values: number[] }[];
+  skipped: number;
+}
+
+/**
+ * Aggregate rows into bars: one bar per distinct `xCol` value (multi-value
+ * columns like Genre are comma-split — a row counts once per value), with an
+ * optional hue split into grouped bars. `agg` "count" ignores yCol; sum/avg
+ * skip rows whose Y doesn't parse. Categories sort numeric-aware A→Z with
+ * the empty-value "—" bar last.
+ */
+export function aggregateBars(
+  rows: CSVRow[],
+  xCol: string,
+  yCol: string | null,
+  hueCol: string | null,
+  agg: BarAgg,
+): BarData {
+  const cells = new Map<string, Map<string, { sum: number; n: number }>>();
+  const hueVals = new Set<string>();
+  let skipped = 0;
+  const multiX = isMultiValueColName(xCol);
+
+  rows.forEach(r => {
+    let y = 0;
+    if (agg !== "count") {
+      const parsed = parseNumeric(r[(yCol ?? "")] ?? "");
+      if (parsed === null) { skipped++; return; }
+      y = parsed;
+    }
+    const rawX = (r[xCol] ?? "").trim();
+    const cats = multiX
+      ? (rawX ? rawX.split(",").map(s => s.trim()).filter(Boolean) : ["—"])
+      : [rawX || "—"];
+    const hue = hueCol ? ((r[hueCol] ?? "").trim() || "—") : "";
+    hueVals.add(hue);
+    cats.forEach(cat => {
+      let byHue = cells.get(cat);
+      if (!byHue) { byHue = new Map(); cells.set(cat, byHue); }
+      const cell = byHue.get(hue) ?? { sum: 0, n: 0 };
+      cell.sum += y;
+      cell.n += 1;
+      byHue.set(hue, cell);
+    });
+  });
+
+  const catSort = (a: string, b: string) =>
+    a === "—" ? 1 : b === "—" ? -1 : a.localeCompare(b, undefined, { numeric: true });
+  const categories = [...cells.keys()].sort(catSort);
+  const series = [...hueVals].sort(catSort).map(hue => ({
+    label: hue,
+    values: categories.map(cat => {
+      const cell = cells.get(cat)?.get(hue);
+      if (!cell || cell.n === 0) return 0;
+      return agg === "count" ? cell.n : agg === "sum" ? cell.sum : cell.sum / cell.n;
+    }),
+  }));
+  return { categories, series, skipped };
+}
+
+/** Chart.js bar config from aggregated data. Pure, like buildChartConfig. */
+export function buildBarConfig(data: BarData, xLabel: string, yLabel: string, colors: ChartColors): ChartConfiguration {
+  const multi = data.series.length > 1;
+  return {
+    type: "bar",
+    data: {
+      labels: data.categories,
+      datasets: data.series.map((s, i) => ({
+        label: s.label || yLabel,
+        data: s.values,
+        backgroundColor: multi ? colors.series[i % colors.series.length] : colors.accent,
+        borderRadius: 3,
+      })),
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          title: { display: !!xLabel, text: xLabel, color: colors.muted },
+          ticks: { color: colors.muted, autoSkip: false, maxRotation: 60 },
+          grid: { display: false },
+        },
+        y: {
+          beginAtZero: true,
+          title: { display: !!yLabel, text: yLabel, color: colors.muted },
+          ticks: { color: colors.muted },
+          grid: { color: colors.grid },
+        },
+      },
+      plugins: {
+        legend: { display: multi, labels: { color: colors.muted, boxWidth: 12 } },
+      },
+    } as ChartConfiguration["options"],
+  };
 }
 
 // ── The Chart view ───────────────────────────────────────────────────────────
@@ -372,9 +516,16 @@ export async function renderChart(view: CardView, container: HTMLElement): Promi
   const dateCol = view.getDateCol();
 
   // X candidates: the date column first (time series is the common case),
-  // then every numeric column, then plain row order as a fallback.
-  const xOptions = [...(dateCol ? [dateCol] : []), ...numCols.filter(c => c !== dateCol), ROW_INDEX];
+  // then every numeric column, row order, then categorical columns — picking
+  // a categorical X flips the whole chart into bar/aggregate mode.
+  const titleCol = view.titleKey() ?? view.headers[0];
+  const catXExclude = new Set<string>([titleCol, ...numCols, ...(dateCol ? [dateCol] : [])]);
+  view.headers.forEach(h => { if (view.isNotesCol(h)) catXExclude.add(h); });
+  const catXCandidates = categoricalXColumns(view.headers, view.rows, catXExclude);
+  const xOptions = [...(dateCol ? [dateCol] : []), ...numCols.filter(c => c !== dateCol), ROW_INDEX, ...catXCandidates];
   let xCol = cfg.chartXCol && xOptions.includes(cfg.chartXCol) ? cfg.chartXCol : xOptions[0];
+  const barMode = catXCandidates.includes(xCol);
+  const agg: BarAgg = cfg.chartAgg === "sum" || cfg.chartAgg === "avg" ? cfg.chartAgg : "count";
   const yOptions = numCols;
   let yCol = cfg.chartYCol && yOptions.includes(cfg.chartYCol)
     ? cfg.chartYCol
@@ -403,11 +554,20 @@ export async function renderChart(view: CardView, container: HTMLElement): Promi
   };
 
   labeledSelect("X", xOptions, xCol, v => save({ chartXCol: v }));
-  labeledSelect("Y", yOptions, yCol, v => save({ chartYCol: v }));
+  // In bar mode with a plain count, Y is irrelevant — hide it so the
+  // controls read "X · Agg" like a pivot, not a broken scatter.
+  if (!barMode || agg !== "count") {
+    labeledSelect(barMode ? `Y (${agg})` : "Y", yOptions, yCol, v => save({ chartYCol: v }));
+  }
+  if (barMode) {
+    labeledSelect("Agg", ["count", "sum", "avg"], agg,
+      v => save({ chartAgg: v as BarAgg }));
+  }
 
   // Hue (ggplot "color by"): split into one colored series per value of a
-  // categorical column. Only offered when the file has a usable candidate.
-  const hueExclude = new Set<string>([xCol, yCol, view.titleKey() ?? view.headers[0]]);
+  // categorical column — grouped bars in bar mode. Only offered when the
+  // file has a usable candidate.
+  const hueExclude = new Set<string>([xCol, yCol, titleCol]);
   view.headers.forEach(h => { if (view.isNotesCol(h)) hueExclude.add(h); });
   const hueCandidates = hueColumns(view.headers, view.rows, hueExclude);
   const NO_HUE = "—";
@@ -415,6 +575,37 @@ export async function renderChart(view: CardView, container: HTMLElement): Promi
   if (hueCandidates.length) {
     labeledSelect("Color", [NO_HUE, ...hueCandidates], hueCol ?? NO_HUE,
       v => save({ chartHueCol: v === NO_HUE ? undefined : v }));
+  }
+
+  // Size-by (bubble): a numeric column mapped to point radius. Scatter only.
+  const sizeCandidates = numCols.filter(c => c !== yCol && c !== xCol);
+  const sizeCol = !barMode && cfg.chartSizeCol && sizeCandidates.includes(cfg.chartSizeCol) ? cfg.chartSizeCol : null;
+  if (!barMode && sizeCandidates.length) {
+    labeledSelect("Size", [NO_HUE, ...sizeCandidates], sizeCol ?? NO_HUE,
+      v => save({ chartSizeCol: v === NO_HUE ? undefined : v }));
+  }
+
+  // ── Bar mode: categorical X → aggregate bars, then done ──────────────────
+  if (barMode) {
+    const data = aggregateBars(rows, xCol, agg === "count" ? null : yCol, hueCol, agg);
+    const canvasWrapB = wrap.createDiv({ cls: "csv-chart-wrap" });
+    const canvasB = canvasWrapB.createEl("canvas", { cls: "csv-chart-canvas" });
+    if (!data.categories.length) {
+      canvasWrapB.remove();
+      wrap.createEl("p", { text: `No rows with a "${xCol}" value to chart.`, cls: "csv-empty-state" });
+      return;
+    }
+    if (data.skipped > 0) {
+      wrap.createDiv({ cls: "csv-chart-footer" })
+        .createSpan({ cls: "csv-chart-skipped", text: `${data.skipped} row${data.skipped === 1 ? "" : "s"} skipped (no numeric value)` });
+    }
+    const yLabel = agg === "count" ? "count" : `${agg}(${yCol})`;
+    const config = buildBarConfig(data, xCol, yLabel, resolveChartColors(container));
+    if (view.chartInstance) { view.chartInstance.destroy(); view.chartInstance = null; }
+    const { Chart } = await loadChart();
+    if (!canvasB.isConnected) return;
+    view.chartInstance = new Chart(canvasB, config);
+    return;
   }
 
   const fitBtn = controls.createEl("button", {
@@ -444,7 +635,7 @@ export async function renderChart(view: CardView, container: HTMLElement): Promi
 
   // ── Chart ─────────────────────────────────────────────────────────────────
   const isDateX = xCol !== ROW_INDEX && (xCol === dateCol || view.isDateCol(xCol));
-  const { series, skipped } = extractSeries(rows, xCol, yCol, hueCol, isDateX, s => view.parseDate(s), r => view.getTitle(r));
+  const { series, skipped } = extractSeries(rows, xCol, yCol, hueCol, sizeCol, isDateX, s => view.parseDate(s), r => view.getTitle(r));
 
   const canvasWrap = wrap.createDiv({ cls: "csv-chart-wrap" });
   const canvas = canvasWrap.createEl("canvas", { cls: "csv-chart-canvas" });
@@ -465,6 +656,7 @@ export async function renderChart(view: CardView, container: HTMLElement): Promi
     connect: isDateX,   // time series read better connected; numeric pairs as dots
     fit,
     formula,
+    sizeLabel: sizeCol ?? "",
   };
   const built = buildChartConfig(spec, resolveChartColors(container));
 

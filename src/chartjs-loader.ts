@@ -13,8 +13,8 @@ export async function loadChart(): Promise<ChartModule> {
   if (chartModule) return chartModule;
   const mod = await import("chart.js");
   mod.Chart.register(
-    mod.LineController, mod.ScatterController,
-    mod.LineElement, mod.PointElement,
+    mod.LineController, mod.ScatterController, mod.BarController,
+    mod.LineElement, mod.PointElement, mod.BarElement,
     mod.LinearScale, mod.CategoryScale,
     mod.Filler, mod.Tooltip, mod.Legend,
   );

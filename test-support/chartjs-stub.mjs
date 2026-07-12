@@ -10,8 +10,10 @@ export class Chart {
 }
 export class LineController {}
 export class ScatterController {}
+export class BarController {}
 export class LineElement {}
 export class PointElement {}
+export class BarElement {}
 export class LinearScale {}
 export class CategoryScale {}
 export class Filler {}
