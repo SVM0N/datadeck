@@ -892,7 +892,19 @@ test("migrateFileConfigKey: caller-set new entry wins, old still cleared", () =>
   const { analyzeTravel, currentStay } = await import(pathToFileURL(out).href);
   fs.rmSync(out, { force: true });
 
-  const csv = fs.readFileSync(fileURLToPath(new URL("./sample-data/travel_flat.csv", import.meta.url)), "utf8");
+  // Inlined synthetic fixture (was sample-data/travel_flat.csv) — the repo
+  // ships no data files; tests carry their own fixtures.
+  const csv = `date_entered,date_left,country,city,visa_status,notes,source,resolved
+2020-01-01,2020-01-11,FR,Paris,Tourist,,confirmed,
+2020-02-01,2020-02-01,JP,Tokyo,Tourist,,confirmed,
+2021-06-01,2021-09-01,US,"New York, NY",F-1,School,confirmed,
+,,BR,,Tourist,Carnival someday,confirmed,
+2019-05-??,2019-05-??,DE,,Tourist,,confirmed,
+2020-01-05,2020-01-07,FR,Lyon,,photo-inferred,inferred,
+2022-03-01,2022-03-10,IT,Rome,,photo-inferred,inferred,
+2021-07-01,2021-07-05,GB,London,,photo-inferred,inferred,
+2021-07-01,2021-07-05,GB,London,,CONFLICT: photos say GB but confirmed says US,conflict,
+`;
   const rows = Papa.parse(csv, { header: true, skipEmptyLines: true }).data;
   const m = analyzeTravel(rows);
 
