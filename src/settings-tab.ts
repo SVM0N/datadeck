@@ -12,7 +12,7 @@ export class CardViewSettingTab extends PluginSettingTab {
   constructor(app: App, plugin: CardViewPlugin){super(app,plugin); this.plugin=plugin;}
   display(): void {
     const {containerEl}=this; containerEl.empty();
-    containerEl.createEl("h2",{text:"XLSX Card View"});
+    containerEl.createEl("h2",{text:"DataDeck"});
     new Setting(containerEl).setName("Default view mode")
       .addDropdown(d=>d.addOption("kanban-genre","Kanban").addOption("table","Table")
         .setValue(this.plugin.settings.defaultMode)
