@@ -1775,6 +1775,7 @@ await test("chart: renders controls, canvas, and fit text over a numeric file", 
   assert(c.querySelector("canvas.csv-chart-canvas"), "canvas present");
   assert(c.querySelector(".csv-chart-fit-text"), "fit equation shown");
   assert(view.chartInstance, "Chart instance created");
+  assert(c.querySelector(".csv-chart-export-btn"), "PNG export button appended after render");
 });
 
 await test("chart: changing the Y select persists to fileCfg and re-renders", async () => {

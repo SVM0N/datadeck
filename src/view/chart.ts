@@ -7,6 +7,7 @@
 // The csv-chart code block (src/chart-block.ts) reuses the extraction +
 // config-building core below. Covered by test-view-smoke.mjs (chart.js stub).
 
+import { Notice, normalizePath } from "obsidian";
 import type { ChartConfiguration, TooltipItem } from "chart.js";
 import type { CardView } from "../../main";
 import { CSVRow } from "../types";
@@ -572,6 +573,48 @@ export function buildBarConfig(data: BarData, xLabel: string, yLabel: string, co
   };
 }
 
+// ── PNG export ───────────────────────────────────────────────────────────────
+
+/**
+ * Save the rendered chart as a PNG next to the CSV. The chart canvas is
+ * transparent, so it's composited onto the theme background first — a
+ * transparent PNG looks broken pasted anywhere light-on-dark or vice versa.
+ */
+async function exportChartPng(view: CardView, canvas: HTMLCanvasElement): Promise<void> {
+  try {
+    const out = canvas.ownerDocument.createElement("canvas");
+    out.width = canvas.width;
+    out.height = canvas.height;
+    const ctx = out.getContext("2d");
+    if (!ctx || !out.toBlob) { new Notice("PNG export isn't available here."); return; }
+    const css = canvas.ownerDocument.defaultView?.getComputedStyle(canvas.ownerDocument.body);
+    ctx.fillStyle = css?.getPropertyValue("--background-primary").trim() || "#ffffff";
+    ctx.fillRect(0, 0, out.width, out.height);
+    ctx.drawImage(canvas, 0, 0);
+    const blob = await new Promise<Blob | null>(resolve => out.toBlob(resolve, "image/png"));
+    if (!blob) { new Notice("PNG export failed."); return; }
+    const folder = view.file?.parent?.path ?? "";
+    const now = new Date();
+    const stamp = `${localISODate(now)} ${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+    const name = `${view.file?.basename ?? "chart"} chart ${stamp}.png`;
+    const path = normalizePath(folder ? `${folder}/${name}` : name);
+    await view.app.vault.createBinary(path, await blob.arrayBuffer());
+    new Notice(`Saved ${path}`);
+  } catch (e) {
+    new Notice(`PNG export failed: ${e instanceof Error ? e.message : String(e)}`, 6000);
+  }
+}
+
+/** The ⬇ PNG button, appended to the controls once a canvas exists to export. */
+function addExportButton(view: CardView, controls: HTMLElement, canvas: HTMLCanvasElement): void {
+  const btn = controls.createEl("button", {
+    cls: "csv-cfg-btn csv-chart-export-btn",
+    text: "⬇ PNG",
+    title: "Save this chart as a PNG next to the CSV",
+  });
+  btn.addEventListener("click", () => { void exportChartPng(view, canvas); });
+}
+
 // ── The Chart view ───────────────────────────────────────────────────────────
 
 /** True when the file has a column pair worth plotting (≥1 numeric column). */
@@ -701,6 +744,7 @@ export async function renderChart(view: CardView, container: HTMLElement): Promi
     const { Chart } = await loadChart();
     if (!canvasB.isConnected) return;
     view.chartInstance = new Chart(canvasB, config);
+    addExportButton(view, controls, canvasB);
     return;
   }
 
@@ -778,4 +822,5 @@ export async function renderChart(view: CardView, container: HTMLElement): Promi
   const { Chart } = await loadChart();
   if (!canvas.isConnected) return;
   view.chartInstance = new Chart(canvas, built.config);
+  addExportButton(view, controls, canvas);
 }
