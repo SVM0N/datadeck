@@ -1528,7 +1528,7 @@ await test("formula: bad input throws readable errors", async () => {
 });
 
 // ── Chart view ───────────────────────────────────────────────────────────────
-const { renderChart, hasChartColumns, parseNumeric, numericColumns, linearFit, buildChartConfig } =
+const { renderChart, hasChartColumns, parseNumeric, numericColumns, linearFit, buildChartConfig, extractSeries, hueColumns } =
   await load("./src/view/chart.ts");
 
 await test("chart: parseNumeric handles separators and rejects text", async () => {
@@ -1557,11 +1557,12 @@ await test("chart: linearFit recovers an exact line with R² = 1", async () => {
   assert(linearFit([{ x: 1, y: 1 }, { x: 1, y: 2 }]) === null, "no X spread → null");
 });
 
-const chartColors = { accent: "#38d", muted: "#888", grid: "#ccc", fitLine: "#999", formula: "#e83" };
+const chartColors = { accent: "#38d", muted: "#888", grid: "#ccc", fitLine: "#999", formula: "#e83", series: ["#111", "#222", "#333"] };
+const oneSeries = (points) => [{ label: "", points }];
 
 await test("chart: buildChartConfig adds fit + formula datasets and fit text", async () => {
   const built = buildChartConfig({
-    points: [{ x: 0, y: 1 }, { x: 1, y: 3 }, { x: 2, y: 5 }],
+    series: oneSeries([{ x: 0, y: 1 }, { x: 1, y: 3 }, { x: 2, y: 5 }]),
     xIsDate: false, xLabel: "x", yLabel: "score", connect: false,
     fit: "linear", formula: "2x + 1",
   }, chartColors);
@@ -1574,12 +1575,48 @@ await test("chart: buildChartConfig adds fit + formula datasets and fit text", a
 await test("chart: date X gets per-day trend text; bad formula surfaces error", async () => {
   const day = 86_400_000;
   const built = buildChartConfig({
-    points: [{ x: 0, y: 0 }, { x: day, y: 2 }, { x: 2 * day, y: 4 }],
+    series: oneSeries([{ x: 0, y: 0 }, { x: day, y: 2 }, { x: 2 * day, y: 4 }]),
     xIsDate: true, xLabel: "date", yLabel: "km", connect: true,
     fit: "linear", formula: "foo(x)",
   }, chartColors);
   assert(built.fitText.startsWith("Trend: +2 km/day"), `per-day phrasing (got "${built.fitText}")`);
   assert(built.formulaError !== null, "bad formula reported, not thrown");
+});
+
+await test("chart: hue split — one colored dataset per series, per-series fits off the legend", async () => {
+  const built = buildChartConfig({
+    series: [
+      { label: "A", points: [{ x: 0, y: 0 }, { x: 1, y: 2 }] },
+      { label: "B", points: [{ x: 0, y: 5 }, { x: 1, y: 4 }] },
+    ],
+    xIsDate: false, xLabel: "x", yLabel: "score", connect: false,
+    fit: "linear", formula: "",
+  }, chartColors);
+  const ds = built.config.data.datasets;
+  assert(ds.length === 4, `2 point datasets + 2 fit datasets (got ${ds.length})`);
+  const pointSets = ds.filter(d => !d.csvIsFit);
+  assert(pointSets[0].label === "A" && pointSets[1].label === "B", "series labeled by hue value");
+  assert(pointSets[0].backgroundColor !== pointSets[1].backgroundColor, "distinct palette colors");
+  const fits = ds.filter(d => d.csvIsFit);
+  assert(fits.length === 2 && fits[0].borderColor === pointSets[0].backgroundColor, "fit keeps its series color");
+  assert(built.fitText.includes("A:") && built.fitText.includes("B:"), `per-series fit text (got "${built.fitText}")`);
+  const legend = built.config.options.plugins.legend;
+  assert(legend.display === true, "legend shown for hue split");
+  assert(legend.labels.filter({ datasetIndex: ds.indexOf(fits[0]) }) === false, "fit datasets filtered from legend");
+  assert(legend.labels.filter({ datasetIndex: 0 }) === true, "point datasets stay in legend");
+});
+
+await test("chart: extractSeries buckets by hue (empty → —); hueColumns needs 2–10 distinct", async () => {
+  const rows = [
+    { name: "a", who: "Anna", val: "1" },
+    { name: "b", who: "Ben", val: "2" },
+    { name: "c", who: "", val: "3" },
+  ];
+  const { series, skipped } = extractSeries(rows, "(row number)", "val", "who", false, () => null, r => r.name);
+  assert(skipped === 0, "all rows numeric");
+  assert(series.map(s => s.label).join(",") === "Anna,Ben,—", `A→Z with — bucket (got ${series.map(s => s.label)})`);
+  assert(hueColumns(["name", "who", "val"], rows, new Set(["name"])).join(",") === "who,val",
+    "low-cardinality columns qualify, excluded ones don't");
 });
 
 function chartView(rows, cfg = {}) {
@@ -1592,6 +1629,8 @@ function chartView(rows, cfg = {}) {
     isDateCol: (h) => h === "date",
     parseDate: (s) => (/^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s + "T00:00:00") : null),
     getTitle: (r) => r[Object.keys(r)[0]] ?? "—",
+    titleKey: () => undefined,
+    isNotesCol: () => false,
     chartInstance: null,
     renderView: () => {}, renderViewPreservingScroll: () => {},
     getSavedCfg: () => savedCfg,

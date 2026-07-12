@@ -66,6 +66,8 @@ export interface FileConfig {
   chartXCol?: string;         // Chart view X column. Unset = date col → first
                               // numeric → row number (see src/view/chart.ts).
   chartYCol?: string;         // Chart view Y column. Unset = first numeric ≠ X.
+  chartHueCol?: string;       // Chart view "Color by" split column (ggplot hue).
+                              // Unset = single series.
   chartFit?: "none" | "linear"; // Chart view best-fit line toggle.
   chartFormula?: string;      // Chart view y = f(x) overlay (src/formula.ts).
 }

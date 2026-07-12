@@ -75,13 +75,18 @@ export function linearFit(pts: { x: number; y: number }[]): LinearFit | null {
 
 export interface ChartPoint { x: number; y: number; label?: string; }
 
+/** One plotted series — a hue-split bucket, or the whole file when no hue. */
+export interface ChartSeries { label: string; points: ChartPoint[]; }
+
 export interface ChartSpec {
-  points: ChartPoint[];
+  // One entry per hue value (ggplot-style "color by" column), or a single
+  // entry with label "" for an un-hued chart.
+  series: ChartSeries[];
   xIsDate: boolean;        // X values are ms timestamps → date-formatted ticks
   xLabel: string;
   yLabel: string;
-  connect: boolean;        // draw the series as a line (sorted by x) vs dots
-  fit: "none" | "linear";
+  connect: boolean;        // draw each series as a line (sorted by x) vs dots
+  fit: "none" | "linear";  // per-series least-squares line(s)
   formula: string;         // raw y=f(x) text, "" = none
   // Domain for a pure-formula plot with no data points.
   xMin?: number;
@@ -89,7 +94,11 @@ export interface ChartSpec {
 }
 
 /** Theme colors resolved from CSS variables at render time (canvas needs concrete values). */
-export interface ChartColors { accent: string; muted: string; grid: string; fitLine: string; formula: string; }
+export interface ChartColors {
+  accent: string; muted: string; grid: string; fitLine: string; formula: string;
+  /** Categorical palette for hue-split series (Obsidian's extended colors, Tableau-ish fallbacks). */
+  series: string[];
+}
 
 export function resolveChartColors(el: HTMLElement): ChartColors {
   // Via the element's own window — a bare getComputedStyle global doesn't
@@ -102,6 +111,16 @@ export function resolveChartColors(el: HTMLElement): ChartColors {
     grid: v("--background-modifier-border", "rgba(128,128,128,0.25)"),
     fitLine: v("--text-faint", "#999999"),
     formula: v("--color-orange", "#e0883a"),
+    // Orange is deliberately absent — it stays the formula overlay's color.
+    series: [
+      v("--color-blue", "#4e79a7"),
+      v("--color-green", "#59a14f"),
+      v("--color-red", "#e15759"),
+      v("--color-purple", "#b07aa1"),
+      v("--color-cyan", "#76b7b2"),
+      v("--color-pink", "#ff9da7"),
+      v("--color-yellow", "#edc948"),
+    ],
   };
 }
 
@@ -126,61 +145,75 @@ export interface BuiltChart {
   formulaError: string | null;
 }
 
+// Dataset with our own bookkeeping flag: fit lines are excluded from the
+// legend (they'd double every hue entry) but still drawn.
+type ChartDataset = ChartConfiguration<"scatter" | "line">["data"]["datasets"][number] & { csvIsFit?: boolean };
+
 /**
- * Build a Chart.js scatter config from a spec: data points, optional fit-line
- * dataset, optional formula-overlay dataset. Pure — no DOM, no Chart.js
- * import — so the smoke tests can assert on it without a canvas.
+ * Build a Chart.js scatter config from a spec: one dataset per series (hue
+ * bucket), optional per-series fit lines, optional formula-overlay dataset.
+ * Pure — no DOM, no Chart.js import — so the smoke tests can assert on it
+ * without a canvas.
  */
 export function buildChartConfig(spec: ChartSpec, colors: ChartColors): BuiltChart {
-  const datasets: ChartConfiguration<"scatter" | "line">["data"]["datasets"] = [];
-  const pts = spec.connect ? [...spec.points].sort((a, b) => a.x - b.x) : spec.points;
+  const datasets: ChartDataset[] = [];
+  const multi = spec.series.length > 1;
 
-  if (pts.length) {
+  const allPoints = spec.series.flatMap(s => s.points);
+  const xs = allPoints.map(p => p.x);
+  const xMin = allPoints.length ? Math.min(...xs) : (spec.xMin ?? 0);
+  const xMax = allPoints.length ? Math.max(...xs) : (spec.xMax ?? 10);
+
+  const fitTexts: string[] = [];
+  spec.series.forEach((s, i) => {
+    const pts = spec.connect ? [...s.points].sort((a, b) => a.x - b.x) : s.points;
+    if (!pts.length) return;
+    const color = multi ? colors.series[i % colors.series.length] : colors.accent;
     datasets.push({
       type: spec.connect ? "line" : "scatter",
-      label: spec.yLabel,
+      label: s.label || spec.yLabel,
       data: pts,
-      backgroundColor: colors.accent,
-      borderColor: colors.accent,
+      backgroundColor: color,
+      borderColor: color,
       borderWidth: 1.5,
       pointRadius: spec.connect ? 3 : 4,
       pointHoverRadius: 6,
       tension: 0.3,
     });
-  }
 
-  const xs = pts.map(p => p.x);
-  const xMin = pts.length ? Math.min(...xs) : (spec.xMin ?? 0);
-  const xMax = pts.length ? Math.max(...xs) : (spec.xMax ?? 10);
-
-  let fitText: string | null = null;
-  if (spec.fit === "linear") {
-    const fit = linearFit(pts);
-    if (fit && xMax > xMin) {
-      datasets.push({
-        type: "line",
-        label: "Best fit",
-        data: [
-          { x: xMin, y: fit.slope * xMin + fit.intercept },
-          { x: xMax, y: fit.slope * xMax + fit.intercept },
-        ],
-        borderColor: colors.fitLine,
-        borderDash: [6, 4],
-        borderWidth: 1.5,
-        pointRadius: 0,
-        pointHitRadius: 0,
-      });
-      const r2 = ` · R² = ${(Math.round(fit.r2 * 1000) / 1000).toFixed(3)}`;
-      if (spec.xIsDate) {
-        // Slope is per millisecond — meaningless to read. Phrase it per day.
-        const perDay = fit.slope * 86_400_000;
-        fitText = `Trend: ${perDay >= 0 ? "+" : ""}${fmtNum(perDay)} ${spec.yLabel}/day${r2}`;
-      } else {
-        const sign = fit.intercept >= 0 ? "+" : "−";
-        fitText = `y = ${fmtNum(fit.slope)}x ${sign} ${fmtNum(Math.abs(fit.intercept))}${r2}`;
+    if (spec.fit === "linear") {
+      const fit = linearFit(pts);
+      // Each fit spans its own series' x-extent, not the global one — a
+      // short series' trend shouldn't be extrapolated across the plot.
+      const sxs = pts.map(p => p.x);
+      const sMin = Math.min(...sxs), sMax = Math.max(...sxs);
+      if (fit && sMax > sMin) {
+        datasets.push({
+          type: "line",
+          label: `${s.label || "Best"} fit`,
+          csvIsFit: true,
+          data: [
+            { x: sMin, y: fit.slope * sMin + fit.intercept },
+            { x: sMax, y: fit.slope * sMax + fit.intercept },
+          ],
+          // Hue-split fits keep their series color so they're attributable;
+          // the single-series fit stays the quiet faint dash.
+          borderColor: multi ? color : colors.fitLine,
+          borderDash: [6, 4],
+          borderWidth: 1.5,
+          pointRadius: 0,
+          pointHitRadius: 0,
+        });
+        const r2 = ` · R² = ${(Math.round(fit.r2 * 1000) / 1000).toFixed(3)}`;
+        const eq = spec.xIsDate
+          // Slope is per millisecond — meaningless to read. Phrase it per day.
+          ? `${fit.slope * 86_400_000 >= 0 ? "+" : ""}${fmtNum(fit.slope * 86_400_000)} ${spec.yLabel}/day${r2}`
+          : `y = ${fmtNum(fit.slope)}x ${fit.intercept >= 0 ? "+" : "−"} ${fmtNum(Math.abs(fit.intercept))}${r2}`;
+        fitTexts.push(multi ? `${s.label}: ${eq}` : (spec.xIsDate ? `Trend: ${eq}` : eq));
       }
     }
-  }
+  });
+  const fitText = fitTexts.length ? fitTexts.join("   ·   ") : null;
 
   let formulaError: string | null = null;
   if (spec.formula.trim()) {
@@ -234,16 +267,24 @@ export function buildChartConfig(spec: ChartSpec, colors: ChartColors): BuiltCha
       },
       plugins: {
         legend: {
-          display: datasets.length > 1,
-          labels: { color: colors.muted, boxWidth: 12 },
+          // Worth showing for hue splits and formula overlays; fit lines are
+          // filtered out (they'd double every hue entry with "<x> fit").
+          display: datasets.filter(d => !d.csvIsFit).length > 1,
+          labels: {
+            color: colors.muted,
+            boxWidth: 12,
+            filter: (item: { datasetIndex?: number }) =>
+              !(datasets[item.datasetIndex ?? -1]?.csvIsFit),
+          },
         },
         tooltip: {
           callbacks: {
             label: (item: TooltipItem<"scatter">) => {
               const p = item.raw as ChartPoint;
               const x = spec.xIsDate ? fmtDate(p.x) : fmtNum(p.x);
+              const series = multi && item.dataset.label ? `[${item.dataset.label}] ` : "";
               const head = p.label ? `${p.label}: ` : "";
-              return `${head}(${x}, ${fmtNum(p.y)})`;
+              return `${series}${head}(${x}, ${fmtNum(p.y)})`;
             },
           },
         },
@@ -258,19 +299,22 @@ export function buildChartConfig(spec: ChartSpec, colors: ChartColors): BuiltCha
 const ROW_INDEX = "(row number)";
 
 /**
- * Rows → points for an x/y column pair. `xCol` may be a date column (values
+ * Rows → series for an x/y column pair, optionally split by a hue column
+ * (ggplot's `color=` aesthetic): one series per distinct hue value, sorted
+ * A→Z, empty hue cells bucketed as "—". `xCol` may be a date column (values
  * parsed via `parseDate`), a numeric column, or ROW_INDEX. Rows where either
  * side doesn't parse are skipped and counted.
  */
-export function extractPoints(
+export function extractSeries(
   rows: CSVRow[],
   xCol: string,
   yCol: string,
+  hueCol: string | null,
   isDateX: boolean,
   parseDate: (s: string) => Date | null,
   labelOf: (row: CSVRow) => string,
-): { points: ChartPoint[]; skipped: number } {
-  const points: ChartPoint[] = [];
+): { series: ChartSeries[]; skipped: number } {
+  const buckets = new Map<string, ChartPoint[]>();
   let skipped = 0;
   rows.forEach((r, i) => {
     const y = parseNumeric(r[yCol] ?? "");
@@ -281,9 +325,28 @@ export function extractPoints(
       x = d ? d.getTime() : null;
     } else x = parseNumeric(r[xCol] ?? "");
     if (x === null || y === null) { skipped++; return; }
-    points.push({ x, y, label: labelOf(r) });
+    const key = hueCol ? ((r[hueCol] ?? "").trim() || "—") : "";
+    let bucket = buckets.get(key);
+    if (!bucket) { bucket = []; buckets.set(key, bucket); }
+    bucket.push({ x, y, label: labelOf(r) });
   });
-  return { points, skipped };
+  const series = [...buckets.entries()]
+    // A→Z, with the empty-value "—" catch-all pinned last.
+    .sort((a, b) => a[0] === "—" ? 1 : b[0] === "—" ? -1 : a[0].localeCompare(b[0]))
+    .map(([label, points]) => ({ label, points }));
+  return { series, skipped };
+}
+
+/**
+ * Columns usable as a hue (color-by) split: 2–10 distinct non-empty values,
+ * excluding the given columns (current X/Y, title) and notes-style columns.
+ */
+export function hueColumns(headers: string[], rows: CSVRow[], exclude: Set<string>): string[] {
+  return headers.filter(h => {
+    if (exclude.has(h)) return false;
+    const distinct = new Set(rows.map(r => (r[h] ?? "").trim()).filter(Boolean));
+    return distinct.size >= 2 && distinct.size <= 10;
+  });
 }
 
 // ── The Chart view ───────────────────────────────────────────────────────────
@@ -342,6 +405,18 @@ export async function renderChart(view: CardView, container: HTMLElement): Promi
   labeledSelect("X", xOptions, xCol, v => save({ chartXCol: v }));
   labeledSelect("Y", yOptions, yCol, v => save({ chartYCol: v }));
 
+  // Hue (ggplot "color by"): split into one colored series per value of a
+  // categorical column. Only offered when the file has a usable candidate.
+  const hueExclude = new Set<string>([xCol, yCol, view.titleKey() ?? view.headers[0]]);
+  view.headers.forEach(h => { if (view.isNotesCol(h)) hueExclude.add(h); });
+  const hueCandidates = hueColumns(view.headers, view.rows, hueExclude);
+  const NO_HUE = "—";
+  const hueCol = cfg.chartHueCol && hueCandidates.includes(cfg.chartHueCol) ? cfg.chartHueCol : null;
+  if (hueCandidates.length) {
+    labeledSelect("Color", [NO_HUE, ...hueCandidates], hueCol ?? NO_HUE,
+      v => save({ chartHueCol: v === NO_HUE ? undefined : v }));
+  }
+
   const fitBtn = controls.createEl("button", {
     cls: `csv-cfg-btn csv-chart-fit-btn ${fit === "linear" ? "active" : ""}`,
     text: "Best fit",
@@ -369,13 +444,13 @@ export async function renderChart(view: CardView, container: HTMLElement): Promi
 
   // ── Chart ─────────────────────────────────────────────────────────────────
   const isDateX = xCol !== ROW_INDEX && (xCol === dateCol || view.isDateCol(xCol));
-  const { points, skipped } = extractPoints(rows, xCol, yCol, isDateX, s => view.parseDate(s), r => view.getTitle(r));
+  const { series, skipped } = extractSeries(rows, xCol, yCol, hueCol, isDateX, s => view.parseDate(s), r => view.getTitle(r));
 
   const canvasWrap = wrap.createDiv({ cls: "csv-chart-wrap" });
   const canvas = canvasWrap.createEl("canvas", { cls: "csv-chart-canvas" });
   const footer = wrap.createDiv({ cls: "csv-chart-footer" });
 
-  if (!points.length) {
+  if (!series.some(s => s.points.length)) {
     canvasWrap.remove();
     footer.remove();
     wrap.createEl("p", { text: `No rows with both "${xCol}" and "${yCol}" values to plot.`, cls: "csv-empty-state" });
@@ -383,7 +458,7 @@ export async function renderChart(view: CardView, container: HTMLElement): Promi
   }
 
   const spec: ChartSpec = {
-    points,
+    series,
     xIsDate: isDateX,
     xLabel: xCol === ROW_INDEX ? "row" : xCol,
     yLabel: yCol,

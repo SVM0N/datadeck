@@ -8,7 +8,9 @@
 //                            omit entirely for a formula-only plot)
 //   x: date                 (optional — default: date column → first numeric)
 //   y: weight               (optional — default: first numeric column ≠ x)
-//   fit: linear             (optional best-fit line with equation + R²)
+//   hue: person             (optional — ggplot-style color-by: one colored
+//                            series per distinct value; alias: color:)
+//   fit: linear             (optional per-series best-fit with equation + R²)
 //   formula: 0.5x + 2       (optional y = f(x) overlay; the whole plot when
 //                            there's no file. See src/formula.ts for syntax.)
 //   xmin: -10               (formula-only plots: domain, default -10 … 10)
@@ -27,7 +29,7 @@ import { parseCSV, resolvePath } from "./utils";
 import { isDateCol } from "./field-types";
 import { loadChart } from "./chartjs-loader";
 import {
-  buildChartConfig, extractPoints, numericColumns, resolveChartColors,
+  buildChartConfig, extractSeries, numericColumns, resolveChartColors,
   ChartSpec,
 } from "./view/chart";
 
@@ -35,6 +37,7 @@ interface ChartBlockOptions {
   file: string;
   x: string;
   y: string;
+  hue: string;
   fit: "none" | "linear";
   formula: string;
   xmin: number | null;
@@ -55,6 +58,7 @@ function parseBlockSource(source: string): ChartBlockOptions {
     file: opt("file"),
     x: opt("x"),
     y: opt("y"),
+    hue: opt("hue") || opt("color"),
     fit: opt("fit").toLowerCase() === "linear" ? "linear" : "none",
     formula: opt("formula"),
     xmin: num("xmin"),
@@ -137,14 +141,16 @@ class ChartBlock extends MarkdownRenderChild {
       const yCol = this.opts.y ? findCol(this.opts.y) : numCols.find(c => c !== xCol) ?? null;
       if (this.opts.y && !yCol) return this.renderError(`No column "${this.opts.y}" in ${file.basename}`);
       if (!xCol || !yCol) return this.renderError(`Couldn't auto-pick x/y columns — add "x:" and "y:" lines`);
+      const hueCol = this.opts.hue ? findCol(this.opts.hue) : null;
+      if (this.opts.hue && !hueCol) return this.renderError(`No column "${this.opts.hue}" in ${file.basename}`);
 
       const isDateX = xCol === dateCol || isDateCol(xCol);
-      const extracted = extractPoints(rows, xCol, yCol, isDateX, parseIsoDate, r => r[headers[0]] ?? "");
+      const extracted = extractSeries(rows, xCol, yCol, hueCol, isDateX, parseIsoDate, r => r[headers[0]] ?? "");
       skipped = extracted.skipped;
-      if (!extracted.points.length) return this.renderError(`No rows with numeric "${xCol}" and "${yCol}" values`);
+      if (!extracted.series.some(s => s.points.length)) return this.renderError(`No rows with numeric "${xCol}" and "${yCol}" values`);
 
       spec = {
-        points: extracted.points,
+        series: extracted.series,
         xIsDate: isDateX,
         xLabel: xCol,
         yLabel: yCol,
@@ -156,7 +162,7 @@ class ChartBlock extends MarkdownRenderChild {
       // Formula-only plot: no data, just the curve over an explicit domain.
       if (!this.opts.formula.trim()) return this.renderError(`Give a "file:" line, a "formula:" line, or both`);
       spec = {
-        points: [],
+        series: [],
         xIsDate: false,
         xLabel: "x",
         yLabel: "y",
