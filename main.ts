@@ -950,12 +950,18 @@ const FILE_TEMPLATES: FileTemplate[] = [
     id: "tasks",
     command: "Create tasks file",
     defaultName: "Tasks",
-    headers: ["Title", "Priority", "Notes", "Due", "Status"],
+    // Type + Project are the two columns the tasks view is actually designed
+    // around (per-type sections, grouped by project) — without Project the
+    // group falls back to whatever pickFallbackGroupCol guesses (Priority),
+    // which read as nonsense headings. Status stays a *word* column
+    // (done/…), NOT a Checkbox: the view's done-toggle writes DONE_WORDS
+    // vocabulary, and typing it Checkbox made the Add-form toggle write
+    // "1"/"0" that the view then couldn't agree with.
+    headers: ["Title", "Type", "Project", "Priority", "Due", "Status", "Notes"],
     mode: "tasks",
     configOverrides: {
-      categoricalColumns: ["Priority"],
+      categoricalColumns: ["Type", "Priority"],
       dateColumns: ["Due"],
-      habitColumns: ["Status"],
       statusColumn: "Status",
       notesColumn: "Notes"
     }
@@ -964,7 +970,11 @@ const FILE_TEMPLATES: FileTemplate[] = [
     id: "travel",
     command: "Create travel file",
     defaultName: "Travel",
-    headers: ["Country", "date_entered", "date_left", "source", "Notes"],
+    // Exactly travel.py's flat-CSV columns, lowercase — analyzeTravel reads
+    // literal keys (r.country, r.notes, …), so the old capitalized
+    // Country/Notes headers passed detection (isTravelFile lowercases) but
+    // produced a travel view where every row was silently dropped.
+    headers: ["date_entered", "date_left", "country", "city", "visa_status", "notes", "source", "resolved"],
     mode: "travel",
   },
   {
@@ -973,6 +983,31 @@ const FILE_TEMPLATES: FileTemplate[] = [
     defaultName: "Habits",
     headers: ["Date", "Exercise", "Meditate", "Read", "Notes"],
     mode: "dashboard",
+    configOverrides: {
+      // Pinned — auto-detection needs at least one row of values, so a fresh
+      // file otherwise renders a dashboard with zero habit toggles.
+      habitColumns: ["Exercise", "Meditate", "Read"],
+      notesColumn: "Notes",
+      // "Read" is a status-column alias; explicitly no status column here so
+      // Stats/Library don't misread a habit as the file's status.
+      statusColumn: "",
+    }
+  },
+  {
+    id: "chart",
+    command: "Create chart file",
+    defaultName: "Measurements",
+    // A dated measurement log — the most common personal chart shape
+    // (weight, km, hours…). Opens as a table until two rows exist
+    // (hasChartColumns needs data to plot), then lands in Chart with a
+    // date X-axis, Value on Y, and the fit line on.
+    headers: ["Date", "Value", "Notes"],
+    mode: "chart",
+    configOverrides: {
+      chartYCol: "Value",
+      chartFit: "linear",
+      notesColumn: "Notes",
+    }
   },
 ];
 

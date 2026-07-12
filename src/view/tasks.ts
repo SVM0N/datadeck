@@ -49,7 +49,10 @@ const TASK_WORDS = ["task", "todo", "to-do", "action", ""];
 const STRUCTURED_WORDS = ["task", "todo", "to-do", "action", "note", "idea", "reference", "ref"];
 
 // Status words that mean "this is finished" → struck through, sorted last.
-const DONE_WORDS = ["done", "complete", "completed", "finished", "closed", "resolved", "yes", "x", "✓", "true"];
+// "1" included for parity with isTruthyVal (1/true/yes) — a Status column
+// typed Checkbox writes "1"/"0", and files scaffolded by the old tasks
+// template did exactly that.
+const DONE_WORDS = ["done", "complete", "completed", "finished", "closed", "resolved", "yes", "x", "✓", "true", "1"];
 
 const PRIORITY_ORDER: Record<string, number> = { high: 0, med: 1, medium: 1, normal: 1, low: 2 };
 
