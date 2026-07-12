@@ -70,8 +70,10 @@ export interface FileConfig {
                               // Unset = single series.
   chartSizeCol?: string;      // Chart view "Size by" numeric column → point
                               // radius (bubble). Unset = uniform dots.
-  chartAgg?: "count" | "sum" | "avg"; // Bar-mode aggregate when X is
-                              // categorical. Unset = count.
+  chartAgg?: "count" | "sum" | "avg"; // Aggregate for bar mode (X categorical,
+                              // default count) and date bucketing (default sum).
+  chartBucket?: "week" | "month"; // Chart view date-X bucketing. Unset = raw days.
+  chartSmooth?: boolean;      // Chart view 7-day rolling-mean toggle (date X).
   chartFit?: "none" | "linear"; // Chart view best-fit line toggle.
   chartFormula?: string;      // Chart view y = f(x) overlay (src/formula.ts).
 }

@@ -81,6 +81,52 @@ export interface ChartPoint {
   size?: number;
 }
 
+/**
+ * Centered rolling mean over a time window: each output point is the mean of
+ * every input y whose x lies within ±window/2. Right for irregularly sampled
+ * personal data (3 runs a week) where a fixed "last N points" window would
+ * stretch over wildly different time spans.
+ */
+export function rollingMean(points: ChartPoint[], windowMs: number): ChartPoint[] {
+  const sorted = [...points].sort((a, b) => a.x - b.x);
+  const half = windowMs / 2;
+  let lo = 0;
+  return sorted.map(p => {
+    while (lo < sorted.length && sorted[lo].x < p.x - half) lo++;
+    let sum = 0, n = 0;
+    for (let i = lo; i < sorted.length && sorted[i].x <= p.x + half; i++) {
+      sum += sorted[i].y; n++;
+    }
+    return { x: p.x, y: n ? sum / n : p.y };
+  });
+}
+
+export type BucketUnit = "week" | "month";
+
+/**
+ * Aggregate a time series into calendar buckets: one point per local week
+ * (Monday-keyed) or month, y = sum/avg/count of the bucket's values.
+ */
+export function bucketPoints(points: ChartPoint[], unit: BucketUnit, agg: BarAgg): ChartPoint[] {
+  const keyOf = (ms: number): number => {
+    const d = new Date(ms);
+    if (unit === "month") return new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+    const sinceMonday = (d.getDay() + 6) % 7;
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() - sinceMonday).getTime();
+  };
+  const cells = new Map<number, { sum: number; n: number }>();
+  points.forEach(p => {
+    const k = keyOf(p.x);
+    const c = cells.get(k) ?? { sum: 0, n: 0 };
+    c.sum += p.y;
+    c.n += 1;
+    cells.set(k, c);
+  });
+  return [...cells.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([x, c]) => ({ x, y: agg === "count" ? c.n : agg === "sum" ? c.sum : c.sum / c.n }));
+}
+
 /** One plotted series — a hue-split bucket, or the whole file when no hue. */
 export interface ChartSeries { label: string; points: ChartPoint[]; }
 
@@ -96,6 +142,11 @@ export interface ChartSpec {
   formula: string;         // raw y=f(x) text, "" = none
   /** Column name behind ChartPoint.size, for the tooltip. "" = no size-by. */
   sizeLabel?: string;
+  /**
+   * Rolling-mean window in days (date X only). >0 renders each series as
+   * faint raw dots + a smoothed line carrying the legend entry.
+   */
+  smoothDays?: number;
   // Domain for a pure-formula plot with no data points.
   xMin?: number;
   xMax?: number;
@@ -153,9 +204,9 @@ export interface BuiltChart {
   formulaError: string | null;
 }
 
-// Dataset with our own bookkeeping flag: fit lines are excluded from the
-// legend (they'd double every hue entry) but still drawn.
-type ChartDataset = ChartConfiguration<"scatter" | "line">["data"]["datasets"][number] & { csvIsFit?: boolean };
+// Dataset with our own bookkeeping flags: fit lines and smoothing's raw dots
+// are excluded from the legend (they'd double every hue entry) but still drawn.
+type ChartDataset = ChartConfiguration<"scatter" | "line">["data"]["datasets"][number] & { csvIsFit?: boolean; csvSkipLegend?: boolean };
 
 /**
  * Build a Chart.js scatter config from a spec: one dataset per series (hue
@@ -190,17 +241,43 @@ export function buildChartConfig(spec: ChartSpec, colors: ChartColors): BuiltCha
     if (!pts.length) return;
     const color = multi ? colors.series[i % colors.series.length] : colors.accent;
     const baseRadius = spec.connect ? 3 : 4;
-    datasets.push({
-      type: spec.connect ? "line" : "scatter",
-      label: s.label || spec.yLabel,
-      data: pts,
-      backgroundColor: color,
-      borderColor: color,
-      borderWidth: 1.5,
-      pointRadius: sized.length ? pts.map(p => radiusOf(p, baseRadius)) : baseRadius,
-      pointHoverRadius: sized.length ? pts.map(p => radiusOf(p, baseRadius) + 2) : 6,
-      tension: 0.3,
-    });
+    if ((spec.smoothDays ?? 0) > 0) {
+      // Smoothing: quiet raw dots + a rolling-mean line that carries the
+      // legend entry. The dots keep tooltips (hover any real data point).
+      datasets.push({
+        type: "scatter",
+        label: s.label || spec.yLabel,
+        csvSkipLegend: true,
+        data: pts,
+        backgroundColor: color,
+        borderColor: color,
+        pointRadius: 2.5,
+        pointHoverRadius: 5,
+      });
+      datasets.push({
+        type: "line",
+        label: s.label || spec.yLabel,
+        data: rollingMean(pts, (spec.smoothDays as number) * 86_400_000),
+        borderColor: color,
+        backgroundColor: color,
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHitRadius: 0,
+        tension: 0.3,
+      });
+    } else {
+      datasets.push({
+        type: spec.connect ? "line" : "scatter",
+        label: s.label || spec.yLabel,
+        data: pts,
+        backgroundColor: color,
+        borderColor: color,
+        borderWidth: 1.5,
+        pointRadius: sized.length ? pts.map(p => radiusOf(p, baseRadius)) : baseRadius,
+        pointHoverRadius: sized.length ? pts.map(p => radiusOf(p, baseRadius) + 2) : 6,
+        tension: 0.3,
+      });
+    }
 
     if (spec.fit === "linear") {
       const fit = linearFit(pts);
@@ -288,14 +365,16 @@ export function buildChartConfig(spec: ChartSpec, colors: ChartColors): BuiltCha
       },
       plugins: {
         legend: {
-          // Worth showing for hue splits and formula overlays; fit lines are
-          // filtered out (they'd double every hue entry with "<x> fit").
-          display: datasets.filter(d => !d.csvIsFit).length > 1,
+          // Worth showing for hue splits and formula overlays; fit lines and
+          // smoothing's raw dots are filtered (they'd double every entry).
+          display: datasets.filter(d => !d.csvIsFit && !d.csvSkipLegend).length > 1,
           labels: {
             color: colors.muted,
             boxWidth: 12,
-            filter: (item: { datasetIndex?: number }) =>
-              !(datasets[item.datasetIndex ?? -1]?.csvIsFit),
+            filter: (item: { datasetIndex?: number }) => {
+              const ds = datasets[item.datasetIndex ?? -1];
+              return !(ds?.csvIsFit || ds?.csvSkipLegend);
+            },
           },
         },
         tooltip: {
@@ -577,10 +656,27 @@ export async function renderChart(view: CardView, container: HTMLElement): Promi
       v => save({ chartHueCol: v === NO_HUE ? undefined : v }));
   }
 
-  // Size-by (bubble): a numeric column mapped to point radius. Scatter only.
+  // Date-X transforms: bucket by week/month (with its own aggregate), or a
+  // 7-day rolling-mean smooth. Mutually exclusive — a bucketed series is
+  // already smooth by construction.
+  const isDateX = !barMode && xCol !== ROW_INDEX && (xCol === dateCol || view.isDateCol(xCol));
+  const bucket: BucketUnit | null = isDateX && (cfg.chartBucket === "week" || cfg.chartBucket === "month") ? cfg.chartBucket : null;
+  const bucketAgg: BarAgg = cfg.chartAgg === "avg" || cfg.chartAgg === "count" ? cfg.chartAgg : "sum";
+  const smooth = isDateX && !bucket && !!cfg.chartSmooth;
+  if (isDateX) {
+    labeledSelect("By", ["day", "week", "month"], bucket ?? "day",
+      v => save({ chartBucket: v === "day" ? undefined : (v as BucketUnit) }));
+    if (bucket) {
+      labeledSelect("Agg", ["sum", "avg", "count"], bucketAgg,
+        v => save({ chartAgg: v as BarAgg }));
+    }
+  }
+
+  // Size-by (bubble): a numeric column mapped to point radius. Scatter only —
+  // aggregation (bar mode / bucketing) has no per-row point to size.
   const sizeCandidates = numCols.filter(c => c !== yCol && c !== xCol);
-  const sizeCol = !barMode && cfg.chartSizeCol && sizeCandidates.includes(cfg.chartSizeCol) ? cfg.chartSizeCol : null;
-  if (!barMode && sizeCandidates.length) {
+  const sizeCol = !barMode && !bucket && cfg.chartSizeCol && sizeCandidates.includes(cfg.chartSizeCol) ? cfg.chartSizeCol : null;
+  if (!barMode && !bucket && sizeCandidates.length) {
     labeledSelect("Size", [NO_HUE, ...sizeCandidates], sizeCol ?? NO_HUE,
       v => save({ chartSizeCol: v === NO_HUE ? undefined : v }));
   }
@@ -615,6 +711,15 @@ export async function renderChart(view: CardView, container: HTMLElement): Promi
   });
   fitBtn.addEventListener("click", () => save({ chartFit: fit === "linear" ? "none" : "linear" }));
 
+  if (isDateX && !bucket) {
+    const smoothBtn = controls.createEl("button", {
+      cls: `csv-cfg-btn csv-chart-smooth-btn ${smooth ? "active" : ""}`,
+      text: "Smooth",
+      title: "Toggle a 7-day rolling average (raw values stay as dots)",
+    });
+    smoothBtn.addEventListener("click", () => save({ chartSmooth: smooth ? undefined : true }));
+  }
+
   // Formula applies on Enter/blur, not per keystroke — the whole view
   // re-renders on apply, which would eat the input focus mid-typing.
   const formulaWrap = controls.createDiv({ cls: "csv-chart-control csv-chart-formula-wrap" });
@@ -634,8 +739,11 @@ export async function renderChart(view: CardView, container: HTMLElement): Promi
   formulaInput.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); formulaInput.blur(); } });
 
   // ── Chart ─────────────────────────────────────────────────────────────────
-  const isDateX = xCol !== ROW_INDEX && (xCol === dateCol || view.isDateCol(xCol));
-  const { series, skipped } = extractSeries(rows, xCol, yCol, hueCol, sizeCol, isDateX, s => view.parseDate(s), r => view.getTitle(r));
+  const extracted = extractSeries(rows, xCol, yCol, hueCol, sizeCol, isDateX, s => view.parseDate(s), r => view.getTitle(r));
+  const skipped = extracted.skipped;
+  const series = bucket
+    ? extracted.series.map(s => ({ label: s.label, points: bucketPoints(s.points, bucket, bucketAgg) }))
+    : extracted.series;
 
   const canvasWrap = wrap.createDiv({ cls: "csv-chart-wrap" });
   const canvas = canvasWrap.createEl("canvas", { cls: "csv-chart-canvas" });
@@ -652,11 +760,12 @@ export async function renderChart(view: CardView, container: HTMLElement): Promi
     series,
     xIsDate: isDateX,
     xLabel: xCol === ROW_INDEX ? "row" : xCol,
-    yLabel: yCol,
+    yLabel: bucket ? (bucketAgg === "count" ? `count / ${bucket}` : `${bucketAgg}(${yCol}) / ${bucket}`) : yCol,
     connect: isDateX,   // time series read better connected; numeric pairs as dots
     fit,
     formula,
     sizeLabel: sizeCol ?? "",
+    smoothDays: smooth ? 7 : 0,
   };
   const built = buildChartConfig(spec, resolveChartColors(container));
 

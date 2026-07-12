@@ -11,9 +11,12 @@
 //   hue: person             (optional — ggplot-style color-by: one colored
 //                            series per distinct value; alias: color:)
 //   size: effort            (optional — numeric column mapped to point radius)
-//   agg: sum                (bar mode only: count | sum | avg, default count.
-//                            Bar mode kicks in when x: is a categorical
+//   agg: sum                (aggregate for bar mode and bucket: — count | sum
+//                            | avg. Bar mode kicks in when x: is a categorical
 //                            column — one bar per value, hue → grouped bars)
+//   bucket: week            (date X only: aggregate into week | month buckets)
+//   smooth: true            (date X only: rolling-mean line over faint raw
+//                            dots; true = 7-day window, or a number of days)
 //   fit: linear             (optional per-series best-fit with equation + R²)
 //   formula: 0.5x + 2       (optional y = f(x) overlay; the whole plot when
 //                            there's no file. See src/formula.ts for syntax.)
@@ -35,7 +38,7 @@ import { isDateCol } from "./field-types";
 import { loadChart } from "./chartjs-loader";
 import {
   buildChartConfig, buildBarConfig, aggregateBars, extractSeries, numericColumns,
-  resolveChartColors, ChartSpec, BarAgg,
+  resolveChartColors, bucketPoints, ChartSpec, BarAgg, BucketUnit,
 } from "./view/chart";
 
 interface ChartBlockOptions {
@@ -45,6 +48,8 @@ interface ChartBlockOptions {
   hue: string;
   size: string;
   agg: BarAgg | "";
+  bucket: BucketUnit | "";
+  smooth: number;         // rolling-mean window in days, 0 = off
   fit: "none" | "linear";
   formula: string;
   xmin: number | null;
@@ -68,6 +73,9 @@ function parseBlockSource(source: string): ChartBlockOptions {
     hue: opt("hue") || opt("color"),
     size: opt("size"),
     agg: (["count", "sum", "avg"].includes(opt("agg").toLowerCase()) ? opt("agg").toLowerCase() : "") as BarAgg | "",
+    bucket: (["week", "month"].includes(opt("bucket").toLowerCase()) ? opt("bucket").toLowerCase() : "") as BucketUnit | "",
+    // smooth: true → 7-day default; smooth: 14 → explicit window in days.
+    smooth: opt("smooth").toLowerCase() === "true" ? 7 : Math.max(0, parseInt(opt("smooth"), 10) || 0),
     fit: opt("fit").toLowerCase() === "linear" ? "linear" : "none",
     formula: opt("formula"),
     xmin: num("xmin"),
@@ -170,15 +178,24 @@ class ChartBlock extends MarkdownRenderChild {
         skipped = extracted.skipped;
         if (!extracted.series.some(s => s.points.length)) return this.renderError(`No rows with numeric "${xCol}" and "${yCol}" values`);
 
+        // Date-X transforms, same semantics as the view: bucket wins over
+        // smooth (a bucketed series is already smooth by construction).
+        const bucket = isDateX ? this.opts.bucket : "";
+        const bucketAgg: BarAgg = this.opts.agg || "sum";
+        const series = bucket
+          ? extracted.series.map(s => ({ label: s.label, points: bucketPoints(s.points, bucket, bucketAgg) }))
+          : extracted.series;
+
         const spec: ChartSpec = {
-          series: extracted.series,
+          series,
           xIsDate: isDateX,
           xLabel: xCol,
-          yLabel: yCol,
+          yLabel: bucket ? (bucketAgg === "count" ? `count / ${bucket}` : `${bucketAgg}(${yCol}) / ${bucket}`) : yCol,
           connect: isDateX,
           fit: this.opts.fit,
           formula: this.opts.formula,
-          sizeLabel: sizeCol ?? "",
+          sizeLabel: bucket ? "" : (sizeCol ?? ""),
+          smoothDays: isDateX && !bucket ? this.opts.smooth : 0,
         };
         built = buildChartConfig(spec, resolveChartColors(root));
       }

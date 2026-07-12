@@ -1528,7 +1528,7 @@ await test("formula: bad input throws readable errors", async () => {
 });
 
 // ── Chart view ───────────────────────────────────────────────────────────────
-const { renderChart, hasChartColumns, parseNumeric, numericColumns, linearFit, buildChartConfig, extractSeries, hueColumns, aggregateBars, buildBarConfig } =
+const { renderChart, hasChartColumns, parseNumeric, numericColumns, linearFit, buildChartConfig, extractSeries, hueColumns, aggregateBars, buildBarConfig, rollingMean, bucketPoints } =
   await load("./src/view/chart.ts");
 
 await test("chart: parseNumeric handles separators and rejects text", async () => {
@@ -1658,6 +1658,69 @@ await test("chart: aggregateBars counts/sums/averages per category, hue → grou
   assert(cfg.type === "bar" && cfg.data.labels.join(",") === "Crime,Drama,—", "bar config carries categories");
   assert(cfg.data.datasets.length === 2 && cfg.data.datasets[0].backgroundColor !== cfg.data.datasets[1].backgroundColor,
     "grouped bars with distinct colors");
+});
+
+await test("chart: rollingMean averages a centered time window; bucketPoints aggregates weeks", async () => {
+  const day = 86_400_000;
+  const pts = [0, 1, 2, 3, 4].map(i => ({ x: i * day, y: i * 10 })); // 0,10,20,30,40
+  const smoothed = rollingMean(pts, 2 * day); // ±1 day window
+  assert(smoothed[0].y === 5, `edge point averages itself + next (got ${smoothed[0].y})`);
+  assert(smoothed[2].y === 20, `interior point averages neighbours (got ${smoothed[2].y})`);
+
+  // Mon 2026-01-05 .. Wed 2026-01-14 spans two ISO weeks.
+  const t = (d) => new Date(2026, 0, d).getTime();
+  const weekPts = [
+    { x: t(5), y: 1 }, { x: t(7), y: 2 },   // week of Jan 5
+    { x: t(12), y: 4 }, { x: t(14), y: 6 }, // week of Jan 12
+  ];
+  const sums = bucketPoints(weekPts, "week", "sum");
+  assert(sums.length === 2 && sums[0].y === 3 && sums[1].y === 10, `weekly sums (got ${sums.map(p => p.y)})`);
+  assert(sums[0].x === t(5) && sums[1].x === t(12), "buckets keyed to local Mondays");
+  const avgs = bucketPoints(weekPts, "week", "avg");
+  assert(avgs[0].y === 1.5 && avgs[1].y === 5, "weekly averages");
+  const counts = bucketPoints(weekPts, "month", "count");
+  assert(counts.length === 1 && counts[0].y === 4, "monthly count collapses to one bucket");
+});
+
+await test("chart: smoothing renders raw dots off the legend + a mean line per series", async () => {
+  const day = 86_400_000;
+  const built = buildChartConfig({
+    series: [{ label: "A", points: [{ x: 0, y: 0 }, { x: day, y: 10 }] },
+             { label: "B", points: [{ x: 0, y: 5 }, { x: day, y: 5 }] }],
+    xIsDate: true, xLabel: "date", yLabel: "km", connect: true,
+    fit: "none", formula: "", smoothDays: 7,
+  }, chartColors);
+  const ds = built.config.data.datasets;
+  assert(ds.length === 4, `dots + line per series (got ${ds.length})`);
+  const dots = ds.filter(d => d.csvSkipLegend);
+  assert(dots.length === 2 && dots.every(d => d.type === "scatter"), "raw dots flagged off the legend");
+  const lines = ds.filter(d => !d.csvSkipLegend);
+  assert(lines.every(d => d.type === "line" && d.pointRadius === 0), "smoothed lines carry the legend");
+  assert(built.config.options.plugins.legend.labels.filter({ datasetIndex: ds.indexOf(dots[0]) }) === false,
+    "legend filter drops the raw dots");
+});
+
+await test("chart: date X offers By/Smooth controls; bucketing hides Size", async () => {
+  const rows = [
+    { date: "2026-01-05", km: "3", effort: "2" },
+    { date: "2026-01-07", km: "4", effort: "5" },
+    { date: "2026-01-12", km: "5", effort: "9" },
+  ];
+  const view = chartView(rows, { chartXCol: "date", chartYCol: "km" });
+  const c = document.body.createDiv();
+  await renderChart(view, c);
+  let labels = Array.from(c.querySelectorAll(".csv-chart-control-label")).map(l => l.textContent);
+  assert(labels.includes("By"), `By select present for date X (got ${labels})`);
+  assert(c.querySelector(".csv-chart-smooth-btn"), "Smooth toggle present");
+  assert(labels.includes("Size"), "Size present un-bucketed");
+
+  const bucketed = chartView(rows, { chartXCol: "date", chartYCol: "km", chartBucket: "week" });
+  const c2 = document.body.createDiv();
+  await renderChart(bucketed, c2);
+  labels = Array.from(c2.querySelectorAll(".csv-chart-control-label")).map(l => l.textContent);
+  assert(labels.includes("Agg"), "bucket Agg select present");
+  assert(!labels.includes("Size"), "Size hidden when bucketing");
+  assert(!c2.querySelector(".csv-chart-smooth-btn"), "Smooth hidden when bucketing");
 });
 
 await test("chart: picking a categorical X renders bar mode with an Agg control", async () => {
