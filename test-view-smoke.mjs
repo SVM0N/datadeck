@@ -1734,14 +1734,14 @@ await test("tasks-block: buildAggregate maps mixed schemas onto canonical column
     {
       basename: "Life",
       headers: ["name", "kind", "project", "deadline", "state"], // aliased everything
-      rows: [{ name: "Renew passport", kind: "task", project: "Admin", deadline: "2026-09-01", state: "done" }],
+      rows: [{ name: "Renew membership", kind: "task", project: "Admin", deadline: "2026-09-01", state: "done" }],
     },
   ]);
   assert(agg.headers.join(",") === "Title,Type,Project,Priority,Due,Status,Notes", "canonical header set");
   assert(agg.rows.length === 2 && agg.refs.length === 2, "one canonical row per source row");
   assert(agg.rows[0].Project === "Website", "file basename fills a missing Project column");
   const r = agg.rows[1];
-  assert(r.Title === "Renew passport" && r.Type === "task" && r.Project === "Admin"
+  assert(r.Title === "Renew membership" && r.Type === "task" && r.Project === "Admin"
     && r.Due === "2026-09-01" && r.Status === "done", `aliases resolved (got ${JSON.stringify(r)})`);
 
   // Write-through: edit the canonical row, push back to the source row.
@@ -1760,7 +1760,7 @@ await test("tasks-block: aggregate rows render through renderTasks with per-file
   const { buildAggregate } = await load("./src/tasks-block.ts");
   const agg = buildAggregate([
     { basename: "Website", headers: ["Title", "Due", "Status"], rows: [{ Title: "Fix nav", Due: "", Status: "" }] },
-    { basename: "Life", headers: ["Title", "Due", "Status"], rows: [{ Title: "Passport", Due: "", Status: "" }] },
+    { basename: "Life", headers: ["Title", "Due", "Status"], rows: [{ Title: "Membership", Due: "", Status: "" }] },
   ]);
   const view = tasksView(agg.rows, {
     headers: agg.headers,
