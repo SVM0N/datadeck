@@ -1723,6 +1723,59 @@ await test("chart: date X offers By/Smooth controls; bucketing hides Size", asyn
   assert(!c2.querySelector(".csv-chart-smooth-btn"), "Smooth hidden when bucketing");
 });
 
+await test("tasks-block: buildAggregate maps mixed schemas onto canonical columns", async () => {
+  const { buildAggregate, writeBack } = await load("./src/tasks-block.ts");
+  const agg = buildAggregate([
+    {
+      basename: "Website",
+      headers: ["Title", "Priority", "Due", "Status", "Notes"], // no Project/Type
+      rows: [{ Title: "Fix nav", Priority: "high", Due: "2026-08-01", Status: "", Notes: "top bar" }],
+    },
+    {
+      basename: "Life",
+      headers: ["name", "kind", "project", "deadline", "state"], // aliased everything
+      rows: [{ name: "Renew passport", kind: "task", project: "Admin", deadline: "2026-09-01", state: "done" }],
+    },
+  ]);
+  assert(agg.headers.join(",") === "Title,Type,Project,Priority,Due,Status,Notes", "canonical header set");
+  assert(agg.rows.length === 2 && agg.refs.length === 2, "one canonical row per source row");
+  assert(agg.rows[0].Project === "Website", "file basename fills a missing Project column");
+  const r = agg.rows[1];
+  assert(r.Title === "Renew passport" && r.Type === "task" && r.Project === "Admin"
+    && r.Due === "2026-09-01" && r.Status === "done", `aliases resolved (got ${JSON.stringify(r)})`);
+
+  // Write-through: edit the canonical row, push back to the source row.
+  r.Status = "";
+  r.Due = "2026-10-01";
+  writeBack(r, agg.refs[1]);
+  const src = agg.refs[1].srcRow;
+  assert(src.state === "" && src.deadline === "2026-10-01", "edits land on the aliased source columns");
+  // The basename-Project is synthetic — nothing to write back to, and the
+  // unmapped column must not be invented on the source row.
+  writeBack(agg.rows[0], agg.refs[0]);
+  assert(!("Project" in agg.refs[0].srcRow), "synthetic Project never written to the source");
+});
+
+await test("tasks-block: aggregate rows render through renderTasks with per-file projects", async () => {
+  const { buildAggregate } = await load("./src/tasks-block.ts");
+  const agg = buildAggregate([
+    { basename: "Website", headers: ["Title", "Due", "Status"], rows: [{ Title: "Fix nav", Due: "", Status: "" }] },
+    { basename: "Life", headers: ["Title", "Due", "Status"], rows: [{ Title: "Passport", Due: "", Status: "" }] },
+  ]);
+  const view = tasksView(agg.rows, {
+    headers: agg.headers,
+    resolveCol: (cands) => cands.map(c => agg.headers.find(h => h.toLowerCase() === c.toLowerCase())).find(Boolean) ?? null,
+    titleKey: () => "Title",
+    getStatusCol: () => "Status",
+    getNotesCol: () => "Notes",
+  });
+  const c = document.body.createDiv();
+  renderTasks(view, c);
+  const groups = Array.from(c.querySelectorAll(".csv-tasks-group-header")).map(g => g.textContent.trim());
+  assert(groups.some(g => g.includes("Website")) && groups.some(g => g.includes("Life")),
+    `each file becomes a project group (got ${groups})`);
+});
+
 await test("sync: conflict stash writes the diverged disk version to Archive", async () => {
   const { stashSyncConflict } = await load("./src/utils.ts");
   const writes = {};

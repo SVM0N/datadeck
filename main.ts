@@ -37,6 +37,7 @@ import { renderFocus } from "./src/view/focus";
 import { renderTasks, hasTaskColumns, taskProjectCol, taskTypeCol, taskPriorityCol } from "./src/view/tasks";
 import { registerCsvViewBlock } from "./src/inline-view";
 import { registerCsvChartBlock } from "./src/chart-block";
+import { registerCsvTasksBlock } from "./src/tasks-block";
 
 // World-map SVG asset, loaded lazily from the plugin dir and cached for the
 // session (undefined = not yet read, null = read failed/missing).
@@ -1092,6 +1093,15 @@ export default class CardViewPlugin extends Plugin {
     // src/chart-block.ts.
     registerCsvChartBlock(
       this.app,
+      (lang, handler) => this.registerMarkdownCodeBlockProcessor(lang, handler),
+    );
+
+    // csv-tasks: a cross-file tasks board — merge task rows from a folder
+    // and/or file list into one editable board. The phase-2 replacement for
+    // the old vault-wide DataviewJS dashboard. See src/tasks-block.ts.
+    registerCsvTasksBlock(
+      this.app,
+      this.settings,
       (lang, handler) => this.registerMarkdownCodeBlockProcessor(lang, handler),
     );
 

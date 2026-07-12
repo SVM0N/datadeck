@@ -7,6 +7,7 @@
 class Base { constructor() {} }
 export class App extends Base {}
 export class Component extends Base { load() {} unload() {} registerEvent() {} register() {} }
+export class MarkdownRenderChild extends Component { constructor(el) { super(); this.containerEl = el; } }
 export class FileView extends Base {}
 export class Modal extends Base {
   constructor(app) {
