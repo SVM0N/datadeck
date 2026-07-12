@@ -32,7 +32,7 @@ import {
 import Papa from "papaparse";
 import type { CardView } from "../main";
 import { CSVRow, ViewMode, FileConfig, CardViewSettings } from "./types";
-import { parseCSV, resolvePath, sanitizeFilename, showSelectPicker, IMAGE_COL_ALIASES, TITLE_COL_ALIASES, CATEGORY_COL_ALIASES, STATUS_COL_ALIASES, NOTES_COL_ALIASES, looksBoolean, looksCategorical, isMultiValueColName } from "./utils";
+import { parseCSV, resolvePath, sanitizeFilename, showSelectPicker, stashSyncConflict, IMAGE_COL_ALIASES, TITLE_COL_ALIASES, CATEGORY_COL_ALIASES, STATUS_COL_ALIASES, NOTES_COL_ALIASES, looksBoolean, looksCategorical, isMultiValueColName } from "./utils";
 import { isDateCol } from "./field-types";
 import { AddEntryModal, NoteExpanderModal } from "./modals";
 import { renderTable } from "./view/table";
@@ -163,6 +163,9 @@ export class InlineCardHost extends MarkdownRenderChild {
       if (!this.file || f.path !== this.file.path) return;
       const text = await this.app.vault.read(this.file);
       if (text === this.lastWritten) return; // our own save — already rendered
+      // Accept the external version as the new sync anchor — without this,
+      // every save after an external change false-flagged a conflict.
+      this.lastWritten = text;
       const parsed = parseCSV(text);
       this.headers = parsed.headers;
       this.rows = parsed.rows;
@@ -187,9 +190,13 @@ export class InlineCardHost extends MarkdownRenderChild {
     }
     this.file = file;
     try {
-      const parsed = parseCSV(await this.app.vault.read(file));
+      const text = await this.app.vault.read(file);
+      const parsed = parseCSV(text);
       this.headers = parsed.headers;
       this.rows = parsed.rows;
+      // Seed the sync anchor with what we just read — doSave compares the
+      // disk against this to detect another writer's changes.
+      this.lastWritten = text;
     } catch (e) {
       this.renderError(`Error reading file: ${e instanceof Error ? e.message : String(e)}`);
       return false;
@@ -213,6 +220,14 @@ export class InlineCardHost extends MarkdownRenderChild {
     if (!this.file) return;
     try {
       const csv = Papa.unparse(this.rows, { columns: this.headers });
+      // Same sync-safety stash as CardView.doSave: don't let a whole-file
+      // overwrite silently eat another writer's changes.
+      try {
+        const onDisk = await this.app.vault.read(this.file);
+        if (this.lastWritten !== null && onDisk !== this.lastWritten && onDisk !== csv) {
+          await stashSyncConflict(this.app, this.file, onDisk);
+        }
+      } catch { /* unreadable right now — proceed with the write */ }
       this.lastWritten = csv; // suppress the echo `modify` event from re-rendering
       await this.app.vault.modify(this.file, csv);
     } catch (e) {

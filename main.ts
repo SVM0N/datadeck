@@ -19,7 +19,7 @@ import type { Chart as ChartType } from "chart.js";
 
 // Import from src modules
 import { CSVRow, ViewMode, FileConfig, CardViewSettings, DEFAULT_SETTINGS, CARD_VIEW_TYPE } from "./src/types";
-import { sanitizeFilename, tagify, titleCase, formatRatingForDisplay, showSelectPicker, parseCSV, migrateFileConfigKey, sortRowsByColumn, isMultiValueColName, IMAGE_COL_ALIASES, TITLE_COL_ALIASES, CATEGORY_COL_ALIASES, STATUS_COL_ALIASES, NOTES_COL_ALIASES, looksBoolean, looksCategorical, isTruthyVal } from "./src/utils";
+import { sanitizeFilename, tagify, titleCase, formatRatingForDisplay, showSelectPicker, parseCSV, migrateFileConfigKey, sortRowsByColumn, isMultiValueColName, IMAGE_COL_ALIASES, TITLE_COL_ALIASES, CATEGORY_COL_ALIASES, STATUS_COL_ALIASES, NOTES_COL_ALIASES, looksBoolean, looksCategorical, isTruthyVal, stashSyncConflict } from "./src/utils";
 import { isDateCol } from "./src/field-types";
 import { AddEntryModal, NoteExpanderModal, FileConfigModal, SearchModal, PromptModal } from "./src/modals";
 import { renderTravel } from "./src/travel-view";
@@ -79,15 +79,49 @@ export class CardView extends FileView {
 
   // ── File I/O ───────────────────────────────────────────────────────────────
 
+  // The CSV text as we last read or wrote it. The anchor for sync safety:
+  // an on-disk value that diverges from this means another writer (device,
+  // tab, iCloud) touched the file since we last agreed with it.
+  private lastDiskContent: string | null = null;
+
+  onload(): void {
+    super.onload();
+    // Re-sync when the open file changes underneath us — the inline csv-view
+    // block always did this; the full view showed stale data until reopen.
+    this.registerEvent(this.app.vault.on("modify", (f) => {
+      if (!this.file || f.path !== this.file.path) return;
+      void this.syncFromDisk();
+    }));
+  }
+
+  /**
+   * Refresh from disk after an external change. Skips our own writes
+   * (content equality with lastDiskContent) and mid-edit states — when a
+   * debounced save is pending, doSave's conflict stash reconciles instead,
+   * so the user's in-flight edits aren't yanked out from under them.
+   */
+  private async syncFromDisk(): Promise<void> {
+    if (!this.file) return;
+    const text = await this.app.vault.read(this.file);
+    if (text === this.lastDiskContent) return;
+    if (this.saveTimer) return;
+    this.lastDiskContent = text;
+    const parsed = parseCSV(text);
+    this.headers = parsed.headers;
+    this.rows = parsed.rows;
+    this.renderViewPreservingScroll();
+  }
+
   async onLoadFile(file: TFile): Promise<void> {
     try {
       const text = await this.app.vault.read(file);
       const parsed = parseCSV(text);
       this.headers = parsed.headers;
       this.rows = parsed.rows;
+      this.lastDiskContent = text;
     } catch (e) {
       console.error("CardView load error", e);
-      this.headers = []; this.rows = [];
+      this.headers = []; this.rows = []; this.lastDiskContent = null;
       // Surface to the user — silent failure leaves an empty view with no clue why.
       new Notice(`Couldn't read ${file.name}: ${e instanceof Error ? e.message : String(e)}`, 8000);
     }
@@ -137,6 +171,17 @@ export class CardView extends FileView {
     if (!this.file) return;
     try {
       const csv = Papa.unparse(this.rows, { columns: this.headers });
+      // Sync safety: this is a whole-file overwrite from in-memory rows. If
+      // the file changed on disk since we last agreed with it, stash that
+      // version to Archive/ first so the other writer's edits survive —
+      // last-write-wins at the file level used to silently eat them.
+      try {
+        const onDisk = await this.app.vault.read(this.file);
+        if (this.lastDiskContent !== null && onDisk !== this.lastDiskContent && onDisk !== csv) {
+          await stashSyncConflict(this.app, this.file, onDisk);
+        }
+      } catch { /* unreadable right now — proceed with the write */ }
+      this.lastDiskContent = csv;
       await this.app.vault.modify(this.file, csv);
     } catch (e) {
       console.error("CardView save error", e);

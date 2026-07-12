@@ -1,5 +1,5 @@
 import Papa from "papaparse";
-import { App, TFile } from "obsidian";
+import { App, Notice, TFile } from "obsidian";
 import { CSVRow } from "./types";
 
 // Column-name aliases that mark a cell as holding an image, for card/kanban
@@ -526,6 +526,29 @@ export function showSelectPicker(
 // were orphaned in an earlier refactor — never wired into main.ts. The new
 // Papa wrapper at the top of this file replaces parseCSV; for serialization
 // `Papa.unparse(...)` is called directly from main.ts (see doSave + csv-add).
+
+/**
+ * Sync-conflict stash: called when a save is about to overwrite a CSV that
+ * changed on disk since we last read/wrote it (another device, another tab,
+ * iCloud sync). The divergent disk version is copied to Archive/ so neither
+ * side's edits are silently lost — the in-memory version (what the user is
+ * looking at) then wins the actual write. Returns the stash path.
+ */
+export async function stashSyncConflict(app: App, file: TFile, diskContent: string): Promise<string> {
+  const folder = file.parent?.path ?? "";
+  const archive = folder ? `${folder}/Archive` : "Archive";
+  if (!(await app.vault.adapter.exists(archive))) await app.vault.adapter.mkdir(archive);
+  const now = new Date();
+  const stamp = `${localISODate(now)} ${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
+  const path = `${archive}/${file.basename} sync-conflict ${stamp}.csv`;
+  await app.vault.adapter.write(path, diskContent);
+  new Notice(
+    `"${file.name}" changed on disk while you were editing (another device?). ` +
+    `That version was saved to ${path} — your edits won.`,
+    10000,
+  );
+  return path;
+}
 
 /**
  * Move a per-file config entry from `oldPath` to `newPath` in-place,

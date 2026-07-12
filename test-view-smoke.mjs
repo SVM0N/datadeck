@@ -1723,6 +1723,22 @@ await test("chart: date X offers By/Smooth controls; bucketing hides Size", asyn
   assert(!c2.querySelector(".csv-chart-smooth-btn"), "Smooth hidden when bucketing");
 });
 
+await test("sync: conflict stash writes the diverged disk version to Archive", async () => {
+  const { stashSyncConflict } = await load("./src/utils.ts");
+  const writes = {};
+  const mkdirs = [];
+  const app = { vault: { adapter: {
+    exists: async () => false,
+    mkdir: async (p) => { mkdirs.push(p); },
+    write: async (p, c) => { writes[p] = c; },
+  } } };
+  const file = { name: "tasks.csv", basename: "tasks", parent: { path: "Projects" } };
+  const path = await stashSyncConflict(app, file, "a,b\n1,2\n");
+  assert(mkdirs[0] === "Projects/Archive", "creates the Archive folder");
+  assert(path.startsWith("Projects/Archive/tasks sync-conflict "), `stash path (got ${path})`);
+  assert(writes[path] === "a,b\n1,2\n", "disk version preserved verbatim");
+});
+
 await test("chart: picking a categorical X renders bar mode with an Agg control", async () => {
   const rows = [
     { title: "A", genre: "Drama", rating: "4" },
