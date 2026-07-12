@@ -4169,7 +4169,8 @@ select.csv-add-row-control {
   max-width: 180px;
 }
 
-.csv-chart-fit-btn.active {
+.csv-chart-fit-btn.active,
+.csv-chart-smooth-btn.active {
   background: var(--csv-accent);
   color: var(--text-on-accent, #fff);
   border-color: var(--csv-accent);
@@ -4210,7 +4211,31 @@ select.csv-add-row-control {
 
 .csv-chart-formula-error { color: var(--text-error, #e05252); }
 
+/* Phones: the control stack was eating ~40% of the screen (each pill gets
+   Obsidian mobile's full input height and its own row). Compact everything —
+   two controls per row, short inputs, full-width formula — so the chart
+   itself gets the space. */
 @media (max-width: 600px) {
-  .csv-chart-wrap { height: 260px; }
-  .csv-chart-select { max-width: 130px; }
+  .csv-chart-wrap { height: 300px; }
+  .csv-chart-view { padding: 4px 0; }
+  .csv-chart-controls { gap: 6px 8px; margin-bottom: 8px; }
+  .csv-chart-control { flex: 1 1 44%; min-width: 0; }
+  .csv-chart-control-label { font-size: 11px; flex: 0 0 auto; }
+  .csv-chart-select {
+    flex: 1;
+    min-width: 0;
+    max-width: none;
+    font-size: 12px;
+    height: 32px;
+    min-height: 32px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+  }
+  .csv-chart-controls .csv-cfg-btn {
+    padding: 5px 10px;
+    font-size: 12px;
+    min-height: 32px;
+  }
+  .csv-chart-formula-wrap { flex: 1 1 100%; }
+  .csv-chart-formula-input { height: 32px; min-height: 32px; font-size: 12px; }
 }
