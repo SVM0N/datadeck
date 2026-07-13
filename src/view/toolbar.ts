@@ -1,5 +1,5 @@
 // Toolbar renderer: title, row count, view-mode buttons, search bar, sort
-// toggle, and the secondary actions (Columns / Mobile / Backup / Anki / + Add / ⋯).
+// toggle, and the secondary actions (Columns / Backup / Anki / + Add / ⋯).
 // Extracted from CardView; reached members are public. Type-only CardView
 // import → no runtime cycle. Covered by test-view-smoke.mjs.
 
@@ -7,7 +7,6 @@ import { Menu, Notice } from "obsidian";
 import type { CardView } from "../../main";
 import { ViewMode } from "../types";
 import { FileConfigModal, AutoDetectedRoles } from "../modals";
-import { generateMobileFiles } from "./mobile";
 import { syncToAnki, autoAnkiFrontCol } from "./anki";
 import { hasStatsColumns } from "./stats";
 import { hasChartColumns } from "./chart";
@@ -229,14 +228,11 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
       (header) => view.cleanupBooleanColumn(header),
     ).open();
   };
-  const openMobile = () => generateMobileFiles(view);
   const openBackup = () => view.backupToArchive();
   const openAnki = () => syncToAnki(view);
 
   ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-secondary", text: "⚙ Config", title: "Configure this file's columns and views" })
     .addEventListener("click", openColumns);
-  ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-secondary", text: "📱 Mobile", title: "Generate mobile dashboard with add form" })
-    .addEventListener("click", openMobile);
   ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-secondary", text: "💾 Backup", title: "Copy this file to Archive/ with today's date" })
     .addEventListener("click", openBackup);
   ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-secondary", text: "🎴 Anki", title: "Sync rows to Anki (needs Anki desktop + AnkiConnect)" })
@@ -252,7 +248,6 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
   overflowBtn.addEventListener("click", (e) => {
     const menu = new Menu();
     menu.addItem(i => i.setTitle("Config").setIcon("settings").onClick(openColumns));
-    menu.addItem(i => i.setTitle("Mobile dashboard").setIcon("smartphone").onClick(openMobile));
     menu.addItem(i => i.setTitle("Backup").setIcon("save").onClick(openBackup));
     menu.addItem(i => i.setTitle("Sync to Anki").setIcon("layers").onClick(openAnki));
     menu.addSeparator();

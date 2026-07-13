@@ -413,7 +413,7 @@ function toolbarView(overrides = {}) {
     isNotesCol: () => false, getDateCol: () => null, titleKey: () => "Title",
     fileCfg: {}, app: {}, headers: ["Title", "Category"],
     renderView: () => {}, renderViewPreservingScroll: () => {}, saveFileCfg: () => {},
-    autoDetectBooleanColumns: () => [], generateMobileFiles: () => {}, backupToArchive: () => {}, openAddModal: () => {},
+    autoDetectBooleanColumns: () => [], backupToArchive: () => {}, openAddModal: () => {},
     ...overrides,
   };
 }
@@ -1164,49 +1164,6 @@ await test("csv-random: missing file shows an error, no card", async () => {
   await renderRandomCard(app, "file: nope.csv", el, { sourcePath: "note.md" });
   assert(el.querySelector(".csv-add-error"), "error message shown");
   assert(!el.querySelector(".csv-random-card"), "no card rendered");
-});
-
-// ── Mobile dashboard generation ──────────────────────────────────────────────
-const { generateMobileFiles } = await load("./src/view/mobile.ts");
-
-await test("mobile: writes a habit dashboard at Mobile/<file>.md", async () => {
-  const created = [];
-  const view = {
-    file: { name: "habits.csv", basename: "habits", path: "Data/habits.csv", parent: { path: "Data" } },
-    headers: ["date", "gym"],
-    getDateCol: () => "date", getCategoryCol: () => null, getBooleanColumns: () => ["gym"],
-    getStatusCol: () => null, titleKey: () => null, authorKey: () => null, resolveCol: () => null,
-    app: { vault: {
-      adapter: { exists: async () => true, mkdir: async () => {} },
-      getAbstractFileByPath: () => null,
-      create: async (p, c) => { created.push({ p, c }); },
-      modify: async () => {},
-    } },
-  };
-  await generateMobileFiles(view);
-  assert(created.length === 1, "one dashboard created");
-  assert(created[0].p === "Data/Mobile/habits.md", "dashboard path under Mobile/");
-  assert(created[0].c.length > 0, "non-empty dashboard content");
-  // Labels are computed by the caller now (templates module is dependency-free).
-  assert(created[0].c.includes('labels = ["Gym"]'), "title-cased habit label baked into the dataviewjs block");
-});
-
-// ── Shared mobile templates (single .mjs source) ─────────────────────────────
-// The plugin (above) and regenerate-mobile-dashboards.mjs import the same
-// module — assert node can load it directly and the output is well-formed.
-const templates = await import("./src/mobile-templates.mjs");
-
-await test("mobile templates: node-importable, library template embeds its keys", async () => {
-  const md = templates.generateLibraryMobileDashboard({
-    filePath: "../books.csv", csvPath: "Lib/books.csv",
-    titleKey: "Title", categoryCol: "Category", statusCol: "Status",
-    authorKey: "Author", yearCol: "Year", ratingCol: "Rating", themeCol: "",
-    compactGrid: true,
-  });
-  assert(md.includes("file: ../books.csv"), "csv-add points at the data file");
-  assert(md.includes('dv.io.csv("Lib/books.csv")'), "dataviewjs reads the canonical csv");
-  assert(md.includes('const titleKey = "Title"'), "titleKey baked in");
-  assert(md.includes("const compactGrid = true"), "compact grid flag baked in");
 });
 
 // ── Grouping helpers (kanban group-by) ───────────────────────────────────────
