@@ -1,0 +1,32 @@
+{
+  "name": "datadeck",
+  "version": "1.6.0",
+  "description": "DataDeck: XLSX/CSV multi-view plugin for Obsidian",
+  "main": "main.js",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "dev": "node esbuild.config.mjs --watch",
+    "deploy": "cp main.js styles.css manifest.json world-map.svg datadeck/ && cp main.js styles.css manifest.json world-map.svg datadeck-work/",
+    "build:deploy": "npm run build && npm run deploy",
+    "test": "node test-plugin-logic.mjs",
+    "test:csv": "node test-csv-parser.mjs",
+    "test:view": "node test-view-smoke.mjs",
+    "test:all": "node test-csv-parser.mjs && node test-plugin-logic.mjs && node test-view-smoke.mjs",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run test:all && npm run build:deploy",
+    "reload": "obsidian plugin:reload id=datadeck",
+    "errors": "obsidian dev:errors"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "esbuild": "^0.19.0",
+    "jsdom": "^29.1.1",
+    "obsidian": "latest",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@types/papaparse": "^5.5.2",
+    "chart.js": "^4.5.1",
+    "papaparse": "^5.5.3"
+  }
+}

@@ -1,0 +1,24 @@
+node_modules/
+.DS_Store
+Test/
+
+# Ignore user data files at project root (sample/scratch copies).
+# xlsx patterns kept post-migration in case someone drops one in for testing.
+/*.csv
+/*.xlsx
+
+# Local deploy symlinks into personal vaults — never track (they leak
+# machine paths and break on clone). npm run deploy follows them if present.
+/datadeck
+/datadeck-work
+
+# Local-only synthetic demo data — the repo ships none; tests inline their fixtures.
+/sample-data
+
+# Personal dev tooling + session notes — local only, never published.
+/local/
+/handoff.md
+/public_audit.md
+
+# Claude Code local settings — machine-specific paths, never track.
+.claude/
