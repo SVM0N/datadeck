@@ -161,7 +161,7 @@ export function parseCSV(raw: string): { headers: string[]; rows: CSVRow[] } {
  *   "data.xlsx"                      → sibling of current note
  *   "./data.xlsx"                    → same as sibling
  *   "../data.xlsx" / "../../foo.csv" → walked up from current folder
- *   "Knowledge/Test/data.xlsx"       → vault-relative (any other path with "/"
+ *   "Library/Data/data.xlsx"         → vault-relative (any other path with "/"
  *                                        and no leading "./" or "../" is treated
  *                                        as vault-relative for back-compat with
  *                                        existing dashboards)

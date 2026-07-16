@@ -795,7 +795,7 @@ test("rating: non-Rating column with unknown text → blank", () => {
 console.log("\n=== resolvePath ===\n");
 
 test("resolvePath: sibling file (no slash)", () => {
-  assertEqual(resolvePath("data.xlsx", "Knowledge/Test"), "Knowledge/Test/data.xlsx");
+  assertEqual(resolvePath("data.xlsx", "Library/Data"), "Library/Data/data.xlsx");
 });
 
 test("resolvePath: sibling file with empty baseFolder (vault root note)", () => {
@@ -803,11 +803,11 @@ test("resolvePath: sibling file with empty baseFolder (vault root note)", () => 
 });
 
 test("resolvePath: vault-relative (slash, no leading dot)", () => {
-  assertEqual(resolvePath("Knowledge/Test/data.xlsx", "anywhere/else"), "Knowledge/Test/data.xlsx");
+  assertEqual(resolvePath("Library/Data/data.xlsx", "anywhere/else"), "Library/Data/data.xlsx");
 });
 
 test("resolvePath: ../ walks up one folder", () => {
-  assertEqual(resolvePath("../data.xlsx", "Knowledge/Test/Mobile"), "Knowledge/Test/data.xlsx");
+  assertEqual(resolvePath("../data.xlsx", "Library/Data/Mobile"), "Library/Data/data.xlsx");
 });
 
 test("resolvePath: ../../ walks up two folders", () => {
@@ -815,19 +815,19 @@ test("resolvePath: ../../ walks up two folders", () => {
 });
 
 test("resolvePath: ./ resolves to sibling", () => {
-  assertEqual(resolvePath("./data.xlsx", "Knowledge/Test"), "Knowledge/Test/data.xlsx");
+  assertEqual(resolvePath("./data.xlsx", "Library/Data"), "Library/Data/data.xlsx");
 });
 
 test("resolvePath: mixed segments (../sub/file.xlsx)", () => {
-  assertEqual(resolvePath("../Other/file.xlsx", "Knowledge/Test/Mobile"), "Knowledge/Test/Other/file.xlsx");
+  assertEqual(resolvePath("../Other/file.xlsx", "Library/Data/Mobile"), "Library/Data/Other/file.xlsx");
 });
 
 test("resolvePath: walking past vault root clamps at root", () => {
-  assertEqual(resolvePath("../../../data.xlsx", "Knowledge"), "data.xlsx");
+  assertEqual(resolvePath("../../../data.xlsx", "Library"), "data.xlsx");
 });
 
 test("resolvePath: empty input passes through", () => {
-  assertEqual(resolvePath("", "Knowledge/Test"), "");
+  assertEqual(resolvePath("", "Library/Data"), "");
 });
 
 console.log("\n=== migrateFileConfigKey ===\n");
@@ -844,21 +844,21 @@ function migrateFileConfigKey(configs, oldPath, newPath) {
 }
 
 test("migrateFileConfigKey: moves entry from old key to new", () => {
-  const configs = { "Knowledge/old.xlsx": { defaultMode: "library" } };
-  migrateFileConfigKey(configs, "Knowledge/old.xlsx", "Knowledge/new.xlsx");
-  assertEqual(configs, { "Knowledge/new.xlsx": { defaultMode: "library" } });
+  const configs = { "Library/old.xlsx": { defaultMode: "library" } };
+  migrateFileConfigKey(configs, "Library/old.xlsx", "Library/new.xlsx");
+  assertEqual(configs, { "Library/new.xlsx": { defaultMode: "library" } });
 });
 
 test("migrateFileConfigKey: no-op if old key absent", () => {
-  const configs = { "Knowledge/other.xlsx": { defaultMode: "table" } };
-  migrateFileConfigKey(configs, "Knowledge/missing.xlsx", "Knowledge/new.xlsx");
-  assertEqual(configs, { "Knowledge/other.xlsx": { defaultMode: "table" } });
+  const configs = { "Library/other.xlsx": { defaultMode: "table" } };
+  migrateFileConfigKey(configs, "Library/missing.xlsx", "Library/new.xlsx");
+  assertEqual(configs, { "Library/other.xlsx": { defaultMode: "table" } });
 });
 
 test("migrateFileConfigKey: no-op if old and new path are equal", () => {
-  const configs = { "Knowledge/same.xlsx": { defaultMode: "library" } };
-  migrateFileConfigKey(configs, "Knowledge/same.xlsx", "Knowledge/same.xlsx");
-  assertEqual(configs, { "Knowledge/same.xlsx": { defaultMode: "library" } });
+  const configs = { "Library/same.xlsx": { defaultMode: "library" } };
+  migrateFileConfigKey(configs, "Library/same.xlsx", "Library/same.xlsx");
+  assertEqual(configs, { "Library/same.xlsx": { defaultMode: "library" } });
 });
 
 test("migrateFileConfigKey: caller-set new entry wins, old still cleared", () => {
@@ -866,11 +866,11 @@ test("migrateFileConfigKey: caller-set new entry wins, old still cleared", () =>
   // a real rename, but defensive), prefer the existing entry and drop
   // the orphan rather than silently overwrite the user's later choice.
   const configs = {
-    "Knowledge/old.xlsx": { defaultMode: "library" },
-    "Knowledge/new.xlsx": { defaultMode: "table" },
+    "Library/old.xlsx": { defaultMode: "library" },
+    "Library/new.xlsx": { defaultMode: "table" },
   };
-  migrateFileConfigKey(configs, "Knowledge/old.xlsx", "Knowledge/new.xlsx");
-  assertEqual(configs, { "Knowledge/new.xlsx": { defaultMode: "table" } });
+  migrateFileConfigKey(configs, "Library/old.xlsx", "Library/new.xlsx");
+  assertEqual(configs, { "Library/new.xlsx": { defaultMode: "table" } });
 });
 
 // ============================================================================
