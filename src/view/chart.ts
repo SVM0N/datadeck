@@ -20,7 +20,7 @@ import { localISODate, isMultiValueColName } from "../utils";
 /**
  * Parse a cell into a finite number, or null. Tolerates thousands separators
  * ("1,234" / "1 234") and a European decimal comma ("3,5") — data typed on a
- * Swedish keyboard should chart without a cleanup pass.
+ * European keyboard layout should chart without a cleanup pass.
  */
 export function parseNumeric(raw: string): number | null {
   let s = (raw ?? "").trim();

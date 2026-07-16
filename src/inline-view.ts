@@ -16,7 +16,8 @@
 // row menu, the inline note editor, + Add, delete) write back to the source
 // CSV via app.vault.modify, the same path the full view uses. Other open
 // views of the same file (a .csv tab, or another csv-view block) re-sync off
-// the vault `modify` event. See HANDOFF for the concurrency model.
+// the vault `modify` event. This is last-write-wins at the whole-file level —
+// no check that the file changed underneath between load and save.
 
 import {
   App,

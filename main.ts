@@ -45,7 +45,7 @@ let worldMapSvgCache: string | null | undefined = undefined;
 
 // Injected by esbuild at build time (see esbuild.config.mjs). Surfaced via
 // the ⋯ menu so the user can confirm which build is actually loaded —
-// handy on iPhone where iCloud sync of the deployed bundle can lag.
+// handy on mobile where sync of the deployed bundle can lag.
 declare const __BUILD_TIME__: string;
 
 
@@ -207,9 +207,8 @@ export class CardView extends FileView {
 
   // ── Title highlight ────────────────────────────────────────────────────────
   // Per-file, keyed by the title-column value (like collapsedGroups) rather
-  // than a row index/id — the CSV has no stable identity column (see the
-  // optimistic-concurrency TODO in handoff.md), and a value-based key is
-  // resilient to row reordering/sort changes.
+  // than a row index/id — the CSV has no stable identity column, and a
+  // value-based key is resilient to row reordering/sort changes.
 
   isHighlighted(row: CSVRow): boolean {
     return (this.fileCfg.highlightedTitles ?? []).includes(this.getTitle(row));
@@ -778,7 +777,9 @@ export class CardView extends FileView {
   /**
    * Load the world-map SVG shipped alongside the plugin. Cached at module
    * level so it's read once per session (it's ~110 KB). Kept out of the JS
-   * bundle deliberately — see handoff. Returns null if the asset is missing.
+   * bundle deliberately — inlining it would only shrink the bundle by
+   * ~12 KB, not worth the size/complexity tradeoff. Returns null if the
+   * asset is missing.
    */
   private async loadMapSvg(): Promise<string | null> {
     if (worldMapSvgCache !== undefined) return worldMapSvgCache;

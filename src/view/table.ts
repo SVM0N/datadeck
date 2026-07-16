@@ -70,7 +70,7 @@ export function renderTable(view: CardView, container: HTMLElement): void {
   // Skip the clip-detection on touch — the fade gradient it triggers is
   // a hover affordance and irrelevant without a cursor. Saves N rAFs × N
   // forced reflows per render on phones (the prime cause of table-view lag
-  // on iPhone when the file has hundreds of rows).
+  // on mobile when the file has hundreds of rows).
   const isTouch = matchMedia("(pointer: coarse)").matches;
   const tbody = table.createEl("tbody");
   filteredRows.forEach((row) => {

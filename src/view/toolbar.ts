@@ -252,7 +252,7 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
     menu.addItem(i => i.setTitle("Sync to Anki").setIcon("layers").onClick(openAnki));
     menu.addSeparator();
     // Build timestamp baked in at compile time. Lets the user confirm on
-    // iPhone that iCloud has actually synced the latest deploy.
+    // mobile that sync has actually delivered the latest deploy.
     menu.addItem(i => i.setTitle(`Built ${__BUILD_TIME__}`).setIcon("info").setDisabled(true));
     menu.showAtMouseEvent(e);
   });

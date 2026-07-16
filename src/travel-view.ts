@@ -4,9 +4,9 @@
 // choropleth, per-country day totals, a year-by-year timeline, and the trip
 // tables (confirmed + collapsed photo-inferred + collapsed conflicts).
 //
-// Coloring rule (see handoff): gold = confirmed countries, blue = countries
-// seen only via photo-inferred rows, grey = unvisited. Conflict rows and
-// inferred rows overlapping a confirmed range are excluded from map/timeline.
+// Coloring rule: gold = confirmed countries, blue = countries seen only via
+// photo-inferred rows, grey = unvisited. Conflict rows and inferred rows
+// overlapping a confirmed range are excluded from map/timeline.
 
 import { CSVRow, ResidencyRule } from "./types";
 import {

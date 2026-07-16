@@ -4,9 +4,11 @@
 // This module is DOM-free and side-effect-free so it can be unit-tested.
 // The companion `travel-view.ts` renders the model this produces.
 //
-// Source format: the flat `travel_flat.csv` emitted by travel.py — one header,
-// uniform rows, with a `source` column (confirmed | inferred | conflict).
-// See docs / handoff "Travel / world-map view" for the overlap rules.
+// Source format: a flat CSV with one header, uniform rows, and a `source`
+// column (confirmed | inferred | conflict). Overlap rule: confirmed rows are
+// authoritative — conflict rows are dropped entirely, and an inferred row is
+// used only where it doesn't overlap a confirmed range (prevents double-
+// counting days a trip is confirmed for).
 
 import { CSVRow } from "./types";
 
