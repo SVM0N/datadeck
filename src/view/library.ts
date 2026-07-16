@@ -196,7 +196,9 @@ export function renderLibrary(view: CardView, container: HTMLElement): void {
     });
 
     const summary = section.createEl("summary", { cls: "csv-library-section-header" });
-    summary.innerHTML = `<span class="csv-library-arrow">▶</span> ${genre} <span class="csv-library-count">${items.length}</span>`;
+    summary.createSpan({ cls: "csv-library-arrow", text: "▶" });
+    summary.createSpan({ text: ` ${genre} ` });
+    summary.createSpan({ cls: "csv-library-count", text: String(items.length) });
 
     const grid = section.createDiv({ cls: "csv-library-grid" });
 

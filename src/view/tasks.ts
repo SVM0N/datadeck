@@ -314,7 +314,9 @@ function renderSection(
     const details = section.createEl("details", { cls: "csv-tasks-group" });
     details.open = true;
     const summary = details.createEl("summary", { cls: "csv-tasks-group-header" });
-    summary.innerHTML = `<span class="csv-tasks-arrow">▶</span> ${project} <span class="csv-tasks-count">${items.length}</span>`;
+    summary.createSpan({ cls: "csv-tasks-arrow", text: "▶" });
+    summary.createSpan({ text: ` ${project} ` });
+    summary.createSpan({ cls: "csv-tasks-count", text: String(items.length) });
     const wrapper = details.createDiv({ cls: "csv-tasks-table-wrapper" });
     const table = wrapper.createEl("table", { cls: "csv-tasks-table" });
     
