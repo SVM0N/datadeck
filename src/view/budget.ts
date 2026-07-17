@@ -191,7 +191,23 @@ export function renderBudget(view: CardView, container: HTMLElement): void {
         makeEditable(view, td, row, h);
       });
       const priceCell = tr.createEl("td", { cls: "csv-budget-price-cell csv-tasks-editable", text: fmtMoney(parseNumeric(row[priceCol] ?? "") ?? 0) });
-      makeEditable(view, priceCell, row, priceCol);
+      // A modal, not makeEditable's inline input — same reason as the Limit
+      // field (the collapsing main view + iOS keyboard). Also: makeEditable
+      // only mutates the row and re-renders that one cell's own text, never
+      // the view, so the category/grand-total rollups went stale after an
+      // inline price edit. Routing through renderViewPreservingScroll fixes
+      // both at once.
+      priceCell.addEventListener("click", () => {
+        new PromptModal(
+          view.app, "Edit price", row[priceCol] ?? "", "0.00",
+          (value) => {
+            row[priceCol] = value.trim();
+            view.scheduleSave();
+            view.renderViewPreservingScroll();
+          },
+          "Save", "number",
+        ).open();
+      });
       tr.addEventListener("contextmenu", e => view.openRowContextMenu(row, e));
     });
   });

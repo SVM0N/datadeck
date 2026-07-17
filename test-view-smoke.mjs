@@ -1524,6 +1524,14 @@ await test("budget: clicking an item opens the expander, not an inline edit", as
   assert(created === 1, "only the page icon touches the filesystem");
 });
 
+await test("budget: price cell opens a modal too, not an inline input", async () => {
+  const rows = [{ Item: "Tent", Category: "Gear", Price: "10" }];
+  const c = document.body.createDiv();
+  renderBudget(budgetView(rows), c);
+  assert(!c.querySelector(".csv-budget-price-cell input"), "no inline number input on the price cell");
+  c.querySelector(".csv-budget-price-cell").click(); // should not throw
+});
+
 // ── Anki sync ────────────────────────────────────────────────────────────────
 const { syncToAnki, ankiFrontCol } = await load("./src/view/anki.ts");
 
