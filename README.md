@@ -8,16 +8,19 @@ edits in place and writes straight back to the one canonical CSV file: no
 database, no shadow copies, no lock-in. Your data stays a text file that
 diffs, syncs, and outlives any tool.
 
-![Chart view — a time series split by category with rolling-average smoothing](docs/img/chart-view.png)
+<details open>
+<summary><b>Screenshots</b> — chart, kanban, tasks board, and the travel map</summary>
 
-<details>
-<summary><b>More screenshots</b> — kanban, the tasks board, and the travel map</summary>
-
-![Kanban view grouped by category with status subgroups](docs/img/kanban-view.png)
-
-![Tasks board — sections per type, grouped by project, overdue flags](docs/img/tasks-view.png)
-
-![Travel view — world choropleth with confirmed and photo-only countries](docs/img/travel-view.png)
+<table>
+<tr>
+<td width="50%"><img src="docs/img/chart-view.png" alt="Chart view — a time series split by category with rolling-average smoothing" width="100%"></td>
+<td width="50%"><img src="docs/img/kanban-view.png" alt="Kanban view grouped by category with status subgroups" width="100%"></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/img/tasks-view.png" alt="Tasks board — sections per type, grouped by project, overdue flags" width="100%"></td>
+<td width="50%"><img src="docs/img/travel-view.png" alt="Travel view — world choropleth with confirmed and photo-only countries" width="100%"></td>
+</tr>
+</table>
 
 </details>
 
