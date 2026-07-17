@@ -34,6 +34,7 @@ import { renderStats, hasStatsColumns } from "./src/view/stats";
 import { renderChart, hasChartColumns } from "./src/view/chart";
 import { renderFocus } from "./src/view/focus";
 import { renderTasks, hasTaskColumns, taskProjectCol, taskTypeCol, taskPriorityCol } from "./src/view/tasks";
+import { renderBudget, hasBudgetColumns } from "./src/view/budget";
 import { registerCsvViewBlock } from "./src/inline-view";
 import { registerCsvChartBlock } from "./src/chart-block";
 import { registerCsvTasksBlock } from "./src/tasks-block";
@@ -139,7 +140,8 @@ export class CardView extends FileView {
         || (this.mode === "travel" && !this.isTravelFile())
         || (this.mode === "stats" && !hasStatsColumns(this))
         || (this.mode === "chart" && !hasChartColumns(this))
-        || (this.mode === "tasks" && !hasTaskColumns(this))) {
+        || (this.mode === "tasks" && !hasTaskColumns(this))
+        || (this.mode === "budget" && !hasBudgetColumns(this))) {
       this.mode = "table";
     }
     this.selectedDate = null; // Reset selected date when loading new file
@@ -680,6 +682,7 @@ export class CardView extends FileView {
     else if (this.mode === "chart") void renderChart(this, content);
     else if (this.mode === "focus") renderFocus(this, content);
     else if (this.mode === "tasks") renderTasks(this, content);
+    else if (this.mode === "budget") renderBudget(this, content);
     else renderTable(this, content);
   }
 

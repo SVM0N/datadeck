@@ -11,8 +11,9 @@ import { syncToAnki, autoAnkiFrontCol } from "./anki";
 import { hasStatsColumns } from "./stats";
 import { hasChartColumns } from "./chart";
 import { hasTaskColumns } from "./tasks";
+import { hasBudgetColumns } from "./budget";
 import { effectiveGroupCol } from "./kanban";
-import { TITLE_COL_ALIASES, CATEGORY_COL_ALIASES, STATUS_COL_ALIASES, NOTES_COL_ALIASES, IMAGE_COL_ALIASES } from "../utils";
+import { TITLE_COL_ALIASES, CATEGORY_COL_ALIASES, STATUS_COL_ALIASES, NOTES_COL_ALIASES, IMAGE_COL_ALIASES, PRICE_COL_ALIASES } from "../utils";
 
 declare const __BUILD_TIME__: string;
 
@@ -29,6 +30,10 @@ export function availableModes(view: CardView): {id: ViewMode, label: string}[] 
   // task/note/idea values (see hasTaskColumns). A native replacement for the
   // old DataviewJS project dashboard.
   if (hasTaskColumns(view)) modes.push({id: "tasks", label: "Tasks"});
+  // Budget: a named/assigned price column, rolled up per category against a
+  // spending limit set inline in the view. Deliberately name-gated (not
+  // "any numeric column") — see hasBudgetColumns.
+  if (hasBudgetColumns(view)) modes.push({id: "budget", label: "Budget"});
   // Cards/Kanban work on any file with a groupable column — the per-file
   // "Group by" pick, the category column, or an auto-picked fallback (see
   // effectiveGroupCol). Travel/date files used to lose these entirely.
@@ -212,6 +217,7 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
       notes: view.resolveCol(NOTES_COL_ALIASES),
       image: view.resolveCol(IMAGE_COL_ALIASES),
       anki: autoAnkiFrontCol(view),
+      price: view.resolveCol(PRICE_COL_ALIASES),
     };
     new FileConfigModal(
       view.app, view.headers, view.file?.path ?? "", view.fileCfg, view.autoDetectBooleanColumns(),

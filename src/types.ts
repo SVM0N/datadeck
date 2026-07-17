@@ -1,7 +1,7 @@
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface CSVRow { [key: string]: string; }
-export type ViewMode = "kanban-genre" | "table" | "dashboard" | "library" | "travel" | "stats" | "focus" | "tasks" | "chart";
+export type ViewMode = "kanban-genre" | "table" | "dashboard" | "library" | "travel" | "stats" | "focus" | "tasks" | "chart" | "budget";
 
 // ─── Residency / threshold rules (travel view) ──────────────────────────────
 // A declarative rule: count days a person was in `scope` within `window`,
@@ -76,6 +76,12 @@ export interface FileConfig {
   chartSmooth?: boolean;      // Chart view 7-day rolling-mean toggle (date X).
   chartFit?: "none" | "linear"; // Chart view best-fit line toggle.
   chartFormula?: string;      // Chart view y = f(x) overlay (src/formula.ts).
+  budgetPriceCol?: string;    // Budget view price/amount column. Unset =
+                              // name-alias match, else the "Price" column
+                              // function (see src/view/budget.ts).
+  budgetLimit?: number;       // Budget view spending cap, set inline in the
+                              // view itself. Unset = no limit (total shown
+                              // neutral, no over/under coloring).
 }
 
 export type LibrarySort = "status" | "title" | "rating" | "year";

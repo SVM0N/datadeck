@@ -3,6 +3,7 @@
 **Your CSV files, alive inside Obsidian.** DataDeck opens plain `.csv` files
 as rich, editable views — cards, kanban, an editable table, charts with
 best-fit lines and formula overlays, a habit dashboard, a tasks board, a
+budget tracker with per-category rollups against a spending limit, a
 one-entry-at-a-time focus reader, and an interactive travel map. Everything
 edits in place and writes straight back to the one canonical CSV file: no
 database, no shadow copies, no lock-in. Your data stays a text file that
@@ -26,9 +27,10 @@ diffs, syncs, and outlives any tool.
 
 ## Highlights
 
-- **Nine view modes**, auto-offered based on the columns in the file — a
+- **Ten view modes**, auto-offered based on the columns in the file — a
   books CSV gets a library, a habit log gets a dashboard, a tasks file gets
-  a project board, a travel log gets a world map.
+  a project board, an expenses CSV gets a budget tracker, a travel log gets
+  a world map.
 - **Everything is editable** — click a cell, toggle a habit, drag nothing:
   edits debounce-save back to the CSV. Notes-style columns render and edit
   as **Markdown**.
@@ -87,6 +89,7 @@ columns:
 | **Chart** | a numeric column (2+ rows) | Scatter/line of any column pair with hue, size-by, fits, formulas, smoothing, bucketing, and bar aggregates — see [Charts](#charts) |
 | **Dashboard** | a date column | Habit tracker: daily toggles, progress chart, streaks, per-habit GitHub-style calendars |
 | **Tasks** | due/priority columns, or task-like type values | Project board: rows grouped by project, split into Tasks / Idea / Note sections, click-to-toggle done, overdue flags |
+| **Budget** | a `Price`/`Cost`/`Amount`/`Total` column (or one assigned in ⚙ Config) | Items grouped by category with per-category subtotals and a grand total, set an inline spending limit and the total turns blue under it, red over |
 | **Stats** | a category/status/rating/author column | Bar-chart insights: status breakdown, categories, rating histogram, entries per year — bars click through to the filtered library |
 | **Focus** | any non-empty file | One entry at a time with big typography — built for quotes and vocabulary. ←/→ keys navigate |
 | **Travel** | `country` + trip-date columns | World choropleth, trip timeline, per-country day totals, residency day-counters — see [Travel view](#travel-view) |

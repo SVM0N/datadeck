@@ -4025,6 +4025,100 @@ select.csv-add-row-control {
   color: var(--csv-text-muted);
 }
 
+/* ─── Budget view ─────────────────────────────────────────────────────────────
+   Summary bar (total vs. an inline-editable limit) + per-category rollup
+   chips, then the item list reusing the Tasks view's collapsible
+   group/table shell (.csv-tasks-section / .csv-tasks-group / .csv-tasks-table)
+   so it inherits that styling instead of duplicating it. */
+
+.csv-budget-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 16px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  background: var(--csv-surface);
+  border-radius: var(--csv-radius);
+}
+
+.csv-budget-total-row { display: flex; align-items: baseline; gap: 6px; }
+.csv-budget-total-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--csv-text-muted);
+  margin-right: 2px;
+}
+.csv-budget-total-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--csv-text);
+}
+.csv-budget-total-value.is-under { color: var(--csv-blue); }
+.csv-budget-total-value.is-over { color: var(--csv-red); }
+.csv-budget-total-limit { font-size: 14px; color: var(--csv-text-faint); }
+
+.csv-budget-limit-row { display: flex; align-items: center; gap: 8px; }
+.csv-budget-limit-label { font-size: 12px; color: var(--csv-text-muted); }
+.csv-budget-limit-input {
+  width: 110px;
+  padding: 5px 8px;
+  border: 1px solid var(--csv-border);
+  border-radius: var(--csv-radius-sm);
+  background: var(--background-modifier-form-field);
+  color: var(--csv-text);
+  font-size: 13px;
+}
+
+.csv-budget-bar {
+  flex: 1 1 160px;
+  align-self: center;
+  height: 6px;
+  background: var(--csv-surface-2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.csv-budget-bar-fill { height: 100%; background: var(--csv-blue); }
+.csv-budget-bar-fill.is-over { background: var(--csv-red); }
+
+.csv-budget-cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.csv-budget-cat-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--background-modifier-hover);
+  border-radius: 999px;
+  font-size: 12px;
+}
+.csv-budget-cat-name { color: var(--csv-text); font-weight: 500; }
+.csv-budget-cat-sum { color: var(--csv-text-muted); }
+
+.csv-budget-cat-subtotal {
+  margin-left: auto;
+  font-weight: 600;
+  color: var(--csv-text-muted);
+}
+
+.csv-budget-price-cell {
+  width: 100px;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 600px) {
+  .csv-budget-summary { gap: 10px; padding: 10px 12px; }
+  .csv-budget-total-value { font-size: 18px; }
+  .csv-budget-bar { flex-basis: 100%; }
+}
+
 /* ─── Native <select> label alignment ─────────────────────────────────────────
    A styled <select> renders its label vertically off on macOS/Electron — left
    on its native appearance it sits a touch low; once you add vertical padding +

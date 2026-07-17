@@ -692,11 +692,12 @@ export class SearchModal extends Modal {
 // ─── File Config Modal ────────────────────────────────────────────────────────
 // Per-file column mapping — which column is the kanban group, notes, status
 
-// What each of the 6 exclusive per-column roles would resolve to with no
+// What each of the 7 exclusive per-column roles would resolve to with no
 // explicit fileCfg override — i.e. what titleKey/getCategoryCol/getStatusCol/
-// getNotesCol/getImageCol/ankiFrontCol already do by name/position at
-// render time. Lets the Config modal show "(auto)" on whichever column is
-// already fulfilling a role, instead of looking like no column does.
+// getNotesCol/getImageCol/ankiFrontCol/budgetPriceCol already do by
+// name/position at render time. Lets the Config modal show "(auto)" on
+// whichever column is already fulfilling a role, instead of looking like no
+// column does.
 export interface AutoDetectedRoles {
   title: string | null;
   category: string | null;
@@ -704,6 +705,7 @@ export interface AutoDetectedRoles {
   notes: string | null;
   image: string | null;
   anki: string | null;
+  price: string | null;
 }
 
 export class FileConfigModal extends Modal {
@@ -824,7 +826,7 @@ export class FileConfigModal extends Modal {
       { value: "categorical", label: "Categorical" },
       { value: "date", label: "Date" },
     ];
-    type Role = "title" | "category" | "status" | "notes" | "image" | "anki" | "";
+    type Role = "title" | "category" | "status" | "notes" | "image" | "anki" | "price" | "";
     const ROLE_OPTIONS: { value: Role; label: string }[] = [
       { value: "", label: "— no function —" },
       { value: "title", label: "Title" },
@@ -833,6 +835,7 @@ export class FileConfigModal extends Modal {
       { value: "notes", label: "Notes" },
       { value: "image", label: "Image (card / kanban thumbnail)" },
       { value: "anki", label: "Anki card front" },
+      { value: "price", label: "Price (Budget view)" },
     ];
     // Explicit fileCfg fields always win outright over name-based detection.
     // Functions are now managed in a separate table below.
@@ -1008,6 +1011,9 @@ export class FileConfigModal extends Modal {
         } else if (role.value === "anki") {
           currentHolder = this.current.ankiFrontCol ?? this.autoDetectedRoles.anki ?? "";
           isAuto = this.current.ankiFrontCol === undefined && !!this.autoDetectedRoles.anki;
+        } else if (role.value === "price") {
+          currentHolder = this.current.budgetPriceCol ?? this.autoDetectedRoles.price ?? "";
+          isAuto = this.current.budgetPriceCol === undefined && !!this.autoDetectedRoles.price;
         }
 
         this.headers.forEach(h => {
@@ -1029,6 +1035,7 @@ export class FileConfigModal extends Modal {
             if (role.value !== "notes" && this.current.notesColumn === h) this.current.notesColumn = undefined;
             if (role.value !== "image" && this.current.imageColumn === h) this.current.imageColumn = undefined;
             if (role.value !== "anki" && this.current.ankiFrontCol === h) this.current.ankiFrontCol = undefined;
+            if (role.value !== "price" && this.current.budgetPriceCol === h) this.current.budgetPriceCol = undefined;
           }
           if (role.value === "title") this.current.titleColumn = h;
           else if (role.value === "category") this.current.categoryColumn = h;
@@ -1036,6 +1043,7 @@ export class FileConfigModal extends Modal {
           else if (role.value === "notes") this.current.notesColumn = h;
           else if (role.value === "image") this.current.imageColumn = h;
           else if (role.value === "anki") this.current.ankiFrontCol = h;
+          else if (role.value === "price") this.current.budgetPriceCol = h;
           renderFuncRows();
         });
 

@@ -19,12 +19,15 @@ import { localISODate, isMultiValueColName } from "../utils";
 
 /**
  * Parse a cell into a finite number, or null. Tolerates thousands separators
- * ("1,234" / "1 234") and a European decimal comma ("3,5") — data typed on a
- * European keyboard layout should chart without a cleanup pass.
+ * ("1,234" / "1 234"), a European decimal comma ("3,5"), and a single
+ * leading/trailing currency symbol ("$45.00", "12,50€") — data typed on a
+ * European keyboard layout, or a price column, should chart/sum without a
+ * cleanup pass.
  */
 export function parseNumeric(raw: string): number | null {
   let s = (raw ?? "").trim();
   if (!s) return null;
+  s = s.replace(/^[$£€¥]\s*/, "").replace(/\s*[$£€¥]$/, "");
   if (/^-?\d{1,3}(?:[,\s]\d{3})+(?:\.\d+)?$/.test(s)) s = s.replace(/[,\s]/g, "");
   else if (/^-?\d+,\d+$/.test(s)) s = s.replace(",", ".");
   if (!/^-?\d*\.?\d+(?:[eE][+-]?\d+)?$/.test(s)) return null;

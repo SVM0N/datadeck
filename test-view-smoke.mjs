@@ -1379,6 +1379,112 @@ await test("tasks: hasTaskColumns gates the mode correctly", async () => {
   assert(!hasTaskColumns(tasksView([{ Title: "Dune", Type: "Fiction", Rating: "5" }])), "genre Type → not a tasks file");
 });
 
+// ── Budget view ──────────────────────────────────────────────────────────────
+const { renderBudget, hasBudgetColumns, budgetPriceCol } = await load("./src/view/budget.ts");
+
+function budgetView(rows, cfg = {}) {
+  let savedCfg = null;
+  const headers = Object.keys(rows[0] ?? {});
+  const resolveCol = (cands) => {
+    for (const cand of cands) {
+      const f = headers.find(h => h.toLowerCase() === cand.toLowerCase());
+      if (f) return f;
+    }
+    return null;
+  };
+  const view = {
+    headers, rows, searchQuery: "",
+    fileCfg: cfg, resolveCol,
+    getFilteredRows: () => rows,
+    saveFileCfg: (c) => { savedCfg = c; view.fileCfg = c; },
+    getSavedCfg: () => savedCfg,
+    renderView: () => {}, renderViewPreservingScroll: () => {},
+    titleKey: () => resolveCol(["Title", "Name", "Item"]) ?? undefined,
+    getCategoryCol: () => resolveCol(["Category"]),
+    getDateCol: () => null, isNotesCol: () => false, isDateCol: () => false,
+    scheduleSave: () => {}, openRowContextMenu: () => {},
+  };
+  return view;
+}
+
+await test("budget: hasBudgetColumns gates on a named/assigned price column only", async () => {
+  assert(hasBudgetColumns(budgetView([{ Item: "Tent", Price: "10" }])), "named Price column → available");
+  assert(hasBudgetColumns(budgetView([{ Item: "Tent", Cost: "10" }])), "named Cost alias → available");
+  // A movies-style Rating column is numeric but not price-named — must NOT
+  // silently enable Budget (that would be a chart-like broad heuristic,
+  // deliberately avoided).
+  assert(!hasBudgetColumns(budgetView([{ Title: "Dune", Rating: "5" }])), "unnamed numeric column → not budget-y");
+  // Explicit fileCfg override wins even without a name match.
+  assert(hasBudgetColumns(budgetView([{ Title: "Dune", Rating: "5" }], { budgetPriceCol: "Rating" })), "explicit override enables it");
+  assert(budgetPriceCol(budgetView([{ Title: "Dune", Rating: "5" }], { budgetPriceCol: "Rating" })) === "Rating", "override resolves to that column");
+});
+
+await test("budget: rolls up per category and a grand total", async () => {
+  const rows = [
+    { Item: "Tent", Category: "Gear", Price: "120.00" },
+    { Item: "Stove", Category: "Gear", Price: "45.50" },
+    { Item: "Flights", Category: "Travel", Price: "300" },
+  ];
+  const c = document.body.createDiv();
+  renderBudget(budgetView(rows), c);
+  const chips = Array.from(c.querySelectorAll(".csv-budget-cat-chip")).map(el => el.textContent);
+  assert(chips.some(t => t.includes("Gear") && t.includes("165.50")), `Gear subtotal 165.50 (got ${chips})`);
+  assert(chips.some(t => t.includes("Travel") && t.includes("300.00")), `Travel subtotal 300.00 (got ${chips})`);
+  assert(c.querySelector(".csv-budget-total-value").textContent === "465.50", "grand total sums every row");
+  assert(c.querySelectorAll(".csv-tasks-group").length === 2, "one collapsible group per category");
+  assert(c.querySelectorAll(".csv-tasks-table tbody tr").length === 3, "3 item rows total");
+});
+
+await test("budget: uncategorized rows fall into a single '—' bucket when there's no category column", async () => {
+  const rows = [{ Item: "A", Price: "1" }, { Item: "B", Price: "2" }];
+  const c = document.body.createDiv();
+  renderBudget(budgetView(rows), c);
+  assert(!c.querySelector(".csv-budget-cats"), "no chip row for a single implicit category");
+  assert(c.querySelector(".csv-tasks-group-header").textContent.includes("—"), "uncategorized group header");
+  assert(c.querySelector(".csv-budget-total-value").textContent === "3.00", "total still sums both rows");
+});
+
+await test("budget: total colors blue under the limit, red over it", async () => {
+  const rows = [{ Item: "A", Price: "50" }, { Item: "B", Price: "60" }];
+  const under = document.body.createDiv();
+  renderBudget(budgetView(rows, { budgetLimit: 200 }), under);
+  assert(under.querySelector(".csv-budget-total-value").classList.contains("is-under"), "110 of 200 reads as under");
+  assert(!under.querySelector(".csv-budget-total-value").classList.contains("is-over"), "not flagged over");
+
+  const over = document.body.createDiv();
+  renderBudget(budgetView(rows, { budgetLimit: 100 }), over);
+  assert(over.querySelector(".csv-budget-total-value").classList.contains("is-over"), "110 of 100 reads as over");
+  assert(over.querySelector(".csv-budget-bar-fill").classList.contains("is-over"), "gauge fill also flips to over");
+
+  const noLimit = document.body.createDiv();
+  renderBudget(budgetView(rows), noLimit);
+  const val = noLimit.querySelector(".csv-budget-total-value");
+  assert(!val.classList.contains("is-under") && !val.classList.contains("is-over"), "no limit set → neutral, no bar");
+  assert(!noLimit.querySelector(".csv-budget-bar"), "no gauge rendered without a limit");
+});
+
+await test("budget: editing the limit input persists to fileCfg", async () => {
+  const rows = [{ Item: "A", Price: "50" }];
+  const view = budgetView(rows);
+  const c = document.body.createDiv();
+  renderBudget(view, c);
+  const input = c.querySelector(".csv-budget-limit-input");
+  input.value = "150";
+  input.dispatchEvent(new window.Event("change", { bubbles: true }));
+  assert(view.getSavedCfg()?.budgetLimit === 150, "typed limit saved to fileCfg");
+});
+
+await test("budget: price cells parse currency symbols and thousands separators", async () => {
+  const rows = [
+    { Item: "A", Price: "$1,200.50" },
+    { Item: "B", Price: "45" },
+  ];
+  const c = document.body.createDiv();
+  renderBudget(budgetView(rows), c);
+  const shown = parseFloat(c.querySelector(".csv-budget-total-value").textContent.replace(/,/g, ""));
+  assert(shown === 1245.5, `currency symbol + thousands separator both parse (got ${shown})`);
+});
+
 // ── Anki sync ────────────────────────────────────────────────────────────────
 const { syncToAnki, ankiFrontCol } = await load("./src/view/anki.ts");
 

@@ -39,6 +39,14 @@ export const NOTES_COL_ALIASES = [
   "Description","description",
   "Annotation","annotation",
 ];
+export const PRICE_COL_ALIASES = [
+  "Price","price",
+  "Cost","cost",
+  "Amount","amount",
+  "Total","total",
+  "Spend","spend","Spent","spent",
+  "Value","value",
+];
 
 /**
  * Resolve a cell value into an <img> src, or null if it isn't resolvable.
