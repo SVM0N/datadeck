@@ -1,7 +1,7 @@
 {
   "id": "datadeck",
   "name": "DataDeck",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "minAppVersion": "1.4.0",
   "description": "View and edit CSV files as cards, kanban, table, charts, a habit dashboard, a tasks board, a budget tracker, a focus reader, or an interactive travel map. Charts with best-fit lines, formulas, and color-by splits. Notes columns render as Markdown.",
   "author": "SVM0N",
