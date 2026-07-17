@@ -356,7 +356,12 @@ export class CardView extends FileView {
   }
   getTitle(row: CSVRow) { const k=this.titleKey(); return (k?row[k]:row[this.headers[0]])??"—"; }
   getSubtitle(row: CSVRow) { const k=this.authorKey(); return k?row[k]??"":""; }
-  getColumnValues(h: string) { return Array.from(new Set(this.rows.map(r=>r[h]??"").filter(Boolean))).sort(); }
+  // Trimmed before dedup so "Electronic" and "Electronic " (trailing
+  // whitespace, easy to introduce via typing/paste) collapse into one
+  // picker option — grouping views (Kanban/Budget's category rollup, etc.)
+  // already trim their own group keys, so an untrimmed picker list showed
+  // "duplicate" options that the view itself never actually split on.
+  getColumnValues(h: string) { return Array.from(new Set(this.rows.map(r=>(r[h]??"").trim()).filter(Boolean))).sort(); }
   // Image column for card/kanban thumbnails — per-file override (reuses the
   // cardImageColumn config) or detected by name (Image/Cover/Poster/…).
   getImageCol(): string | null {

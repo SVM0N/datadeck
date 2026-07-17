@@ -116,6 +116,16 @@ function resolveCol(headers, candidates) {
   return null;
 }
 
+// Copy of getColumnValues from CardView (main.ts) — the distinct-values
+// list every picker (Add-entry dropdown, chip picker, filters) is built
+// from. Trimmed before dedup so "Electronic" and "Electronic " (trailing
+// whitespace) collapse into one option — grouping views (Kanban/Budget's
+// category rollup) already trim their own group keys, so an untrimmed list
+// here showed "duplicate" options a grouped view never actually split on.
+function getColumnValues(rows, h) {
+  return Array.from(new Set(rows.map(r => (r[h] ?? "").trim()).filter(Boolean))).sort();
+}
+
 // CSV serialization (escape function from doSave)
 function escapeCSV(v) {
   return (v.includes(",") || v.includes('"') || v.includes("\n"))
@@ -364,6 +374,23 @@ test("resolveCol: status column fallback chain", () => {
   assertEqual(resolveCol(["Progress", "State"], statusCandidates), "State");
   assertEqual(resolveCol(["Progress", "Stage"], statusCandidates), "Progress");
   assertEqual(resolveCol(["read", "done"], statusCandidates), "read");
+});
+
+console.log("\n=== getColumnValues ===\n");
+
+test("getColumnValues: trailing whitespace collapses into one option", () => {
+  const rows = [{ Type: "Electronic" }, { Type: "Electronic " }, { Type: " Electronic" }];
+  assertEqual(getColumnValues(rows, "Type"), ["Electronic"]);
+});
+
+test("getColumnValues: distinct values still sort and dedup normally", () => {
+  const rows = [{ Type: "Groceries" }, { Type: "Travel" }, { Type: "Groceries" }, { Type: "" }];
+  assertEqual(getColumnValues(rows, "Type"), ["Groceries", "Travel"]);
+});
+
+test("getColumnValues: whitespace-only values are dropped, not returned as blank options", () => {
+  const rows = [{ Type: "Travel" }, { Type: "   " }, { Type: undefined }];
+  assertEqual(getColumnValues(rows, "Type"), ["Travel"]);
 });
 
 console.log("\n=== CSV Serialization (Round-trip) ===\n");

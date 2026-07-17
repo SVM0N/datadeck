@@ -433,7 +433,11 @@ export function showSelectPicker(
     else renderList(search.value);
   };
 
-  const isActive = (val: string) => multi ? selected.has(val) : val === currentValue;
+  // Trimmed comparison: allValues (from getColumnValues) is already
+  // trimmed, but currentValue is the raw, possibly-untrimmed row value —
+  // without this a dirty row (e.g. "Electronic ") wouldn't show its
+  // current option as selected even though picking it again would.
+  const isActive = (val: string) => multi ? selected.has(val) : val === currentValue.trim();
   const hasValue = () => multi ? selected.size > 0 : !!currentValue;
 
   const renderList = (filter: string) => {
