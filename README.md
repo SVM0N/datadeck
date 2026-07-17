@@ -10,7 +10,7 @@ database, no shadow copies, no lock-in. Your data stays a text file that
 diffs, syncs, and outlives any tool.
 
 <details open>
-<summary><b>Screenshots</b> — chart, kanban, tasks board, and the travel map</summary>
+<summary><b>Screenshots</b> — chart, kanban, tasks board, budget tracker, and the travel map</summary>
 
 <table>
 <tr>
@@ -20,6 +20,9 @@ diffs, syncs, and outlives any tool.
 <tr>
 <td width="50%"><img src="docs/img/tasks-view.png" alt="Tasks board — sections per type, grouped by project, overdue flags" width="100%"></td>
 <td width="50%"><img src="docs/img/travel-view.png" alt="Travel view — world choropleth with confirmed and photo-only countries" width="100%"></td>
+</tr>
+<tr>
+<td colspan="2"><img src="docs/img/budget-view.png" alt="Budget view — items grouped by category with subtotals, a grand total tracked against a spending limit" width="100%"></td>
 </tr>
 </table>
 
