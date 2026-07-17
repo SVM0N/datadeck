@@ -168,8 +168,7 @@ export function renderBudget(view: CardView, container: HTMLElement): void {
 
     items.forEach(row => {
       const tr = tbody.createEl("tr");
-      const nameCell = tr.createEl("td", { cls: "csv-tasks-name-cell csv-tasks-editable", text: row[titleCol] || "Untitled" });
-      makeEditable(view, nameCell, row, titleCol);
+      renderNameCell(view, tr, row, titleCol);
       displayCols.forEach(h => {
         const val = row[h] ?? "";
         const display = val.length > 40 ? val.slice(0, 38) + "…" : val;
@@ -181,4 +180,22 @@ export function renderBudget(view: CardView, container: HTMLElement): void {
       tr.addEventListener("contextmenu", e => view.openRowContextMenu(row, e));
     });
   });
+}
+
+// Name cell: clicking the item opens the entry overview (the expander modal
+// — same click-to-edit affordance Tasks/Kanban use), not an inline text
+// input. A separate page icon (📄 if a backing .md exists, + to create) is
+// the only thing that touches the filesystem.
+function renderNameCell(view: CardView, tr: HTMLElement, row: CSVRow, titleCol: string): void {
+  const nameCell = tr.createEl("td", { cls: "csv-tasks-name-cell" });
+  const link = nameCell.createSpan({ cls: "csv-tasks-link", text: row[titleCol] || "Untitled" });
+  const notesCol = view.getNotesCol();
+  link.addEventListener("click", () => {
+    if (notesCol) view.openNoteExpander(row, notesCol);
+    else void view.openOrCreateNotes(row);
+  });
+  const exists = view.notesFileExists(row);
+  const icon = nameCell.createEl("button", { cls: `csv-tasks-page-icon ${exists ? "exists" : ""}`, text: exists ? "📄" : "+" });
+  icon.setAttr("title", exists ? "Open page" : "Create page");
+  icon.addEventListener("click", e => { e.stopPropagation(); void view.openOrCreateNotes(row); });
 }

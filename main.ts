@@ -1056,6 +1056,13 @@ const FILE_TEMPLATES: FileTemplate[] = [
       titleColumn: "Item",
       categoricalColumns: ["Category"],
       notesColumn: "Notes",
+      // "" is in BOOLEAN_PATTERNS (looksBoolean), so a fresh file with one
+      // row and an empty Category value vacuously auto-detects Category as
+      // a habit/checkbox column — and the Add-entry modal checks isBooleanCol
+      // before the categorical branch, so it'd render a toggle instead of
+      // the dropdown categoricalColumns configures. Pin no habit columns,
+      // same fix the "habits" template uses for its own collision.
+      habitColumns: [],
     }
   },
 ];

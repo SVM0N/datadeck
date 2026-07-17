@@ -1382,7 +1382,7 @@ await test("tasks: hasTaskColumns gates the mode correctly", async () => {
 // ── Budget view ──────────────────────────────────────────────────────────────
 const { renderBudget, hasBudgetColumns, budgetPriceCol } = await load("./src/view/budget.ts");
 
-function budgetView(rows, cfg = {}) {
+function budgetView(rows, cfg = {}, overrides = {}) {
   let savedCfg = null;
   const headers = Object.keys(rows[0] ?? {});
   const resolveCol = (cands) => {
@@ -1402,7 +1402,11 @@ function budgetView(rows, cfg = {}) {
     titleKey: () => resolveCol(["Title", "Name", "Item"]) ?? undefined,
     getCategoryCol: () => resolveCol(["Category"]),
     getDateCol: () => null, isNotesCol: () => false, isDateCol: () => false,
+    getNotesCol: () => resolveCol(["Notes", "Note"]),
+    notesFileExists: () => false,
+    openNoteExpander: () => {}, openOrCreateNotes: () => {},
     scheduleSave: () => {}, openRowContextMenu: () => {},
+    ...overrides,
   };
   return view;
 }
@@ -1483,6 +1487,22 @@ await test("budget: price cells parse currency symbols and thousands separators"
   renderBudget(budgetView(rows), c);
   const shown = parseFloat(c.querySelector(".csv-budget-total-value").textContent.replace(/,/g, ""));
   assert(shown === 1245.5, `currency symbol + thousands separator both parse (got ${shown})`);
+});
+
+await test("budget: clicking an item opens the expander, not an inline edit", async () => {
+  const rows = [{ Item: "Tent", Category: "Gear", Price: "10", Notes: "body" }];
+  let expanded = 0, created = 0;
+  const view = budgetView(rows, {}, {
+    openNoteExpander: () => { expanded++; },
+    openOrCreateNotes: () => { created++; },
+  });
+  const c = document.body.createDiv();
+  renderBudget(view, c);
+  assert(!c.querySelector(".csv-tasks-name-cell input"), "no inline text input on the item cell");
+  c.querySelector(".csv-tasks-link").click();      // item name → overview
+  c.querySelector(".csv-tasks-page-icon").click(); // icon → page
+  assert(expanded === 1, "item click opened the expander");
+  assert(created === 1, "only the page icon touches the filesystem");
 });
 
 // ── Anki sync ────────────────────────────────────────────────────────────────
