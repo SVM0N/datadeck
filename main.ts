@@ -1042,6 +1042,22 @@ const FILE_TEMPLATES: FileTemplate[] = [
       notesColumn: "Notes",
     }
   },
+  {
+    id: "budget",
+    command: "Create budget file",
+    defaultName: "Budget",
+    // Category and Price match CATEGORY_COL_ALIASES/PRICE_COL_ALIASES by
+    // name already (see effectiveGroupCol / hasBudgetColumns) — only Item
+    // needs an explicit titleColumn override, since "Item" isn't one of
+    // TITLE_COL_ALIASES (Title/Name).
+    headers: ["Date", "Item", "Category", "Price", "Notes"],
+    mode: "budget",
+    configOverrides: {
+      titleColumn: "Item",
+      categoricalColumns: ["Category"],
+      notesColumn: "Notes",
+    }
+  },
 ];
 
 // ─── Plugin ───────────────────────────────────────────────────────────────────
@@ -1123,6 +1139,7 @@ export default class CardViewPlugin extends Plugin {
     //  - tasks: hasTaskColumns() (Priority/Due present)
     //  - travel: isTravelFile() (country + date_entered + date_left + source)
     //  - dashboard: a date column + boolean habit columns.
+    //  - budget: hasBudgetColumns() (a Price/Cost/Amount/Total/Spend/Value column)
     for (const tpl of FILE_TEMPLATES) {
       this.addCommand({
         id: `create-${tpl.id}`,
