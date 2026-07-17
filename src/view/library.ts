@@ -14,7 +14,6 @@ export function renderLibrary(view: CardView, container: HTMLElement): void {
   const cc = effectiveGroupCol(view);
   const sc = view.getStatusCol();
   const titleCol = view.titleKey() ?? view.headers[0];
-  const authorCol = view.authorKey();
 
   if (!cc) {
     container.createEl("p", { text: `No groupable column found.`, cls: "csv-empty-state" });
@@ -53,9 +52,9 @@ export function renderLibrary(view: CardView, container: HTMLElement): void {
 
   if (hasDone || hasInProgress) {
     statusSelect.createEl("option", { text: "───────", value: "", attr: { disabled: "true" } });
-    if (hasDone) statusSelect.createEl("option", { text: "✓ Done", value: "__done__" });
-    if (hasInProgress) statusSelect.createEl("option", { text: "◐ In Progress", value: "__inprogress__" });
-    statusSelect.createEl("option", { text: "○ Not Started", value: "__notstarted__" });
+    if (hasDone) statusSelect.createEl("option", { text: "✓ done", value: "__done__" });
+    if (hasInProgress) statusSelect.createEl("option", { text: "◐ in progress", value: "__inprogress__" });
+    statusSelect.createEl("option", { text: "○ not started", value: "__notstarted__" });
   }
 
   if (allStatuses.size > 0) {

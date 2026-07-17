@@ -228,7 +228,7 @@ export function renderTasks(view: CardView, container: HTMLElement): void {
       // Done toggle (only when there's a status column to flip).
       if (statusCol) {
         const checkCell = tr.createEl("td", { cls: "csv-tasks-check-cell" });
-        const box = checkCell.createEl("span", { cls: `csv-tasks-check ${done ? "is-done" : ""}`, text: done ? "✓" : "" });
+        const box = checkCell.createSpan({ cls: `csv-tasks-check ${done ? "is-done" : ""}`, text: done ? "✓" : "" });
         box.setAttr("title", done ? "Mark not done" : "Mark done");
         box.addEventListener("click", e => {
           e.stopPropagation();

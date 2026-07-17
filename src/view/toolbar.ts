@@ -228,17 +228,17 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
       (header) => view.cleanupBooleanColumn(header),
     ).open();
   };
-  const openBackup = () => view.backupToArchive();
-  const openAnki = () => syncToAnki(view);
+  const openBackup = () => { void view.backupToArchive(); };
+  const openAnki = () => { void syncToAnki(view); };
 
   ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-secondary", text: "⚙ Config", title: "Configure this file's columns and views" })
     .addEventListener("click", openColumns);
-  ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-secondary", text: "💾 Backup", title: "Copy this file to Archive/ with today's date" })
+  ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-secondary", text: "💾 Backup", title: "Copy this file to archive/ with today's date" })
     .addEventListener("click", openBackup);
   ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-secondary", text: "🎴 Anki", title: "Sync rows to Anki (needs Anki desktop + AnkiConnect)" })
     .addEventListener("click", openAnki);
 
-  ctrl.createEl("button",{cls:"csv-add-btn",text:"+ Add"}).addEventListener("click",()=>view.openAddModal());
+  ctrl.createEl("button",{cls:"csv-add-btn",text:"+ add"}).addEventListener("click",()=>view.openAddModal());
 
   // ⋯ overflow lives after + Add so on mobile (where the secondary buttons
   // are hidden) the row reads `[modes] [search] [+ Add] [⋯]` — the primary

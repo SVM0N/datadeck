@@ -175,7 +175,7 @@ export async function renderTravel(
     mapWrap.empty();
     if (svg) injectMap(mapWrap, svg, model, select);
     else mapWrap.createDiv({ cls: "csv-tv-map-loading", text: "World map asset not found (world-map.svg)." });
-  } catch (_e) {
+  } catch {
     mapWrap.empty();
     mapWrap.createDiv({ cls: "csv-tv-map-loading", text: "Couldn't load world map." });
   }
@@ -230,7 +230,8 @@ function renderStats(root: HTMLElement, m: TravelModel): void {
 
 function injectMap(wrap: HTMLElement, svg: string, m: TravelModel, select: (iso: string | null) => void): void {
   const box = wrap.createDiv({ cls: "csv-tv-map" });
-  box.innerHTML = svg;
+  const svgEl = new DOMParser().parseFromString(svg, "image/svg+xml").documentElement;
+  box.appendChild(svgEl);
   box.querySelectorAll<SVGPathElement>(".country-path").forEach(p => {
     const iso = (p.getAttribute("data-iso") || "").toUpperCase();
     p.classList.remove("cp-unvisited", "cp-confirmed", "cp-inferred");
@@ -266,11 +267,15 @@ function injectMap(wrap: HTMLElement, svg: string, m: TravelModel, select: (iso:
     try {
       const r = p.getBoundingClientRect();
       if (r.width && r.height && Math.max(r.width, r.height) < 12) p.classList.add("cp-tiny");
-    } catch (_e) { /* not measurable yet — skip, no halo */ }
+    } catch { /* not measurable yet — skip, no halo */ }
   });
   const legend = wrap.createDiv({ cls: "csv-tv-map-legend" });
-  legend.createSpan({ cls: "csv-tv-leg" }).innerHTML = `<span class="csv-tv-dot cp-confirmed"></span> Confirmed`;
-  legend.createSpan({ cls: "csv-tv-leg" }).innerHTML = `<span class="csv-tv-dot cp-inferred"></span> Photo evidence`;
+  const confirmedLeg = legend.createSpan({ cls: "csv-tv-leg" });
+  confirmedLeg.createSpan({ cls: "csv-tv-dot cp-confirmed" });
+  confirmedLeg.appendText(" Confirmed");
+  const inferredLeg = legend.createSpan({ cls: "csv-tv-leg" });
+  inferredLeg.createSpan({ cls: "csv-tv-dot cp-inferred" });
+  inferredLeg.appendText(" Photo evidence");
 }
 
 /**
@@ -431,7 +436,7 @@ function renderTimeline(root: HTMLElement, m: TravelModel, select: (iso: string 
     }
   }
   const leg = wrap.createDiv({ cls: "csv-tv-tl-legend" });
-  leg.setText("Confirmed (solid) · Photo inferred (outlined)");
+  leg.setText("Confirmed (solid) · photo inferred (outlined)");
 }
 
 function sortByDateDesc<T extends { date_entered: string }>(arr: T[]): T[] {

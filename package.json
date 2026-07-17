@@ -6,20 +6,24 @@
   "scripts": {
     "build": "node esbuild.config.mjs",
     "dev": "node esbuild.config.mjs --watch",
-    "deploy": "cp main.js styles.css manifest.json world-map.svg datadeck/ && cp main.js styles.css manifest.json world-map.svg datadeck-work/",
+    "deploy": "cp main.js styles.css manifest.json datadeck/ && cp main.js styles.css manifest.json datadeck-work/",
     "build:deploy": "npm run build && npm run deploy",
     "test": "node test-plugin-logic.mjs",
     "test:csv": "node test-csv-parser.mjs",
     "test:view": "node test-view-smoke.mjs",
     "test:all": "node test-csv-parser.mjs && node test-plugin-logic.mjs && node test-view-smoke.mjs",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npm run test:all && npm run build:deploy",
+    "lint": "eslint main.ts \"src/**/*.ts\"",
+    "check": "npm run typecheck && npm run test:all && npm run lint && npm run build:deploy",
     "reload": "obsidian plugin:reload id=datadeck",
     "errors": "obsidian dev:errors"
   },
   "devDependencies": {
     "@types/node": "^18.0.0",
+    "@typescript-eslint/parser": "^8.64.0",
     "esbuild": "^0.19.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-obsidianmd": "^0.4.1",
     "jsdom": "^29.1.1",
     "obsidian": "latest",
     "typescript": "^5.0.0"

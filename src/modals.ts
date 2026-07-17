@@ -175,7 +175,7 @@ export class AddEntryModal extends Modal {
         const sel = row.createEl("select", { cls: "csv-modal-select" });
         sel.createEl("option", { text: "—", value: "" });
         merged.forEach(v => sel.createEl("option", { text: v, value: v }));
-        sel.createEl("option", { text: "+ Custom…", value: CUSTOM });
+        sel.createEl("option", { text: "+ custom…", value: CUSTOM });
 
         const customInput = row.createEl("input", { cls: "csv-modal-input csv-modal-custom", type: "text", placeholder: `Custom ${titleCase(h).toLowerCase()}` });
         customInput.hide();
@@ -358,12 +358,10 @@ export class NoteExpanderModal extends Modal {
     // ── Header ──────────────────────────────────────────────────────────────
     const header = contentEl.createDiv({ cls: "csv-expander-header" });
     header.createDiv({ cls: "csv-expander-title", text: this.row[this.titleCol ?? this.headers[0]] ?? "—" });
-    const headerBtns = header.createDiv({ cls: "csv-expander-header-btns" });
 
     // ── Fields section (non-notes columns) ──────────────────────────────────
     const fieldsEl = contentEl.createDiv({ cls: "csv-expander-fields" });
     const titleKey = this.titleCol;
-    const authorKey = this.headers.find(h => ["author","Author","director","Director","artist","Artist","creator","Creator"].includes(h));
 
     this.headers.forEach(h => {
       if (this.isNotesCol(h)) return; // notes rendered separately below
@@ -443,15 +441,14 @@ export class NoteExpanderModal extends Modal {
 
       const rendered = contentEl.createDiv({ cls: "csv-expander-rendered markdown-rendered" });
       rendered.title = "Click to edit";
-      const editorWrap = contentEl.createDiv({ cls: "csv-expander-editor" });
-      editorWrap.style.display = "none";
+      const editorWrap = contentEl.createDiv({ cls: "csv-expander-editor is-hidden" });
 
       const renderMarkdown = () => {
         rendered.empty();
         if (currentText.trim()) {
-          MarkdownRenderer.render(this.app, currentText, rendered, this.filePath, this.renderComponent);
+          void MarkdownRenderer.render(this.app, currentText, rendered, this.filePath, this.renderComponent);
         } else {
-          rendered.createDiv({ cls: "csv-notes-empty", text: "+ Add note" });
+          rendered.createDiv({ cls: "csv-notes-empty", text: "+ add note" });
         }
       };
       renderMarkdown();
@@ -463,16 +460,16 @@ export class NoteExpanderModal extends Modal {
       const enterEdit = () => {
         if (isEditing) return;
         isEditing = true;
-        rendered.style.display = "none";
-        editorWrap.style.display = "flex";
+        rendered.classList.add("is-hidden");
+        editorWrap.classList.remove("is-hidden");
         ta!.value = currentText;
         ta!.focus();
       };
       const exitEdit = () => {
         if (!isEditing) return;
         isEditing = false;
-        editorWrap.style.display = "none";
-        rendered.style.display = "";
+        editorWrap.classList.add("is-hidden");
+        rendered.classList.remove("is-hidden");
         currentText = ta!.value;
         renderMarkdown();
       };
@@ -501,13 +498,20 @@ export class NoteExpanderModal extends Modal {
 
     if (this.onDelete) {
       const titleVal = String(this.row[this.titleCol ?? this.headers[0]] ?? "").trim();
-      footer.createEl("button", { cls: "csv-expander-delete-btn", text: "Delete" })
-        .addEventListener("click", () => {
-          const label = titleVal || "this entry";
-          if (!window.confirm(`Delete "${label}"? This can't be undone.`)) return;
+      const deleteBtn = footer.createEl("button", {
+        cls: "csv-expander-delete-btn", text: "Delete",
+        attr: { title: `Delete "${titleVal || "this entry"}"? This can't be undone.` },
+      });
+      deleteBtn.addEventListener("click", () => {
+        if (deleteBtn.hasClass("confirm")) {
           this.onDelete!();
           this.close();
-        });
+          return;
+        }
+        deleteBtn.addClass("confirm");
+        deleteBtn.setText("Confirm?");
+        window.setTimeout(() => { if (deleteBtn.isConnected) { deleteBtn.removeClass("confirm"); deleteBtn.setText("Delete"); } }, 3000);
+      });
     }
 
     const rightBtns = footer.createDiv({ cls: "csv-expander-footer-right" });
@@ -581,22 +585,9 @@ export class SearchModal extends Modal {
     // underneath to near-black, which hides the filter results — the
     // user types but can't see the table updating. Tag the container so
     // a CSS rule (`.mod-csv-search-bg .modal-bg`) zeroes out the dim.
-    // Also defensively clear the inline opacity/background in case the
-    // CSS rule loses the cascade to a later !important. Tap-outside still
-    // closes because the bg element retains its click handler.
+    // Tap-outside still closes because the bg element retains its click
+    // handler.
     this.containerEl.addClass("mod-csv-search-bg");
-    const clearBg = () => {
-      const bg = this.containerEl.querySelector<HTMLElement>(".modal-bg");
-      if (bg) {
-        bg.style.opacity = "0";
-        bg.style.background = "transparent";
-      }
-    };
-    clearBg();
-    // Obsidian sometimes restyles the bg after onOpen runs; redo it on
-    // the next frame and a tick later for good measure.
-    requestAnimationFrame(clearBg);
-    setTimeout(clearBg, 50);
 
     // visualViewport pinning — same trick as NoteExpanderModal. Without
     // it, Obsidian centers the modal in window.innerHeight and the iOS
@@ -680,7 +671,7 @@ export class SearchModal extends Modal {
 
     // Autofocus after one frame so iOS reliably opens the keyboard
     // (focus called synchronously sometimes gets dropped on modal-open).
-    requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
       input.focus();
       // Caret at the end of existing query so user can extend or backspace.
       input.setSelectionRange(input.value.length, input.value.length);
@@ -823,7 +814,7 @@ export class FileConfigModal extends Modal {
     colSection.createEl("label", { text: "Columns", cls: "csv-modal-label" });
     colSection.createEl("p", {
       cls: "csv-modal-hint",
-      text: "Type and Function are each exclusive per column — picking one clears it from whichever column held it before. \"auto\" means it's already doing that by column name, with nothing saved here yet. Card field is independent and can combine with anything. Checkbox columns get a \"Clean up\" action that rewrites every row to strict 1/0 right away — not deferred to Save.",
+      text: "Type and function are each exclusive per column — picking one clears it from whichever column held it before. \"auto\" means it's already doing that by column name, with nothing saved here yet. Card field is independent and can combine with anything. Checkbox columns get a \"clean up\" action that rewrites every row to strict 1/0 right away — not deferred to save.",
     });
 
     type ColType = "text" | "checkbox" | "categorical" | "date";
@@ -972,7 +963,7 @@ export class FileConfigModal extends Modal {
 
     // ── Functions Table ──
     const funcSection = contentEl.createDiv({ cls: "csv-modal-section", attr: { style: "margin-top: 24px;" } });
-    funcSection.createEl("h3", { text: "Column Functions", cls: "csv-modal-h3" });
+    funcSection.createEl("h3", { text: "Column functions", cls: "csv-modal-h3" });
     funcSection.createEl("p", { 
       cls: "csv-modal-desc", 
       text: "Assign specific roles to your columns. 'auto' means it's already doing that by column name. Selecting '— none —' disables the function entirely." 
@@ -1058,7 +1049,7 @@ export class FileConfigModal extends Modal {
 
     const addColWrap = colSection.createDiv({ cls: "csv-modal-add-column" });
     const addColInput = addColWrap.createEl("input", { cls: "csv-modal-input", type: "text", placeholder: "New column name" });
-    const addColBtn = addColWrap.createEl("button", { cls: "csv-modal-cancel", text: "+ Add column" });
+    const addColBtn = addColWrap.createEl("button", { cls: "csv-modal-cancel", text: "+ add column" });
     const doAdd = () => {
       const err = this.onAddColumn(addColInput.value);
       if (err) { new Notice(err); return; }

@@ -166,7 +166,7 @@ function renderKanbanCard(view: CardView, container: HTMLElement, row: CSVRow, s
     text: hasNotesFile ? "📄" : "+",
     title: hasNotesFile ? "Open notes file" : "Create notes file",
   });
-  notesIconBtn.addEventListener("click", e => { e.stopPropagation(); view.openOrCreateNotes(row); });
+  notesIconBtn.addEventListener("click", e => { e.stopPropagation(); void view.openOrCreateNotes(row); });
 
   const sub = view.getSubtitle(row);
   if (sub) card.createDiv({cls:"csv-kanban-card-sub", text:sub});
@@ -205,7 +205,7 @@ function renderKanbanCard(view: CardView, container: HTMLElement, row: CSVRow, s
   const hasInlineNotes = !!(notesCol && row[notesCol]?.trim());
 
   // The preview is itself the editor affordance — clicking opens the
-  // inline textarea. When there's no note yet, render a quiet "+ Add note"
+  // inline textarea. When there's no note yet, render a quiet "+ add note"
   // placeholder in the same slot so the click target is discoverable
   // without needing a separate "Edit note" button.
   const notesPreviewEl = card.createDiv({cls:"csv-kanban-notes-preview"});
@@ -215,26 +215,25 @@ function renderKanbanCard(view: CardView, container: HTMLElement, row: CSVRow, s
     notesPreviewEl.title = "Click to edit";
   } else {
     notesPreviewEl.addClass("csv-kanban-notes-preview--empty");
-    if (notesCol) notesPreviewEl.setText("+ Add note");
+    if (notesCol) notesPreviewEl.setText("+ add note");
   }
 
-  const notesEditorEl = card.createDiv({cls:"csv-kanban-notes-editor"});
-  notesEditorEl.style.display = "none";
+  const notesEditorEl = card.createDiv({cls:"csv-kanban-notes-editor is-hidden"});
 
   const openInlineEditor = () => {
     // Save scroll position of the content area so we can restore it on close
-    const contentArea = view.contentEl.querySelector(".csv-content-area") as HTMLElement | null;
+    const contentArea = view.contentEl.querySelector<HTMLElement>(".csv-content-area");
     const scrollLeft = contentArea?.scrollLeft ?? 0;
     const scrollTop = contentArea?.scrollTop ?? 0;
 
-    notesPreviewEl.style.display = "none";
-    notesEditorEl.style.display = "block";
+    notesPreviewEl.classList.add("is-hidden");
+    notesEditorEl.classList.remove("is-hidden");
     notesEditorEl.empty();
     const ta = notesEditorEl.createEl("textarea", {cls:"csv-notes-textarea"});
     ta.value = (notesCol ? row[notesCol] : "") ?? "";
     ta.addEventListener("click", e => e.stopPropagation());
     ta.addEventListener("mousedown", e => e.stopPropagation());
-    ta.addEventListener("input", () => { ta.style.height="auto"; ta.style.height=ta.scrollHeight+"px"; });
+    ta.addEventListener("input", () => { ta.style.removeProperty("height"); ta.style.height=ta.scrollHeight+"px"; });
     // One close per open: Escape discards (closes with the original text) and
     // the hide triggers a blur, which must not commit a second time — without
     // the guard, Escape saved the edit anyway via the follow-up blur.
@@ -259,8 +258,8 @@ function renderKanbanCard(view: CardView, container: HTMLElement, row: CSVRow, s
     // Size to content after a frame. Reading scrollHeight inline (before
     // layout) returns ~0, which made the height clamp to the 120 px floor
     // regardless of how long the note actually is.
-    requestAnimationFrame(() => {
-      ta.style.height = "auto";
+    window.requestAnimationFrame(() => {
+      ta.style.removeProperty("height");
       ta.style.height = Math.max(120, ta.scrollHeight) + "px";
     });
   };
@@ -269,18 +268,18 @@ function renderKanbanCard(view: CardView, container: HTMLElement, row: CSVRow, s
     // Only dirty the file on a real change — open-then-close shouldn't queue
     // a vault write (and the sync churn that follows).
     if (notesCol && newVal !== (row[notesCol] ?? "")) { row[notesCol]=newVal; view.scheduleSave(); }
-    notesEditorEl.style.display = "none";
-    notesPreviewEl.style.display = "";
+    notesEditorEl.classList.add("is-hidden");
+    notesPreviewEl.classList.remove("is-hidden");
     if (newVal.trim()) {
       const plain = newVal.replace(/#{1,6}\s/g,"").replace(/[*_>`]/g,"").replace(/\n+/g," ").trim();
       notesPreviewEl.setText(plain.slice(0,120) + (plain.length > 120 ? "…" : ""));
       notesPreviewEl.removeClass("csv-kanban-notes-preview--empty");
       notesPreviewEl.title = "Click to edit";
     } else {
-      // Restore the "+ Add note" placeholder rather than leaving an empty,
+      // Restore the "+ add note" placeholder rather than leaving an empty,
       // invisible click target. Matches initial render exactly.
       notesPreviewEl.addClass("csv-kanban-notes-preview--empty");
-      notesPreviewEl.setText(notesCol ? "+ Add note" : "");
+      notesPreviewEl.setText(notesCol ? "+ add note" : "");
       notesPreviewEl.removeAttribute("title");
     }
     // Restore scroll position after the DOM settles
@@ -288,15 +287,15 @@ function renderKanbanCard(view: CardView, container: HTMLElement, row: CSVRow, s
     if (contentArea) {
       contentArea.scrollLeft = scrollLeft;
       contentArea.scrollTop = scrollTop;
-      requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
         contentArea.scrollLeft = scrollLeft;
         contentArea.scrollTop = scrollTop;
-        requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
           contentArea.scrollLeft = scrollLeft;
           contentArea.scrollTop = scrollTop;
         });
       });
-      setTimeout(() => {
+      window.setTimeout(() => {
         contentArea.scrollLeft = scrollLeft;
         contentArea.scrollTop = scrollTop;
       }, 50);

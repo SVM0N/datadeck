@@ -12,5 +12,5 @@
     "declaration": false,
     "noEmit": true
   },
-  "include": ["main.ts"]
+  "include": ["main.ts", "svg.d.ts"]
 }

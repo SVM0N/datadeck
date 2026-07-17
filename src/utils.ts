@@ -336,8 +336,6 @@ export function showSelectPicker(
   // for backward compatibility.
   document.body.querySelectorAll(".csv-select-picker").forEach(el => el.remove());
   const picker = document.body.createDiv({ cls: "csv-select-picker" });
-  picker.style.position = "fixed";
-  picker.style.zIndex = "9999";
 
   // Anchor below the chip by default, but flip above when there isn't room
   // below — keeps the dropdown inside the viewport on the bottom edge.
@@ -481,7 +479,7 @@ export function showSelectPicker(
   // and nothing happens. On desktop the scroll/resize dismissal genuinely
   // fixes the picker-floating-detached-from-anchor case, so keep it there.
   const isTouch = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
-  setTimeout(() => {
+  window.setTimeout(() => {
     document.addEventListener("mousedown", onOutside);
     if (!isTouch) {
       window.addEventListener("scroll", onScroll, true);

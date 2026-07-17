@@ -27,7 +27,7 @@ async function ankiInvoke(action: string, params: Record<string, unknown>): Prom
       body: JSON.stringify({ action, version: ANKI_CONNECT_VERSION, params }),
       throw: false,
     });
-  } catch (e) {
+  } catch {
     // requestUrl rejects on connection refused — Anki closed or AnkiConnect
     // not installed. Rethrow with a message the user can act on.
     throw new Error("Couldn't reach Anki. Is the desktop app open with the AnkiConnect add-on installed?");

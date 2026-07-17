@@ -101,15 +101,15 @@ export function renderTable(view: CardView, container: HTMLElement): void {
     const at = tr.createEl("td",{cls:"csv-table-action"});
     const hasFile = view.notesFileExists(row);
     at.createEl("button",{cls:`csv-table-notes-btn ${hasFile?"exists":""}`,text:hasFile?"📄":"✚",title:hasFile?"Open notes":"Create notes"})
-      .addEventListener("click",()=>view.openOrCreateNotes(row));
-    at.createEl("button",{cls:"csv-table-del-btn",text:"✕",title:"Delete row (Undo available)"})
+      .addEventListener("click",()=>void view.openOrCreateNotes(row));
+    at.createEl("button",{cls:"csv-table-del-btn",text:"✕",title:"Delete row (undo available)"})
       .addEventListener("click",()=>view.deleteWithUndo(row));
   });
   // Detect overflowing cells in one rAF instead of one per row. Single
   // querySelectorAll, single forced-layout batch — orders of magnitude
   // cheaper than per-row rAF on big files. Skipped entirely on touch.
   if (!isTouch) {
-    requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
       tbody.querySelectorAll<HTMLElement>("td:not(.csv-table-notes-cell):not(.csv-table-action)").forEach(cell => {
         if (cell.scrollHeight > cell.clientHeight + 1) cell.addClass("csv-cell--clipped");
       });

@@ -54,7 +54,7 @@ const MODE_LABELS: { id: InlineMode; label: string }[] = [
  * with a stub vault in the smoke tests (cross-bundle instanceof is unreliable).
  */
 function asFile(f: unknown): TFile | null {
-  return f && typeof f === "object" && "basename" in (f as object) ? (f as TFile) : null;
+  return f && typeof f === "object" && "basename" in (f) ? (f as TFile) : null;
 }
 
 interface BlockOptions {
@@ -149,33 +149,35 @@ export class InlineCardHost extends MarkdownRenderChild {
   // isn't a structural CardView, so the cast is explicit and centralized here.
   private get asView(): CardView { return this as unknown as CardView; }
 
-  async onload(): Promise<void> {
+  onload(): void {
     this.containerEl.addClass("csv-inline-view");
     if (!this.opts.file) {
       this.renderError("No file specified. Use: file: yourfile.csv");
       return;
     }
-    if (!(await this.reload())) return;
-    this.renderView();
-
-    // Re-sync when the source file changes underneath us (edited in a .csv
-    // tab, another csv-view block, or external sync). Skip our own writes.
-    this.registerEvent(this.app.vault.on("modify", async (f) => {
-      if (!this.file || f.path !== this.file.path) return;
-      const text = await this.app.vault.read(this.file);
-      if (text === this.lastWritten) return; // our own save — already rendered
-      // Accept the external version as the new sync anchor — without this,
-      // every save after an external change false-flagged a conflict.
-      this.lastWritten = text;
-      const parsed = parseCSV(text);
-      this.headers = parsed.headers;
-      this.rows = parsed.rows;
+    void (async () => {
+      if (!(await this.reload())) return;
       this.renderView();
-    }));
-    // A rename of the source file invalidates our cached handle.
-    this.registerEvent(this.app.vault.on("rename", (f, oldPath) => {
-      if (this.file && oldPath === this.file.path) this.file = asFile(f);
-    }));
+
+      // Re-sync when the source file changes underneath us (edited in a .csv
+      // tab, another csv-view block, or external sync). Skip our own writes.
+      this.registerEvent(this.app.vault.on("modify", async (f) => {
+        if (!this.file || f.path !== this.file.path) return;
+        const text = await this.app.vault.read(this.file);
+        if (text === this.lastWritten) return; // our own save — already rendered
+        // Accept the external version as the new sync anchor — without this,
+        // every save after an external change false-flagged a conflict.
+        this.lastWritten = text;
+        const parsed = parseCSV(text);
+        this.headers = parsed.headers;
+        this.rows = parsed.rows;
+        this.renderView();
+      }));
+      // A rename of the source file invalidates our cached handle.
+      this.registerEvent(this.app.vault.on("rename", (f, oldPath) => {
+        if (this.file && oldPath === this.file.path) this.file = asFile(f);
+      }));
+    })();
   }
 
   onunload(): void {
@@ -426,7 +428,7 @@ export class InlineCardHost extends MarkdownRenderChild {
     this.scheduleSave();
     this.renderView();
     const title = this.getTitle(row) || "entry";
-    const frag = document.createDocumentFragment();
+    const frag = createFragment();
     frag.createSpan({ text: `Deleted “${title}”. ` });
     const undoBtn = frag.createEl("button", { text: "Undo", cls: "csv-notice-undo" });
     const notice = new Notice(frag, 6000);
@@ -443,7 +445,7 @@ export class InlineCardHost extends MarkdownRenderChild {
 
   openRowContextMenu(row: CSVRow, e: MouseEvent): void {
     const menu = new Menu();
-    menu.addItem(i => i.setTitle("Open / Create Notes file").setIcon("file-text").onClick(() => void this.openOrCreateNotes(row)));
+    menu.addItem(i => i.setTitle("Open / create notes file").setIcon("file-text").onClick(() => void this.openOrCreateNotes(row)));
     // Always offered — the expander edits every structured field; on files
     // without a notes column it simply omits the notes editor.
     menu.addItem(i => i.setTitle("Open entry").setIcon("maximize").onClick(() => this.openNoteExpander(row, this.getNotesCol() ?? "")));
@@ -547,7 +549,7 @@ export class InlineCardHost extends MarkdownRenderChild {
     if (this.rows.length === 0) {
       const wrap = content.createDiv({ cls: "csv-empty-state" });
       wrap.createEl("p", { text: "No entries yet." });
-      wrap.createEl("button", { cls: "csv-empty-state-action", text: "+ Add the first entry" })
+      wrap.createEl("button", { cls: "csv-empty-state-action", text: "+ add the first entry" })
         .addEventListener("click", () => this.openAddModal());
       return;
     }
@@ -588,7 +590,7 @@ export class InlineCardHost extends MarkdownRenderChild {
       debounce = window.setTimeout(() => { debounce = null; this.renderView(true); }, 120);
     });
 
-    ctrl.createEl("button", { cls: "csv-add-btn", text: "+ Add" }).addEventListener("click", () => this.openAddModal());
+    ctrl.createEl("button", { cls: "csv-add-btn", text: "+ add" }).addEventListener("click", () => this.openAddModal());
   }
 }
 

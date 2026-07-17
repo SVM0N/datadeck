@@ -57,8 +57,8 @@ export interface LinearFit { slope: number; intercept: number; r2: number; }
 export function linearFit(pts: { x: number; y: number }[]): LinearFit | null {
   const n = pts.length;
   if (n < 2) return null;
-  let sx = 0, sy = 0, sxx = 0, sxy = 0, syy = 0;
-  for (const p of pts) { sx += p.x; sy += p.y; sxx += p.x * p.x; sxy += p.x * p.y; syy += p.y * p.y; }
+  let sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (const p of pts) { sx += p.x; sy += p.y; sxx += p.x * p.x; sxy += p.x * p.y; }
   const denom = n * sxx - sx * sx;
   if (denom === 0) return null;
   const slope = (n * sxy - sx * sy) / denom;
@@ -391,7 +391,7 @@ export function buildChartConfig(spec: ChartSpec, colors: ChartColors): BuiltCha
           },
         },
       },
-    } as ChartConfiguration["options"],
+    },
   };
   return { config, fitText, formulaError };
 }
@@ -569,7 +569,7 @@ export function buildBarConfig(data: BarData, xLabel: string, yLabel: string, co
       plugins: {
         legend: { display: multi, labels: { color: colors.muted, boxWidth: 12 } },
       },
-    } as ChartConfiguration["options"],
+    },
   };
 }
 

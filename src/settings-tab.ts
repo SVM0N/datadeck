@@ -12,14 +12,13 @@ export class CardViewSettingTab extends PluginSettingTab {
   constructor(app: App, plugin: CardViewPlugin){super(app,plugin); this.plugin=plugin;}
   display(): void {
     const {containerEl}=this; containerEl.empty();
-    containerEl.createEl("h2",{text:"DataDeck"});
     new Setting(containerEl).setName("Default view mode")
       .addDropdown(d=>d.addOption("kanban-genre","Kanban").addOption("table","Table")
         .setValue(this.plugin.settings.defaultMode)
         .onChange(async v=>{ this.plugin.settings.defaultMode=v as ViewMode; await this.plugin.saveSettings(); }));
     new Setting(containerEl).setName("Status column name")
       .addText(t=>t.setValue(this.plugin.settings.statusColumn).onChange(async v=>{ this.plugin.settings.statusColumn=v; await this.plugin.saveSettings(); }));
-    new Setting(containerEl).setName("Category/Genre column name")
+    new Setting(containerEl).setName("Category/genre column name")
       .addText(t=>t.setValue(this.plugin.settings.categoryColumn).onChange(async v=>{ this.plugin.settings.categoryColumn=v; await this.plugin.saveSettings(); }));
     new Setting(containerEl).setName("Notes column names").setDesc("Comma-separated.")
       .addText(t=>t.setValue(this.plugin.settings.notesColumns.join(", ")).onChange(async v=>{ this.plugin.settings.notesColumns=v.split(",").map(s=>s.trim()); await this.plugin.saveSettings(); }));
@@ -33,7 +32,7 @@ export class CardViewSettingTab extends PluginSettingTab {
       .setDesc("Show residency / tax day-gauges in the travel view.")
       .addToggle(t=>t.setValue(this.plugin.settings.showResidency!==false).onChange(async v=>{ this.plugin.settings.showResidency=v; await this.plugin.saveSettings(); }));
 
-    containerEl.createEl("h3",{text:"Residency rules"});
+    new Setting(containerEl).setName("Residency rules").setHeading();
     containerEl.createEl("p",{cls:"setting-item-description",text:"Each rule counts days in the listed countries within the window, minus exempt visa rows, against the threshold. Counts confirmed trips only. Indicators, not legal/tax advice."});
     const rrWrap = containerEl.createDiv({cls:"csv-rr-wrap"});
     this.renderResidencyRules(rrWrap);
@@ -52,7 +51,9 @@ export class CardViewSettingTab extends PluginSettingTab {
       label.addEventListener("input", () => { rule.label = label.value; save(); });
       const del = head.createEl("button", { cls: "csv-rr-del", text: "✕" });
       del.setAttr("aria-label", "Remove rule");
-      del.addEventListener("click", async () => { rules.splice(i, 1); await this.plugin.saveSettings(); this.renderResidencyRules(wrap); });
+      del.addEventListener("click", () => {
+        void (async () => { rules.splice(i, 1); await this.plugin.saveSettings(); this.renderResidencyRules(wrap); })();
+      });
 
       const grid = card.createDiv({ cls: "csv-rr-grid" });
       const field = (lbl: string, value: string, onChange: (v: string) => void, ph = "") => {
@@ -89,10 +90,12 @@ export class CardViewSettingTab extends PluginSettingTab {
     });
 
     const btns = wrap.createDiv({ cls: "csv-rr-btns" });
-    btns.createEl("button", { cls: "csv-rr-add", text: "+ Add rule" }).addEventListener("click", async () => {
-      rules.push({ label: "New rule", scope: { countries: [] }, window: { type: "calendar-year" }, threshold: 183 });
-      await this.plugin.saveSettings();
-      this.renderResidencyRules(wrap);
+    btns.createEl("button", { cls: "csv-rr-add", text: "+ add rule" }).addEventListener("click", () => {
+      void (async () => {
+        rules.push({ label: "New rule", scope: { countries: [] }, window: { type: "calendar-year" }, threshold: 183 });
+        await this.plugin.saveSettings();
+        this.renderResidencyRules(wrap);
+      })();
     });
   }
 }

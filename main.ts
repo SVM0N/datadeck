@@ -1,5 +1,4 @@
 import {
-  App,
   Plugin,
   FileView,
   WorkspaceLeaf,
@@ -19,9 +18,9 @@ import type { Chart as ChartType } from "chart.js";
 
 // Import from src modules
 import { CSVRow, ViewMode, FileConfig, CardViewSettings, DEFAULT_SETTINGS, CARD_VIEW_TYPE } from "./src/types";
-import { sanitizeFilename, tagify, titleCase, formatRatingForDisplay, showSelectPicker, parseCSV, migrateFileConfigKey, sortRowsByColumn, isMultiValueColName, IMAGE_COL_ALIASES, TITLE_COL_ALIASES, CATEGORY_COL_ALIASES, STATUS_COL_ALIASES, NOTES_COL_ALIASES, looksBoolean, looksCategorical, isTruthyVal, stashSyncConflict } from "./src/utils";
+import { sanitizeFilename, tagify, showSelectPicker, parseCSV, migrateFileConfigKey, sortRowsByColumn, isMultiValueColName, IMAGE_COL_ALIASES, TITLE_COL_ALIASES, CATEGORY_COL_ALIASES, STATUS_COL_ALIASES, NOTES_COL_ALIASES, looksBoolean, looksCategorical, isTruthyVal, stashSyncConflict } from "./src/utils";
 import { isDateCol } from "./src/field-types";
-import { AddEntryModal, NoteExpanderModal, FileConfigModal, SearchModal, PromptModal } from "./src/modals";
+import { AddEntryModal, NoteExpanderModal, PromptModal } from "./src/modals";
 import { renderTravel } from "./src/travel-view";
 import { CardViewSettingTab } from "./src/settings-tab";
 import { renderAddEntryForm } from "./src/add-entry-form";
@@ -38,16 +37,7 @@ import { renderTasks, hasTaskColumns, taskProjectCol, taskTypeCol, taskPriorityC
 import { registerCsvViewBlock } from "./src/inline-view";
 import { registerCsvChartBlock } from "./src/chart-block";
 import { registerCsvTasksBlock } from "./src/tasks-block";
-
-// World-map SVG asset, loaded lazily from the plugin dir and cached for the
-// session (undefined = not yet read, null = read failed/missing).
-let worldMapSvgCache: string | null | undefined = undefined;
-
-// Injected by esbuild at build time (see esbuild.config.mjs). Surfaced via
-// the ⋯ menu so the user can confirm which build is actually loaded —
-// handy on mobile where sync of the deployed bundle can lag.
-declare const __BUILD_TIME__: string;
-
+import worldMapSvg from "./world-map.svg";
 
 // ─── View ────────────────────────────────────────────────────────────────────
 
@@ -165,7 +155,7 @@ export class CardView extends FileView {
 
   scheduleSave(): void {
     if (this.saveTimer) window.clearTimeout(this.saveTimer);
-    this.saveTimer = window.setTimeout(() => this.doSave(), 600);
+    this.saveTimer = window.setTimeout(() => { void this.doSave(); }, 600);
   }
 
   private async doSave(): Promise<void> {
@@ -406,7 +396,7 @@ export class CardView extends FileView {
     this.renderViewPreservingScroll();
 
     const title = this.getTitle(row) || "entry";
-    const frag = document.createDocumentFragment();
+    const frag = createFragment();
     frag.createSpan({ text: `Deleted “${title}”. ` });
     const undoBtn = frag.createEl("button", { text: "Undo", cls: "csv-notice-undo" });
     const notice = new Notice(frag, 6000);
@@ -433,7 +423,7 @@ export class CardView extends FileView {
    */
   openRowContextMenu(row: CSVRow, e: MouseEvent): void {
     const menu = new Menu();
-    menu.addItem(i => i.setTitle("Open / Create Notes file").setIcon("file-text").onClick(() => this.openOrCreateNotes(row)));
+    menu.addItem(i => i.setTitle("Open / create notes file").setIcon("file-text").onClick(() => this.openOrCreateNotes(row)));
     // Always offered — the expander edits every structured field; on files
     // without a notes column it simply omits the notes editor.
     menu.addItem(i => i.setTitle("Open entry").setIcon("maximize").onClick(() => this.openNoteExpander(row, this.getNotesCol() ?? "")));
@@ -488,7 +478,7 @@ export class CardView extends FileView {
       file = await this.app.vault.create(path,content);
       new Notice(`Created: ${file.name}`);
     }
-    await this.app.workspace.getLeaf("tab").openFile(file as TFile);
+    await this.app.workspace.getLeaf("tab").openFile(file);
   }
 
   openNoteExpander(row: CSVRow, notesCol: string): void {
@@ -567,11 +557,11 @@ export class CardView extends FileView {
       });
     };
     restore();
-    requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
       restore();
-      requestAnimationFrame(restore);
+      window.requestAnimationFrame(restore);
     });
-    setTimeout(restore, 50);
+    window.setTimeout(restore, 50);
   }
 
   openAddModal(): void {
@@ -663,7 +653,7 @@ export class CardView extends FileView {
       // a new xlsx in Numbers/Excel and there's nothing inside yet).
       const wrap = content.createDiv({ cls: "csv-empty-state csv-empty-state--big" });
       wrap.createEl("h3", { text: "This file is empty" });
-      wrap.createEl("p", { text: "Add a header row in your spreadsheet app, then come back — or click + Add in the toolbar to start fresh." });
+      wrap.createEl("p", { text: "Add a header row in your spreadsheet app, then come back — or click + add in the toolbar to start fresh." });
       return;
     }
     if (this.rows.length === 0) {
@@ -672,7 +662,7 @@ export class CardView extends FileView {
       // "is this broken?" rather than "I haven't added anything yet."
       const wrap = content.createDiv({ cls: "csv-empty-state csv-empty-state--big" });
       wrap.createEl("h3", { text: "No entries yet" });
-      const addBtn = wrap.createEl("button", { cls: "csv-empty-state-action", text: "+ Add the first entry" });
+      const addBtn = wrap.createEl("button", { cls: "csv-empty-state-action", text: "+ add the first entry" });
       addBtn.addEventListener("click", () => this.openAddModal());
       wrap.createEl("p", { cls: "csv-empty-state-hint", text: `${this.headers.length} column${this.headers.length === 1 ? "" : "s"} detected: ${this.headers.slice(0, 5).join(", ")}${this.headers.length > 5 ? "…" : ""}` });
       return;
@@ -775,21 +765,14 @@ export class CardView extends FileView {
   }
 
   /**
-   * Load the world-map SVG shipped alongside the plugin. Cached at module
-   * level so it's read once per session (it's ~110 KB). Kept out of the JS
-   * bundle deliberately — inlining it would only shrink the bundle by
-   * ~12 KB, not worth the size/complexity tradeoff. Returns null if the
-   * asset is missing.
+   * World-map SVG for the travel view. Inlined into the bundle at build
+   * time (esbuild text loader) rather than read from a separate release
+   * asset — Obsidian's plugin installer only ever downloads main.js,
+   * styles.css, and manifest.json, so a standalone world-map.svg release
+   * file would never reach community-store installs.
    */
   private async loadMapSvg(): Promise<string | null> {
-    if (worldMapSvgCache !== undefined) return worldMapSvgCache;
-    const path = normalizePath(`${this.app.vault.configDir}/plugins/datadeck/world-map.svg`);
-    try {
-      worldMapSvgCache = await this.app.vault.adapter.read(path);
-    } catch (_e) {
-      worldMapSvgCache = null;
-    }
-    return worldMapSvgCache;
+    return worldMapSvg;
   }
 
   // ── Search filtering ─────────────────────────────────────────────────────────
@@ -1168,19 +1151,18 @@ export default class CardViewPlugin extends Plugin {
     // Register csv-refresh code block for manual refresh button
     this.registerMarkdownCodeBlockProcessor("csv-refresh", (source, el, ctx) => {
       const btn = el.createEl("button", {
-        cls: "csv-refresh-btn"
+        cls: "csv-refresh-btn",
+        text: "↻ refresh"
       });
-      btn.innerHTML = "↻ refresh";
-      btn.addEventListener("click", async () => {
-        // Close and reopen the note to force Dataview to re-read CSV
-        const currentPath = ctx.sourcePath;
-        const file = this.app.vault.getAbstractFileByPath(currentPath);
-        if (file instanceof TFile) {
-          const leaf = this.app.workspace.activeLeaf;
-          if (leaf) {
-            await leaf.openFile(file, { state: { mode: "preview" } });
+      btn.addEventListener("click", () => {
+        void (async () => {
+          // Close and reopen the note to force Dataview to re-read CSV
+          const currentPath = ctx.sourcePath;
+          const file = this.app.vault.getAbstractFileByPath(currentPath);
+          if (file instanceof TFile) {
+            await this.app.workspace.getLeaf(false).openFile(file, { state: { mode: "preview" } });
           }
-        }
+        })();
       });
     });
   }
@@ -1198,33 +1180,36 @@ export default class CardViewPlugin extends Plugin {
       tpl.command,
       tpl.defaultName,
       "File name (without .csv)",
-      async (name) => {
-        // Drop into the active file's folder so a tracker lands beside related
-        // notes; fall back to the vault root.
-        const active = this.app.workspace.getActiveFile();
-        const folder = active?.parent && active.parent.path !== "/" ? `${active.parent.path}/` : "";
-        const base = sanitizeFilename(name);
-        let path = normalizePath(`${folder}${base}.csv`);
-        for (let n = 2; this.app.vault.getAbstractFileByPath(path); n++) {
-          path = normalizePath(`${folder}${base} ${n}.csv`);
-        }
-        const file = await this.app.vault.create(path, tpl.headers.join(",") + "\n");
-        // Pin the renderer up front so the file opens in its template's view
-        // even before the user adds a row that would trigger auto-detection.
-        const baseConfig = this.settings.fileConfigs[file.path] || {};
-        this.settings.fileConfigs[file.path] = { ...baseConfig, defaultMode: tpl.mode, ...(tpl.configOverrides || {}) };
-        await this.saveSettings();
-        await this.app.workspace.getLeaf("tab").openFile(file);
-        new Notice(`Created: ${file.name}`);
+      (name) => {
+        void (async () => {
+          // Drop into the active file's folder so a tracker lands beside related
+          // notes; fall back to the vault root.
+          const active = this.app.workspace.getActiveFile();
+          const folder = active?.parent && active.parent.path !== "/" ? `${active.parent.path}/` : "";
+          const base = sanitizeFilename(name);
+          let path = normalizePath(`${folder}${base}.csv`);
+          for (let n = 2; this.app.vault.getAbstractFileByPath(path); n++) {
+            path = normalizePath(`${folder}${base} ${n}.csv`);
+          }
+          const file = await this.app.vault.create(path, tpl.headers.join(",") + "\n");
+          // Pin the renderer up front so the file opens in its template's view
+          // even before the user adds a row that would trigger auto-detection.
+          const baseConfig = this.settings.fileConfigs[file.path] || {};
+          this.settings.fileConfigs[file.path] = { ...baseConfig, defaultMode: tpl.mode, ...(tpl.configOverrides || {}) };
+          await this.saveSettings();
+          await this.app.workspace.getLeaf("tab").openFile(file);
+          new Notice(`Created: ${file.name}`);
+        })();
       }
     ).open();
   }
 
   async loadSettings(): Promise<void> {
-    this.settings=Object.assign({},DEFAULT_SETTINGS,await this.loadData());
+    const saved = await this.loadData() as Partial<CardViewSettings> | null;
+    this.settings=Object.assign({},DEFAULT_SETTINGS,saved);
     // Deep-clone so the in-app editor mutates this file's settings, not the
     // shared DEFAULT_RESIDENCY_RULES constant (a reference when data.json has none).
-    this.settings.residencyRules = JSON.parse(JSON.stringify(this.settings.residencyRules ?? []));
+    this.settings.residencyRules = JSON.parse(JSON.stringify(this.settings.residencyRules ?? [])) as CardViewSettings["residencyRules"];
   }
   async saveSettings(): Promise<void> { await this.saveData(this.settings); }
 }

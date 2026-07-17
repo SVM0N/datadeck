@@ -117,18 +117,18 @@ export async function renderDashboard(view: CardView, container: HTMLElement): P
   // ── Today's Habits ────────────────────────────────────────────────────────
   if (currentRow) {
     const habitsSection = container.createDiv({ cls: "csv-dash-habits" });
-    habitsSection.createEl("h3", { text: view.selectedDate === today ? "Today" : view.selectedDate!, cls: "csv-dash-section-title" });
+    habitsSection.createEl("h3", { text: view.selectedDate === today ? "Today" : view.selectedDate, cls: "csv-dash-section-title" });
 
     const habitsGrid = habitsSection.createDiv({ cls: "csv-dash-habits-grid" });
 
     habitCols.forEach(h => {
-      const isChecked = view.isTruthy(currentRow![h]);
+      const isChecked = view.isTruthy(currentRow[h]);
       const habitEl = habitsGrid.createDiv({ cls: `csv-dash-habit ${isChecked ? "checked" : ""}` });
       const checkbox = habitEl.createEl("button", { cls: "csv-dash-habit-check", text: isChecked ? "●" : "○" });
       habitEl.createSpan({ cls: "csv-dash-habit-label", text: h });
 
       checkbox.addEventListener("click", () => {
-        currentRow![h] = isChecked ? "0" : "1";
+        currentRow[h] = isChecked ? "0" : "1";
         view.scheduleSave();
         // Toggling a habit on the current day shouldn't reset dashboard
         // scroll — the user may have been looking at habit stats below
@@ -138,7 +138,7 @@ export async function renderDashboard(view: CardView, container: HTMLElement): P
     });
 
     // Habits done count
-    const doneCount = habitCols.filter(h => view.isTruthy(currentRow![h])).length;
+    const doneCount = habitCols.filter(h => view.isTruthy(currentRow[h])).length;
     habitsSection.createDiv({ cls: "csv-dash-habits-count", text: `${doneCount} of ${habitCols.length} complete` });
 
     // Notes preview
@@ -269,7 +269,19 @@ export async function renderDashboard(view: CardView, container: HTMLElement): P
 
   // Format stats like Dataview: "105 days logged · 2.0 avg/day · 0 perfect days · current streak 8d · best streak 90d"
   const statsBar = statsSection.createDiv({ cls: "csv-dash-stats-bar" });
-  statsBar.innerHTML = `<strong>${totalDays}</strong> days logged · <strong>${avgPerDay}</strong> avg/day · <strong>${perfectDays}</strong> perfect days · current streak <strong>${currentStreak}d</strong> · best streak <strong>${bestStreak}d</strong>`;
+  const addStat = (value: string, label: string) => {
+    statsBar.createEl("strong", { text: value });
+    statsBar.appendText(` ${label}`);
+  };
+  addStat(String(totalDays), "days logged");
+  statsBar.appendText(" · ");
+  addStat(String(avgPerDay), "avg/day");
+  statsBar.appendText(" · ");
+  addStat(String(perfectDays), "perfect days");
+  statsBar.appendText(" · current streak ");
+  statsBar.createEl("strong", { text: `${currentStreak}d` });
+  statsBar.appendText(" · best streak ");
+  statsBar.createEl("strong", { text: `${bestStreak}d` });
 
   // ── Per-habit cards ───────────────────────────────────────────────────────
   const cardsSection = container.createDiv({ cls: "csv-dash-cards-section" });
@@ -495,5 +507,9 @@ function renderHabitTimeline(view: CardView, container: HTMLElement, sortedRows:
   }
 
   const statsEl = timelineSection.createDiv({ cls: "csv-dash-timeline-stats" });
-  statsEl.innerHTML = `<strong>${doneDays}</strong> of ${totalEntries} in ${view.timelineYear} · current streak <strong>${habitStreak}d</strong> · best streak <strong>${habitBestStreak}d</strong>`;
+  statsEl.createEl("strong", { text: String(doneDays) });
+  statsEl.appendText(` of ${totalEntries} in ${view.timelineYear} · current streak `);
+  statsEl.createEl("strong", { text: `${habitStreak}d` });
+  statsEl.appendText(" · best streak ");
+  statsEl.createEl("strong", { text: `${habitBestStreak}d` });
 }

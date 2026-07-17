@@ -24,6 +24,7 @@ const buildOptions = {
   sourcemap: isWatch ? "inline" : false,
   minify: !isWatch,
   logLevel: "info",
+  loader: { ".svg": "text" },
   define: {
     __BUILD_TIME__: JSON.stringify(buildTime),
   },

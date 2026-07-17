@@ -20,7 +20,7 @@ import { App, TFile, MarkdownPostProcessorContext } from "obsidian";
  * the obsidian stub, which breaks cross-bundle instanceof identity.
  */
 function asFile(f: unknown): TFile | null {
-  return f && typeof f === "object" && "basename" in (f as object) ? (f as TFile) : null;
+  return f && typeof f === "object" && "basename" in (f) ? (f as TFile) : null;
 }
 import { CSVRow } from "./types";
 import { parseCSV, resolvePath } from "./utils";
@@ -52,7 +52,7 @@ export async function renderRandomCard(app: App, source: string, el: HTMLElement
     headers = parsed.headers;
     rows = parsed.rows;
   } catch (e) {
-    el.createEl("p", { text: `Error reading file: ${e}`, cls: "csv-add-error" });
+    el.createEl("p", { text: `Error reading file: ${e instanceof Error ? e.message : String(e)}`, cls: "csv-add-error" });
     return;
   }
   if (!rows.length) {

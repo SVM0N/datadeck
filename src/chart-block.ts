@@ -86,7 +86,7 @@ function parseBlockSource(source: string): ChartBlockOptions {
 
 /** Duck-typed TFile check — mirrors inline-view.ts (cross-bundle instanceof is unreliable). */
 function asFile(f: unknown): TFile | null {
-  return f && typeof f === "object" && "basename" in (f as object) ? (f as TFile) : null;
+  return f && typeof f === "object" && "basename" in (f) ? (f as TFile) : null;
 }
 
 function parseIsoDate(s: string): Date | null {
@@ -106,17 +106,19 @@ class ChartBlock extends MarkdownRenderChild {
     super(containerEl);
   }
 
-  async onload(): Promise<void> {
+  onload(): void {
     this.containerEl.addClass("csv-chart-block");
-    await this.render();
-    if (this.opts.file) {
-      this.registerEvent(this.app.vault.on("modify", (f) => {
-        if (f.path === this.opts.file) void this.render();
-      }));
-      this.registerEvent(this.app.vault.on("rename", (f, oldPath) => {
-        if (oldPath === this.opts.file) this.opts.file = f.path;
-      }));
-    }
+    void (async () => {
+      await this.render();
+      if (this.opts.file) {
+        this.registerEvent(this.app.vault.on("modify", (f) => {
+          if (f.path === this.opts.file) void this.render();
+        }));
+        this.registerEvent(this.app.vault.on("rename", (f, oldPath) => {
+          if (oldPath === this.opts.file) this.opts.file = f.path;
+        }));
+      }
+    })();
   }
 
   onunload(): void {

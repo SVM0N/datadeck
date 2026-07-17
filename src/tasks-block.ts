@@ -88,7 +88,7 @@ export function buildAggregate(sources: AggSource[]): Aggregate {
     src.rows.forEach(srcRow => {
       const canon: CSVRow = {};
       for (const col of CANON) {
-        canon[col] = map[col] ? (srcRow[map[col] as string] ?? "") : "";
+        canon[col] = map[col] ? (srcRow[map[col]] ?? "") : "";
       }
       if (!map.Project) canon.Project = src.basename;
       rows.push(canon);
@@ -123,7 +123,7 @@ function parseBlockSource(source: string): TasksBlockOptions {
 }
 
 function asFile(f: unknown): TFile | null {
-  return f && typeof f === "object" && "basename" in (f as object) ? (f as TFile) : null;
+  return f && typeof f === "object" && "basename" in (f) ? (f as TFile) : null;
 }
 
 // ── The block host ───────────────────────────────────────────────────────────
@@ -162,29 +162,31 @@ class TasksBlockHost extends MarkdownRenderChild {
   get contentEl(): HTMLElement { return this.containerEl; }
   private get asView(): CardView { return this as unknown as CardView; }
 
-  async onload(): Promise<void> {
+  onload(): void {
     this.containerEl.addClass("csv-inline-view", "csv-tasks-block");
     if (!this.opts.folder && !this.opts.files.length) {
       this.renderError(`Give a "folder:" line ("/" = whole vault) and/or a "files:" list.`);
       return;
     }
-    await this.reload();
-    this.renderView();
-
-    // Re-sync when any source CSV changes underneath us; skip our own saves
-    // (text equality) and mid-edit states (doSave reconciles those).
-    this.registerEvent(this.app.vault.on("modify", async (f) => {
-      const src = this.sources.find(s => s.file.path === f.path);
-      if (!src || this.saveTimer) return;
-      const text = await this.app.vault.read(src.file);
-      if (text === src.lastText) return;
-      src.lastText = text;
-      const parsed = parseCSV(text);
-      src.headers = parsed.headers;
-      src.rows = parsed.rows;
-      this.rebuild();
+    void (async () => {
+      await this.reload();
       this.renderView();
-    }));
+
+      // Re-sync when any source CSV changes underneath us; skip our own saves
+      // (text equality) and mid-edit states (doSave reconciles those).
+      this.registerEvent(this.app.vault.on("modify", async (f) => {
+        const src = this.sources.find(s => s.file.path === f.path);
+        if (!src || this.saveTimer) return;
+        const text = await this.app.vault.read(src.file);
+        if (text === src.lastText) return;
+        src.lastText = text;
+        const parsed = parseCSV(text);
+        src.headers = parsed.headers;
+        src.rows = parsed.rows;
+        this.rebuild();
+        this.renderView();
+      }));
+    })();
   }
 
   onunload(): void {

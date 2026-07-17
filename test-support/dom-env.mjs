@@ -34,6 +34,7 @@ export function setupDom() {
   HE.createDiv = function (opts, cb) { return this.createEl("div", opts, cb); };
   HE.createSpan = function (opts, cb) { return this.createEl("span", opts, cb); };
   HE.setText = function (t) { this.textContent = t == null ? "" : String(t); return this; };
+  HE.appendText = function (t) { this.appendChild(doc.createTextNode(String(t))); return this; };
   HE.empty = function () { while (this.firstChild) this.removeChild(this.firstChild); return this; };
   HE.addClass = function (...c) { this.classList.add(...c.filter(Boolean)); return this; };
   HE.removeClass = function (...c) { this.classList.remove(...c.filter(Boolean)); return this; };
@@ -52,6 +53,7 @@ export function setupDom() {
   globalThis.document = doc;
   globalThis.HTMLElement = window.HTMLElement;
   globalThis.Node = window.Node;
+  globalThis.DOMParser = window.DOMParser;
   globalThis.requestAnimationFrame = globalThis.requestAnimationFrame || ((fn) => setTimeout(() => fn(Date.now()), 0));
   globalThis.matchMedia = globalThis.matchMedia || (() => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
   window.matchMedia = window.matchMedia || globalThis.matchMedia;

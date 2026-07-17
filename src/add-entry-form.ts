@@ -53,7 +53,7 @@ export async function renderAddEntryForm(app: App, source: string, el: HTMLEleme
       headers = parsed.headers;
       rows = parsed.rows;
     } catch (e) {
-      el.createEl("p", { text: `Error reading file: ${e}`, cls: "csv-add-error" });
+      el.createEl("p", { text: `Error reading file: ${e instanceof Error ? e.message : String(e)}`, cls: "csv-add-error" });
       return;
     }
 
@@ -103,25 +103,24 @@ export async function renderAddEntryForm(app: App, source: string, el: HTMLEleme
     // Default-open: the card is visible immediately; tapping × collapses it
     // to the trigger pill, and the pill re-opens it. (One menu, always one tap
     // away in either direction.)
-    const trigger = root.createEl("button", { cls: "csv-add-trigger", text: "+ New entry" });
-    trigger.style.display = "none";
+    const trigger = root.createEl("button", { cls: "csv-add-trigger is-hidden", text: "+ new entry" });
     const card = root.createDiv({ cls: "csv-add-card" });
 
     // Header bar: title + close (×). Re-uses the trigger to collapse.
     const header = card.createDiv({ cls: "csv-add-card-header" });
-    header.createEl("span", { cls: "csv-add-card-title", text: "New entry" });
+    header.createSpan({ cls: "csv-add-card-title", text: "New entry" });
     const closeBtn = header.createEl("button", { cls: "csv-add-card-close", text: "×" });
 
     // Rows live in one grouped list with hairline separators between them.
     const rowsWrap = card.createDiv({ cls: "csv-add-rows" });
 
-    const inputs: Record<string, HTMLInputElement | HTMLSelectElement> = {};
+    const inputs: Record<string, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement> = {};
     const toggleStates: Record<string, boolean> = {};
 
     // Helper: a single row (label on the left, control on the right).
     const makeRow = (h: string, kind: string) => {
       const row = rowsWrap.createDiv({ cls: `csv-add-row csv-add-row-${kind}` });
-      row.createEl("span", { cls: "csv-add-row-label", text: titleCase(h) });
+      row.createSpan({ cls: "csv-add-row-label", text: titleCase(h) });
       return row;
     };
 
@@ -139,7 +138,7 @@ export async function renderAddEntryForm(app: App, source: string, el: HTMLEleme
       const row = makeRow(h, "toggle");
       const switchWrap = row.createEl("label", { cls: "csv-add-switch" });
       const checkbox = switchWrap.createEl("input", { type: "checkbox", cls: "csv-add-switch-input" });
-      switchWrap.createEl("span", { cls: "csv-add-switch-track" });
+      switchWrap.createSpan({ cls: "csv-add-switch-track" });
       checkbox.addEventListener("change", () => { toggleStates[h] = checkbox.checked; });
       inputs[h] = checkbox;
     });
@@ -157,19 +156,18 @@ export async function renderAddEntryForm(app: App, source: string, el: HTMLEleme
         const select = row.createEl("select", { cls: "csv-add-row-control" });
         select.createEl("option", { text: "—", value: "" });
         Array.from(uniqueVals).sort().forEach(v => select.createEl("option", { text: v, value: v }));
-        select.createEl("option", { text: "+ Custom", value: "__custom__" });
+        select.createEl("option", { text: "+ custom", value: "__custom__" });
         // Custom input lives in its own row that appears just below when chosen.
-        const customRow = rowsWrap.createDiv({ cls: "csv-add-row csv-add-row-custom" });
-        customRow.style.display = "none";
+        const customRow = rowsWrap.createDiv({ cls: "csv-add-row csv-add-row-custom is-hidden" });
         const customInput = customRow.createEl("input", { cls: "csv-add-row-control", type: "text", placeholder: `Custom ${titleCase(h).toLowerCase()}` });
         // Keep the custom row visually adjacent to its parent select row.
         rowsWrap.insertBefore(customRow, row.nextSibling);
         select.addEventListener("change", () => {
-          customRow.style.display = select.value === "__custom__" ? "flex" : "none";
+          customRow.classList.toggle("is-hidden", select.value !== "__custom__");
           if (select.value === "__custom__") customInput.focus();
         });
         inputs[h] = select;
-        inputs[`${h}__custom`] = customInput as HTMLInputElement;
+        inputs[`${h}__custom`] = customInput;
       } else {
         inputs[h] = row.createEl("input", { cls: "csv-add-row-control", type: "text", placeholder: titleCase(h) });
       }
@@ -178,8 +176,8 @@ export async function renderAddEntryForm(app: App, source: string, el: HTMLEleme
     // Notes row — full-width textarea, stacked below the inline label.
     notesCols.forEach(h => {
       const row = rowsWrap.createDiv({ cls: "csv-add-row csv-add-row-notes" });
-      row.createEl("span", { cls: "csv-add-row-label", text: titleCase(h) });
-      inputs[h] = row.createEl("textarea", { cls: "csv-add-row-textarea", placeholder: "Optional notes…" }) as any;
+      row.createSpan({ cls: "csv-add-row-label", text: titleCase(h) });
+      inputs[h] = row.createEl("textarea", { cls: "csv-add-row-textarea", placeholder: "Optional notes…" });
     });
 
     // Submit lives inside the card so the whole menu reads as one unit.
@@ -194,7 +192,7 @@ export async function renderAddEntryForm(app: App, source: string, el: HTMLEleme
     //
     // Only runs when the file has a date column (i.e. habit-tracker shape);
     // library/generic dashboards have no date and skip naturally.
-    const titleEl = header.querySelector(".csv-add-card-title") as HTMLElement | null;
+    const titleEl = header.querySelector(".csv-add-card-title");
     const syncFromExisting = (): void => {
       if (!dateCols.length) return;
       const dateInput = inputs[dateCols[0]] as HTMLInputElement | undefined;
@@ -238,7 +236,7 @@ export async function renderAddEntryForm(app: App, source: string, el: HTMLEleme
           if (opt) {
             input.value = val;
             // Hide any custom-row that was previously open.
-            if (customRow) customRow.style.display = "none";
+            if (customRow) customRow.classList.add("is-hidden");
             if (customInput) customInput.value = "";
           } else if (val) {
             // Existing value isn't a known option — show it in the custom
@@ -246,16 +244,16 @@ export async function renderAddEntryForm(app: App, source: string, el: HTMLEleme
             // read as "nothing recorded" even when something was).
             input.value = "__custom__";
             if (customInput) customInput.value = val;
-            if (customRow) customRow.style.display = "flex";
+            if (customRow) customRow.classList.remove("is-hidden");
           } else {
             input.value = "";
-            if (customRow) customRow.style.display = "none";
+            if (customRow) customRow.classList.add("is-hidden");
             if (customInput) customInput.value = "";
           }
-        } else if (input instanceof HTMLTextAreaElement) {
+        } else if (input.instanceOf(HTMLTextAreaElement)) {
           input.value = val;
         } else {
-          (input as HTMLInputElement).value = val;
+          (input).value = val;
         }
       });
     };
@@ -270,28 +268,28 @@ export async function renderAddEntryForm(app: App, source: string, el: HTMLEleme
     // Expand / collapse wiring. Focusing the first text-ish input on open
     // mirrors iOS sheet behaviour where the keyboard comes up immediately.
     const open = () => {
-      card.style.display = "block";
-      trigger.style.display = "none";
-      const first = card.querySelector(".csv-add-row-control") as HTMLElement | null;
+      card.classList.remove("is-hidden");
+      trigger.classList.add("is-hidden");
+      const first = card.querySelector<HTMLElement>(".csv-add-row-control");
       first?.focus();
     };
     const close = () => {
-      card.style.display = "none";
-      trigger.style.display = "";
+      card.classList.add("is-hidden");
+      trigger.classList.remove("is-hidden");
     };
     trigger.addEventListener("click", open);
     closeBtn.addEventListener("click", close);
 
-    submitBtn.addEventListener("click", async () => {
+    const handleSubmit = async () => {
       // Gather values
       const newRow: CSVRow = {};
       headers.forEach(h => {
         if (binaryCols.includes(h)) {
           newRow[h] = toggleStates[h] ? "1" : "0";
-        } else if (inputs[h] instanceof HTMLSelectElement && (inputs[h] as HTMLSelectElement).value === "__custom__") {
+        } else if (inputs[h] instanceof HTMLSelectElement && (inputs[h]).value === "__custom__") {
           newRow[h] = (inputs[`${h}__custom`] as HTMLInputElement)?.value ?? "";
         } else if (inputs[h] instanceof HTMLTextAreaElement) {
-          newRow[h] = (inputs[h] as HTMLTextAreaElement).value;
+          newRow[h] = inputs[h].value;
         } else {
           newRow[h] = (inputs[h] as HTMLInputElement)?.value ?? "";
         }
@@ -313,7 +311,7 @@ export async function renderAddEntryForm(app: App, source: string, el: HTMLEleme
         const text = await app.vault.read(file);
         currentRows = parseCSV(text).rows;
       } catch (e) {
-        new Notice(`Error reading file: ${e}`);
+        new Notice(`Error reading file: ${e instanceof Error ? e.message : String(e)}`);
         return;
       }
 
@@ -375,18 +373,18 @@ export async function renderAddEntryForm(app: App, source: string, el: HTMLEleme
             const input = inputs[h];
             if (input instanceof HTMLSelectElement) {
               input.selectedIndex = 0;
-            } else if (input instanceof HTMLTextAreaElement) {
+            } else if (input.instanceOf(HTMLTextAreaElement)) {
               input.value = "";
             } else if (input) {
-              (input as HTMLInputElement).value = "";
+              (input).value = "";
             }
             const customInput = inputs[`${h}__custom`];
             if (customInput) {
               (customInput as HTMLInputElement).value = "";
               // The custom input lives inside a .csv-add-row-custom wrapper —
               // hide the row itself so the layout stays in sync with the select.
-              const customRow = (customInput as HTMLInputElement).closest(".csv-add-row-custom") as HTMLElement | null;
-              if (customRow) customRow.style.display = "none";
+              const customRow = (customInput as HTMLInputElement).closest(".csv-add-row-custom");
+              if (customRow) customRow.classList.add("is-hidden");
             }
           });
         }
@@ -394,17 +392,17 @@ export async function renderAddEntryForm(app: App, source: string, el: HTMLEleme
         // tap away; user can collapse with the × header button when finished.
 
         // Auto-refresh: reopen the note to force Dataview to re-read CSV
-        setTimeout(async () => {
-          const noteFile = app.vault.getAbstractFileByPath(ctx.sourcePath);
-          if (noteFile instanceof TFile) {
-            const leaf = app.workspace.activeLeaf;
-            if (leaf) {
-              await leaf.openFile(noteFile, { state: { mode: "preview" } });
+        window.setTimeout(() => {
+          void (async () => {
+            const noteFile = app.vault.getAbstractFileByPath(ctx.sourcePath);
+            if (noteFile instanceof TFile) {
+              await app.workspace.getLeaf(false).openFile(noteFile, { state: { mode: "preview" } });
             }
-          }
+          })();
         }, 300);
       } catch (e) {
-        new Notice(`Error saving: ${e}`);
+        new Notice(`Error saving: ${e instanceof Error ? e.message : String(e)}`);
       }
-    });
+    };
+    submitBtn.addEventListener("click", () => { void handleSubmit(); });
 }
