@@ -154,6 +154,12 @@ export function renderBudget(view: CardView, container: HTMLElement): void {
 
     const wrapper = details.createDiv({ cls: "csv-tasks-table-wrapper" });
     const table = wrapper.createEl("table", { cls: "csv-tasks-table" });
+    // Without an explicit min-width the table's auto layout squeezes columns
+    // to fit a narrow (mobile) viewport instead of the wrapper scrolling
+    // horizontally — on a phone-width screen that reads as overlapping,
+    // unreadable cells. Same fixed-per-column-type budgeting Tasks uses;
+    // 180 matches .csv-tasks-name-cell's own min-width.
+    table.style.minWidth = `${180 + displayCols.length * 150 + 110}px`;
     const thead = table.createEl("thead").createEl("tr");
     thead.createEl("th", { text: "Item", cls: "csv-tasks-name-cell" });
     displayCols.forEach(h => thead.createEl("th", { text: h, cls: "csv-tasks-generic-cell" }));
