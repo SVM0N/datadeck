@@ -1113,7 +1113,9 @@ export class PromptModal extends Modal {
     private title: string,
     private initial: string,
     private placeholder: string,
-    private onSubmit: (value: string) => void
+    private onSubmit: (value: string) => void,
+    private submitLabel: string = "Create",
+    private inputType: "text" | "number" = "text",
   ) {
     super(app);
   }
@@ -1124,7 +1126,7 @@ export class PromptModal extends Modal {
     contentEl.addClass("csv-add-modal");
     contentEl.createEl("h2", { text: this.title, cls: "csv-modal-title" });
 
-    const input = contentEl.createEl("input", { cls: "csv-modal-field", type: "text" });
+    const input = contentEl.createEl("input", { cls: "csv-modal-field", type: this.inputType });
     input.value = this.initial;
     input.placeholder = this.placeholder;
     // Select the basename so the user can type over the default immediately.
@@ -1142,7 +1144,7 @@ export class PromptModal extends Modal {
 
     const btnRow = contentEl.createDiv({ cls: "csv-modal-btns" });
     btnRow.createEl("button", { text: "Cancel", cls: "csv-modal-cancel" }).addEventListener("click", () => this.close());
-    btnRow.createEl("button", { text: "Create", cls: "csv-modal-submit" }).addEventListener("click", submit);
+    btnRow.createEl("button", { text: this.submitLabel, cls: "csv-modal-submit" }).addEventListener("click", submit);
   }
 
   onClose(): void { this.contentEl.empty(); }

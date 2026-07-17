@@ -1046,19 +1046,25 @@ const FILE_TEMPLATES: FileTemplate[] = [
     id: "budget",
     command: "Create budget file",
     defaultName: "Budget",
-    // Category and Price match CATEGORY_COL_ALIASES/PRICE_COL_ALIASES by
-    // name already (see effectiveGroupCol / hasBudgetColumns) — only Item
-    // needs an explicit titleColumn override, since "Item" isn't one of
-    // TITLE_COL_ALIASES (Title/Name).
-    headers: ["Date", "Item", "Category", "Price", "Notes"],
+    // "Type" (not "Category") and Price match CATEGORY_COL_ALIASES/
+    // PRICE_COL_ALIASES by name already (see effectiveGroupCol /
+    // hasBudgetColumns) — only Item needs an explicit titleColumn override,
+    // since "Item" isn't one of TITLE_COL_ALIASES (Title/Name).
+    // "Category" itself is deliberately avoided: isMultiValueColName's
+    // regex matches singular "category" too (comma-separated Kanban tags),
+    // which routes the Add-entry modal into the multi-value chip picker
+    // instead of a plain single-pick dropdown — wrong for a budget entry,
+    // which belongs to exactly one category. "Type" is the closest alias
+    // that isn't multi-value-matched.
+    headers: ["Date", "Item", "Type", "Price", "Notes"],
     mode: "budget",
     configOverrides: {
       titleColumn: "Item",
-      categoricalColumns: ["Category"],
+      categoricalColumns: ["Type"],
       notesColumn: "Notes",
       // "" is in BOOLEAN_PATTERNS (looksBoolean), so a fresh file with one
-      // row and an empty Category value vacuously auto-detects Category as
-      // a habit/checkbox column — and the Add-entry modal checks isBooleanCol
+      // row and an empty Type value vacuously auto-detects Type as a
+      // habit/checkbox column — and the Add-entry modal checks isBooleanCol
       // before the categorical branch, so it'd render a toggle instead of
       // the dropdown categoricalColumns configures. Pin no habit columns,
       // same fix the "habits" template uses for its own collision.

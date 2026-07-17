@@ -4059,17 +4059,29 @@ select.csv-add-row-control {
 .csv-budget-total-value.is-over { color: var(--csv-red); }
 .csv-budget-total-limit { font-size: 14px; color: var(--csv-text-faint); }
 
-.csv-budget-limit-row { display: flex; align-items: center; gap: 8px; }
+.csv-budget-limit-row { display: flex; align-items: center; gap: 6px; }
 .csv-budget-limit-label { font-size: 12px; color: var(--csv-text-muted); }
-.csv-budget-limit-input {
-  width: 110px;
-  padding: 5px 8px;
+.csv-budget-limit-btn {
+  padding: 5px 10px;
   border: 1px solid var(--csv-border);
   border-radius: var(--csv-radius-sm);
   background: var(--background-modifier-form-field);
   color: var(--csv-text);
   font-size: 13px;
+  cursor: pointer;
 }
+.csv-budget-limit-btn:hover { border-color: var(--csv-accent); }
+.csv-budget-limit-clear {
+  border: none;
+  background: transparent;
+  color: var(--csv-text-faint);
+  font-size: 14px;
+  line-height: 1;
+  padding: 4px 6px;
+  cursor: pointer;
+  border-radius: var(--csv-radius-sm);
+}
+.csv-budget-limit-clear:hover { color: var(--csv-red); background: var(--background-modifier-hover); }
 
 .csv-budget-bar {
   flex: 1 1 160px;
@@ -4111,6 +4123,15 @@ select.csv-add-row-control {
   text-align: right;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+/* Tasks' shared .csv-tasks-table td defaults to vertical-align: top (right
+   for its own often-multi-line rows), but .csv-tasks-name-cell overrides
+   itself to flex/center — a mismatch that reads as "misaligned, too tall"
+   once every Budget row is short, single-line text. Scoped to .csv-budget
+   so Tasks' own table is untouched. */
+.csv-budget .csv-tasks-table td {
+  vertical-align: middle;
 }
 
 @media (max-width: 600px) {

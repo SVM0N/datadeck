@@ -6,7 +6,7 @@
 import { Menu, Notice } from "obsidian";
 import type { CardView } from "../../main";
 import { ViewMode } from "../types";
-import { FileConfigModal, AutoDetectedRoles } from "../modals";
+import { FileConfigModal, AutoDetectedRoles, SearchModal } from "../modals";
 import { syncToAnki, autoAnkiFrontCol } from "./anki";
 import { hasStatsColumns } from "./stats";
 import { hasChartColumns } from "./chart";
@@ -168,11 +168,30 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
     });
     // Active-filter indicator on the toggle (mobile only).
     if (view.searchQuery) searchToggle.addClass("has-query");
+    // Touch devices open SearchModal instead of expanding inline: the main
+    // view (unlike this modal) has no visualViewport keyboard handling, and
+    // iOS collapses it to near-nothing while the inline input is focused —
+    // the user can type but can't see the content area updating (black
+    // screen). SearchModal already solves this (viewport pinning + a
+    // results preview list rendered inside the modal itself) — it just
+    // wasn't wired to a trigger before. Desktop keeps the inline expand;
+    // there's no keyboard there to collapse anything.
+    const isTouch = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
     searchToggle.addEventListener("click", () => {
+      if (isTouch) {
+        const notesCol = view.getNotesCol();
+        new SearchModal(
+          view.app,
+          view.searchQuery,
+          (q) => { view.searchQuery = q; view.renderView(); },
+          () => ({ matched: view.getFilteredRows().length, total: view.rows.length }),
+          () => view.getFilteredRows().map(row => ({ title: view.getTitle(row), subtitle: view.getSubtitle(row) || undefined, row })),
+          (row) => { if (notesCol) view.openNoteExpander(row, notesCol); else void view.openOrCreateNotes(row); },
+        ).open();
+        return;
+      }
       // Expand inline. CSS hides the other toolbar items while expanded
-      // so the input fills the row. The toolbar is in normal flow so
-      // iOS keyboard handling is whatever the WebView does — content
-      // area below shrinks to fit above the keyboard and filters live.
+      // so the input fills the row.
       bar.addClass("csv-toolbar--search-expanded");
       searchInput.focus({ preventScroll: true });
     });

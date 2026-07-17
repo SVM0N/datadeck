@@ -1393,7 +1393,7 @@ function budgetView(rows, cfg = {}, overrides = {}) {
     return null;
   };
   const view = {
-    headers, rows, searchQuery: "",
+    headers, rows, searchQuery: "", app: {},
     fileCfg: cfg, resolveCol,
     getFilteredRows: () => rows,
     saveFileCfg: (c) => { savedCfg = c; view.fileCfg = c; },
@@ -1467,15 +1467,34 @@ await test("budget: total colors blue under the limit, red over it", async () =>
   assert(!noLimit.querySelector(".csv-budget-bar"), "no gauge rendered without a limit");
 });
 
-await test("budget: editing the limit input persists to fileCfg", async () => {
-  const rows = [{ Item: "A", Price: "50" }];
-  const view = budgetView(rows);
+await test("budget: limit button reflects state; clicking it opens a modal (no inline input)", async () => {
+  // The limit editor is a button that opens a PromptModal, not an inline
+  // <input> — the main view has no visualViewport keyboard handling, and
+  // an inline number field there showed a black screen when the keyboard
+  // opened. Clicking must not throw even though the test harness's Modal
+  // stub no-ops .open() (same reason AddEntryModal-style tests call
+  // .onOpen() directly instead of relying on click-through).
+  const noLimitView = budgetView([{ Item: "A", Price: "50" }]);
+  const c1 = document.body.createDiv();
+  renderBudget(noLimitView, c1);
+  assert(!c1.querySelector(".csv-budget-limit-input"), "no inline number input for the limit");
+  const btn = c1.querySelector(".csv-budget-limit-btn");
+  assert(btn.textContent === "No limit set", "button shows the unset state");
+  assert(!c1.querySelector(".csv-budget-limit-clear"), "no clear button when nothing is set");
+  btn.click(); // should not throw
+
+  const withLimitView = budgetView([{ Item: "A", Price: "50" }], { budgetLimit: 200 });
+  const c2 = document.body.createDiv();
+  renderBudget(withLimitView, c2);
+  assert(c2.querySelector(".csv-budget-limit-btn").textContent.includes("200"), "button shows the formatted limit");
+});
+
+await test("budget: clear button removes the limit directly, no modal needed", async () => {
+  const view = budgetView([{ Item: "A", Price: "50" }], { budgetLimit: 200 });
   const c = document.body.createDiv();
   renderBudget(view, c);
-  const input = c.querySelector(".csv-budget-limit-input");
-  input.value = "150";
-  input.dispatchEvent(new window.Event("change", { bubbles: true }));
-  assert(view.getSavedCfg()?.budgetLimit === 150, "typed limit saved to fileCfg");
+  c.querySelector(".csv-budget-limit-clear").click();
+  assert(view.getSavedCfg()?.budgetLimit === undefined, "clear button unsets budgetLimit in fileCfg");
 });
 
 await test("budget: price cells parse currency symbols and thousands separators", async () => {

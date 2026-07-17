@@ -11,6 +11,7 @@ import { PRICE_COL_ALIASES } from "../utils";
 import { parseNumeric } from "./chart";
 import { effectiveGroupCol } from "./kanban";
 import { makeEditable } from "./table";
+import { PromptModal } from "../modals";
 
 const UNCATEGORIZED = "—";
 
@@ -87,23 +88,37 @@ export function renderBudget(view: CardView, container: HTMLElement): void {
   });
   if (hasLimit) totalRow.createSpan({ cls: "csv-budget-total-limit", text: ` / ${fmtMoney(limit)}` });
 
+  // A modal prompt, not an inline <input>: the main view (unlike the note
+  // expander / search modals) has no visualViewport keyboard handling, and
+  // iOS collapses it to near-nothing while a field inside it is focused —
+  // typing into an inline number field here showed a black screen. A
+  // PromptModal sidesteps that entirely (it's not a descendant of the
+  // collapsing view).
   const limitRow = summary.createDiv({ cls: "csv-budget-limit-row" });
   limitRow.createSpan({ cls: "csv-budget-limit-label", text: "Limit" });
-  const limitInput = limitRow.createEl("input", {
-    cls: "csv-budget-limit-input", type: "number",
-    attr: { placeholder: "No limit set", step: "0.01", min: "0" },
-  });
-  if (limit !== undefined) limitInput.value = String(limit);
-  const commitLimit = () => {
-    const raw = limitInput.value.trim();
-    const n = raw === "" ? undefined : parseFloat(raw);
-    const next = n !== undefined && Number.isFinite(n) && n >= 0 ? n : undefined;
+  const setLimit = (next: number | undefined) => {
     if (next === view.fileCfg.budgetLimit) return;
     view.saveFileCfg({ ...view.fileCfg, budgetLimit: next });
     view.renderViewPreservingScroll();
   };
-  limitInput.addEventListener("change", commitLimit);
-  limitInput.addEventListener("keydown", e => { if (e.key === "Enter") limitInput.blur(); });
+  const limitBtn = limitRow.createEl("button", {
+    cls: "csv-budget-limit-btn",
+    text: hasLimit ? fmtMoney(limit) : "No limit set",
+  });
+  limitBtn.addEventListener("click", () => {
+    new PromptModal(
+      view.app, "Set spending limit", limit !== undefined ? String(limit) : "", "e.g. 2000",
+      (value) => {
+        const n = parseFloat(value.trim());
+        if (Number.isFinite(n) && n >= 0) setLimit(n);
+      },
+      "Set", "number",
+    ).open();
+  });
+  if (hasLimit) {
+    const clearBtn = limitRow.createEl("button", { cls: "csv-budget-limit-clear", text: "×", attr: { "aria-label": "Clear limit", title: "Clear limit" } });
+    clearBtn.addEventListener("click", () => setLimit(undefined));
+  }
 
   if (hasLimit) {
     const bar = summary.createDiv({ cls: "csv-budget-bar" });
