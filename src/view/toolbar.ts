@@ -55,6 +55,12 @@ export function availableModes(view: CardView): {id: ViewMode, label: string}[] 
 }
 
 export function renderToolbar(view: CardView, root: HTMLElement): void {
+  // The fresh `bar` below never starts expanded, so `root`'s mirror of that
+  // state (see the search-toggle handler) must reset here too — otherwise a
+  // full re-render while search was expanded (e.g. a command-palette action)
+  // would leave `root` stuck with the class and the "Found X of Y" header
+  // hidden for good.
+  root.removeClass("csv-toolbar--search-expanded");
   const bar = root.createDiv({cls:"csv-toolbar"});
   bar.createDiv({cls:"csv-toolbar-title", text: view.file?.basename??""});
   const ctrl = bar.createDiv({cls:"csv-toolbar-controls"});
@@ -124,6 +130,7 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
       e.preventDefault();
       if (!searchInput.value) {
         bar.removeClass("csv-toolbar--search-expanded");
+        root.removeClass("csv-toolbar--search-expanded");
         searchToggle.removeClass("has-query");
         view.searchQuery = "";
         view.renderView(true);
@@ -191,8 +198,11 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
         return;
       }
       // Expand inline. CSS hides the other toolbar items while expanded
-      // so the input fills the row.
+      // so the input fills the row. Mirrored onto `root` too — the "Found
+      // X of Y" header it hides lives outside the toolbar, and toggling a
+      // class directly beats a `:has()` selector for that lookup.
       bar.addClass("csv-toolbar--search-expanded");
+      root.addClass("csv-toolbar--search-expanded");
       searchInput.focus({ preventScroll: true });
     });
   }

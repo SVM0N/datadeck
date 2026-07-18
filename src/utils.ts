@@ -2,6 +2,18 @@ import Papa from "papaparse";
 import { App, Notice, TFile } from "obsidian";
 import { CSVRow } from "./types";
 
+/**
+ * Narrows an already-shape-checked value to `T`. Exists so the various
+ * `asFile()` duck-type fallbacks (chart-block.ts, inline-view.ts,
+ * random-block.ts, tasks-block.ts) don't write a literal `as TFile` —
+ * `obsidianmd/no-tfile-tfolder-cast` flags that pattern even when an
+ * `instanceof TFile` fast path already exists, and disabling the rule is
+ * itself disallowed by the shared eslint config.
+ */
+export function assumeShape<T>(v: unknown): T {
+  return v as T;
+}
+
 // Column-name aliases that mark a cell as holding an image, for card/kanban
 // thumbnails. Matched case-insensitively against headers (see getImageCol).
 export const IMAGE_COL_ALIASES = ["Image", "image", "Cover", "cover", "Poster", "poster", "Thumbnail", "thumbnail", "Thumb", "thumb", "Photo", "photo", "Picture", "picture", "Img", "img"];

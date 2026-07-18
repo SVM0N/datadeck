@@ -24,7 +24,7 @@ import { App, Menu, MarkdownPostProcessorContext, MarkdownRenderChild, Notice, T
 import Papa from "papaparse";
 import type { CardView } from "../main";
 import { CSVRow, CardViewSettings } from "./types";
-import { parseCSV, resolvePath, sanitizeFilename, stashSyncConflict, TITLE_COL_ALIASES, NOTES_COL_ALIASES } from "./utils";
+import { parseCSV, resolvePath, sanitizeFilename, stashSyncConflict, TITLE_COL_ALIASES, NOTES_COL_ALIASES, assumeShape } from "./utils";
 import { NoteExpanderModal } from "./modals";
 import { renderTasks, hasTaskColumns } from "./view/tasks";
 
@@ -122,8 +122,10 @@ function parseBlockSource(source: string): TasksBlockOptions {
   };
 }
 
+/** `instanceof TFile` fast path, falling back to duck-typing for stub-vault smoke tests (cross-bundle instanceof identity breaks there). */
 function asFile(f: unknown): TFile | null {
-  return f && typeof f === "object" && "basename" in (f) ? (f as TFile) : null;
+  if (f instanceof TFile) return f;
+  return f && typeof f === "object" && "basename" in (f) ? assumeShape<TFile>(f) : null;
 }
 
 // ── The block host ───────────────────────────────────────────────────────────

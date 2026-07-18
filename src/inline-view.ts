@@ -33,7 +33,7 @@ import {
 import Papa from "papaparse";
 import type { CardView } from "../main";
 import { CSVRow, ViewMode, FileConfig, CardViewSettings } from "./types";
-import { parseCSV, resolvePath, sanitizeFilename, showSelectPicker, stashSyncConflict, IMAGE_COL_ALIASES, TITLE_COL_ALIASES, CATEGORY_COL_ALIASES, STATUS_COL_ALIASES, NOTES_COL_ALIASES, looksBoolean, looksCategorical, isMultiValueColName } from "./utils";
+import { parseCSV, resolvePath, sanitizeFilename, showSelectPicker, stashSyncConflict, IMAGE_COL_ALIASES, TITLE_COL_ALIASES, CATEGORY_COL_ALIASES, STATUS_COL_ALIASES, NOTES_COL_ALIASES, looksBoolean, looksCategorical, isMultiValueColName, assumeShape } from "./utils";
 import { isDateCol } from "./field-types";
 import { AddEntryModal, NoteExpanderModal } from "./modals";
 import { renderTable } from "./view/table";
@@ -50,11 +50,13 @@ const MODE_LABELS: { id: InlineMode; label: string }[] = [
 ];
 
 /**
- * Duck-typed TFile check — mirrors random-block.ts so the block is drivable
- * with a stub vault in the smoke tests (cross-bundle instanceof is unreliable).
+ * `instanceof TFile` fast path for real vault files, falling back to duck-
+ * typing — mirrors random-block.ts so the block is still drivable with a
+ * stub vault in the smoke tests (cross-bundle instanceof identity breaks there).
  */
 function asFile(f: unknown): TFile | null {
-  return f && typeof f === "object" && "basename" in (f) ? (f as TFile) : null;
+  if (f instanceof TFile) return f;
+  return f && typeof f === "object" && "basename" in (f) ? assumeShape<TFile>(f) : null;
 }
 
 interface BlockOptions {

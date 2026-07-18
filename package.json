@@ -1,6 +1,6 @@
 {
   "name": "datadeck",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "DataDeck: XLSX/CSV multi-view plugin for Obsidian",
   "main": "main.js",
   "scripts": {
@@ -25,7 +25,7 @@
     "eslint": "^9.39.5",
     "eslint-plugin-obsidianmd": "^0.4.1",
     "jsdom": "^29.1.1",
-    "obsidian": "latest",
+    "obsidian": "^1.13.1",
     "typescript": "^5.0.0"
   },
   "dependencies": {

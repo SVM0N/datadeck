@@ -33,7 +33,7 @@
 import { App, MarkdownPostProcessorContext, MarkdownRenderChild, TFile } from "obsidian";
 import type { ChartConfiguration } from "chart.js";
 import { CSVRow } from "./types";
-import { parseCSV, resolvePath } from "./utils";
+import { parseCSV, resolvePath, assumeShape } from "./utils";
 import { isDateCol } from "./field-types";
 import { loadChart } from "./chartjs-loader";
 import {
@@ -84,9 +84,14 @@ function parseBlockSource(source: string): ChartBlockOptions {
   };
 }
 
-/** Duck-typed TFile check — mirrors inline-view.ts (cross-bundle instanceof is unreliable). */
+/**
+ * `instanceof TFile` fast path for real vault files, falling back to duck-
+ * typing — mirrors inline-view.ts. The fallback matters across bundles
+ * (e.g. smoke tests with a stub vault), where instanceof identity breaks.
+ */
 function asFile(f: unknown): TFile | null {
-  return f && typeof f === "object" && "basename" in (f) ? (f as TFile) : null;
+  if (f instanceof TFile) return f;
+  return f && typeof f === "object" && "basename" in (f) ? assumeShape<TFile>(f) : null;
 }
 
 function parseIsoDate(s: string): Date | null {

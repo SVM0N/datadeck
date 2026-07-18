@@ -14,16 +14,18 @@
 import { App, TFile, MarkdownPostProcessorContext } from "obsidian";
 
 /**
- * Duck-typed TFile check (folders have `name`/`path` but no `extension`).
- * Used instead of `instanceof TFile` so the block is drivable with a stub
- * vault in the smoke tests — each test entry is bundled with its own copy of
- * the obsidian stub, which breaks cross-bundle instanceof identity.
+ * `instanceof TFile` fast path for real vault files (folders have
+ * `name`/`path` but no `extension`), falling back to duck-typing so the
+ * block is still drivable with a stub vault in the smoke tests — each test
+ * entry is bundled with its own copy of the obsidian stub, which breaks
+ * cross-bundle instanceof identity.
  */
 function asFile(f: unknown): TFile | null {
-  return f && typeof f === "object" && "basename" in (f) ? (f as TFile) : null;
+  if (f instanceof TFile) return f;
+  return f && typeof f === "object" && "basename" in (f) ? assumeShape<TFile>(f) : null;
 }
 import { CSVRow } from "./types";
-import { parseCSV, resolvePath } from "./utils";
+import { parseCSV, resolvePath, assumeShape } from "./utils";
 
 const ATTRIBUTION_COLS = ["Author", "author", "By", "by", "Source", "source", "Speaker", "speaker", "Artist", "artist", "Director", "director"];
 

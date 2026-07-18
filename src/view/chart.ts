@@ -585,6 +585,10 @@ export function buildBarConfig(data: BarData, xLabel: string, yLabel: string, co
  */
 async function exportChartPng(view: CardView, canvas: HTMLCanvasElement): Promise<void> {
   try {
+    // Deliberately plain createElement, not Obsidian's createEl: `out` is a
+    // detached scratch canvas for pixel compositing, never attached to the
+    // DOM, and `ownerDocument.win.createEl` isn't stubbed in the jsdom
+    // smoke-test environment (only Element.prototype.createEl is).
     const out = canvas.ownerDocument.createElement("canvas");
     out.width = canvas.width;
     out.height = canvas.height;

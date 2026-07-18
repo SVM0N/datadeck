@@ -145,16 +145,20 @@
      shrinks naturally when iOS opens the keyboard and the content
      area below filters live in whatever space is left above the keyboard.
      Tapping × clears + collapses back to the default toolbar. */
-  .csv-search-toggle { display: inline-flex !important; }
-  .csv-search-wrap { display: none !important; }
+  /* `.csv-toolbar-controls` ancestor bumps specificity to (0,2,0) so these
+     mobile rules reliably beat the equal-specificity base rules declared
+     later in the file (.csv-search-wrap, .csv-search-toggle, etc.) without
+     needing `!important`. */
+  .csv-toolbar-controls .csv-search-toggle { display: inline-flex; }
+  .csv-toolbar-controls .csv-search-wrap { display: none; }
   .csv-toolbar--search-expanded .csv-mode-group,
   .csv-toolbar--search-expanded .csv-add-btn,
   .csv-toolbar--search-expanded .csv-cfg-btn-overflow,
   .csv-toolbar--search-expanded .csv-search-toggle {
-    display: none !important;
+    display: none;
   }
   .csv-toolbar--search-expanded .csv-search-wrap {
-    display: flex !important;
+    display: flex;
     flex: 1 1 auto;
     min-width: 0;
     align-items: center;
@@ -166,20 +170,29 @@
     flex: 1 1 auto;
     min-width: 0;
   }
-  .csv-toolbar--search-expanded .csv-search-input {
-    width: 100% !important;
+  /* The extra `:focus` selector matches the desktop `.csv-search-input:focus
+     { width:220px }` rule's (0,2,0) specificity so this mobile override wins
+     in both states without `!important`. */
+  .csv-toolbar--search-expanded .csv-search-input,
+  .csv-toolbar--search-expanded .csv-search-input:focus {
+    width: 100%;
     min-width: 0;
   }
   /* Hide the in-content "Found X of Y" header on mobile while the search
      is open. The input itself + the underlying filtered view convey the
      same info; the header clips weirdly when iOS shrinks the WebView for
      the keyboard. */
-  .datadeck-root:has(.csv-toolbar--search-expanded) .csv-search-results {
+  .datadeck-root.csv-toolbar--search-expanded .csv-search-results {
     display: none;
   }
-  /* `!important` defeats the desktop `.csv-search-input:focus { width:220px }`
+  /* Same specificity trick as above: beats the desktop `:focus { width:220px }`
      rule which otherwise overflows the toolbar at mobile widths. */
-  .csv-search-input { width: 100% !important; min-width: 0; max-width: 100%; }
+  .csv-toolbar-controls .csv-search-input,
+  .csv-toolbar-controls .csv-search-input:focus {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
   /* Toolbar buttons go icon-tight on mobile */
   .csv-cfg-btn, .csv-add-btn { padding: 6px 10px; font-size: 12px; }
   .csv-row-count { display: none; }
@@ -411,9 +424,9 @@
 }
 .csv-empty-state-action:hover { background: var(--csv-accent-hover); }
 .csv-empty-state-hint {
-  font-size: 11px !important;
-  color: var(--csv-text-faint) !important;
-  margin-top: 4px !important;
+  font-size: 11px;
+  color: var(--csv-text-faint);
+  margin-top: 4px;
 }
 
 /* ─── Grid View ───────────────────────────────────────────────────────────── */
@@ -1267,7 +1280,8 @@ td .csv-select-chip {
 /* Inline select in kanban chips */
 .csv-chip-select {
   cursor: pointer;
-  text-decoration: underline dotted;
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
   text-underline-offset: 2px;
 }
 
@@ -1399,13 +1413,15 @@ td .csv-select-chip {
 /* Title is now the clickable nav element */
 .csv-kanban-card-title {
   cursor: pointer;
-  text-decoration: underline dotted;
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
   text-underline-offset: 2px;
 }
 
 .csv-kanban-card-title:hover {
   color: var(--interactive-accent);
-  text-decoration: underline solid;
+  text-decoration-line: underline;
+  text-decoration-style: solid;
 }
 
 .csv-kanban-notes-editor {
@@ -1695,13 +1711,16 @@ td .csv-select-chip {
   width: min(780px, 90vw) !important;
   /* Keyboard-aware modal height. The JS in NoteExpanderModal sets
      --csv-modal-vh to visualViewport.height (the screen minus the iOS
-     keyboard, when it's open). When that variable is absent the modal
-     falls back to dvh, then vh — those work on desktop and on browsers
-     without the visualViewport API. The 85% factor leaves a margin
-     around the modal so it doesn't butt against the edges. */
+     keyboard, when it's open). `vh` is the baseline for browsers without
+     dvh/custom-property-in-calc support; the @supports block below
+     upgrades browsers that have it. The 85% factor leaves a margin around
+     the modal so it doesn't butt against the edges. */
   max-height: 85vh !important;
-  max-height: 85dvh !important;
-  max-height: calc(var(--csv-modal-vh, 100dvh) * 0.85) !important;
+}
+@supports (height: 100dvh) {
+  .csv-note-expander-modal {
+    max-height: calc(var(--csv-modal-vh, 100dvh) * 0.85) !important;
+  }
 }
 
 /* Mobile: dock the modal to the top of the visible viewport instead of
@@ -1726,14 +1745,17 @@ td .csv-select-chip {
   display: flex;
   flex-direction: column;
   max-height: 85vh;
-  max-height: 85dvh;
-  max-height: calc(var(--csv-modal-vh, 100dvh) * 0.85);
   /* The modal-content itself scrolls when its body exceeds the keyboard-
      aware max-height. Combined with `position: sticky` on the footer, this
      guarantees the action bar stays reachable no matter what iOS does with
      the keyboard or how long the note is. */
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+}
+@supports (height: 100dvh) {
+  .csv-note-expander-modal .modal-content {
+    max-height: calc(var(--csv-modal-vh, 100dvh) * 0.85);
+  }
 }
 
 @media (max-width: 600px) {
@@ -2005,20 +2027,28 @@ td .csv-select-chip {
   }
 }
 
+/* The `display: table*` declarations below guard against vault-wide CSS
+   snippets that force `table { display: block }` for markdown-table
+   overflow (a common Obsidian community fix). Scoping through the
+   `.csv-modal-colcfg-table-wrap` ancestor rather than relying on
+   `!important` keeps specificity ((0,2,1)+) high enough to win against a
+   bare/low-specificity snippet without fighting the cascade unconditionally. */
 .csv-modal-colcfg-table {
-  display: table !important;
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
 }
-.csv-modal-colcfg-table thead {
-  display: table-header-group !important;
+.csv-modal-colcfg-table-wrap .csv-modal-colcfg-table {
+  display: table;
 }
-.csv-modal-colcfg-table tbody {
-  display: table-row-group !important;
+.csv-modal-colcfg-table-wrap .csv-modal-colcfg-table thead {
+  display: table-header-group;
 }
-.csv-modal-colcfg-table tr {
-  display: table-row !important;
+.csv-modal-colcfg-table-wrap .csv-modal-colcfg-table tbody {
+  display: table-row-group;
+}
+.csv-modal-colcfg-table-wrap .csv-modal-colcfg-table tr {
+  display: table-row;
 }
 
 .csv-modal-colcfg-table th {
@@ -2032,15 +2062,19 @@ td .csv-select-chip {
   background: var(--background-secondary);
   border-bottom: 1px solid var(--csv-border);
   white-space: nowrap;
-  display: table-cell !important;
+}
+.csv-modal-colcfg-table-wrap .csv-modal-colcfg-table th {
+  display: table-cell;
 }
 
 .csv-modal-colcfg-table td {
-  display: table-cell !important;
   padding: 6px 8px;
   border-bottom: 1px solid var(--csv-border);
   white-space: nowrap;
   vertical-align: middle;
+}
+.csv-modal-colcfg-table-wrap .csv-modal-colcfg-table td {
+  display: table-cell;
 }
 
 .csv-modal-colcfg-table tbody tr:last-child td {
@@ -2762,9 +2796,9 @@ td .csv-select-chip {
   white-space: nowrap;
 }
 
-.csv-mobile-table th,
-.csv-mobile-table td {
-  padding: 4px 8px !important;
+.csv-mobile-table table th,
+.csv-mobile-table table td {
+  padding: 4px 8px;
   font-size: 12px;
 }
 
@@ -3958,7 +3992,8 @@ select.csv-add-row-control {
 .csv-tasks-table tr:last-child td { border-bottom: none; }
 .csv-tasks-table tbody tr:hover { background: var(--background-modifier-hover); }
 
-.csv-tasks-check-cell { width: 22px; padding-right: 0 !important; }
+.csv-tasks-table th.csv-tasks-check-cell,
+.csv-tasks-table td.csv-tasks-check-cell { width: 22px; padding-right: 0; }
 .csv-tasks-check {
   display: inline-flex;
   align-items: center;
