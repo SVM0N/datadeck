@@ -942,6 +942,9 @@ export class CardView extends FileView {
   // ── Timeline view ─────────────────────────────────────────────────────────────
 
   timelineGroupFilter: string = "all";
+  // "auto" picks a tick step from the domain span (see buildTimelineTicks);
+  // any other value pins the axis to that unit regardless of span.
+  timelineGranularity: string = "auto";
 
   // ── Focus view ───────────────────────────────────────────────────────────────
 
@@ -1088,15 +1091,28 @@ const FILE_TEMPLATES: FileTemplate[] = [
     id: "timeline",
     command: "Create timeline file",
     defaultName: "Timeline",
-    // Start + End satisfy hasTimelineColumns by name alone; Category matches
-    // CATEGORY_COL_ALIASES so effectiveGroupCol picks it up for the per-row
-    // color coding without any override.
-    headers: ["Title", "Start", "End", "Category", "Notes"],
+    // Start + End satisfy hasTimelineColumns by name alone. "Type" (not
+    // "Category") matches CATEGORY_COL_ALIASES so effectiveGroupCol still
+    // picks it up for the per-row color coding — same reasoning as the
+    // "budget" template: isMultiValueColName's regex matches singular
+    // "category" too, which would route the Add-entry modal into the
+    // multi-value chip picker (a body-appended showSelectPicker) instead of
+    // the modal's native <select>. On a brand-new empty file that chip
+    // picker loses focus to the modal's focus-trap the instant it opens,
+    // bouncing focus back to the Title field and making the column
+    // unfillable. "Type" isn't multi-value-matched, so it gets the native
+    // select instead.
+    headers: ["Title", "Start", "End", "Type", "Notes"],
     mode: "timeline",
     configOverrides: {
       dateColumns: ["Start", "End"],
-      categoricalColumns: ["Category"],
+      categoricalColumns: ["Type"],
       notesColumn: "Notes",
+      // "" is in BOOLEAN_PATTERNS (looksBoolean), so a fresh file with one
+      // empty Type value vacuously auto-detects it as a habit/checkbox
+      // column — same collision the "budget" template hits, fixed the same
+      // way: pin no habit columns.
+      habitColumns: [],
     }
   },
 ];

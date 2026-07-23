@@ -1573,6 +1573,7 @@ function timelineView(rows, overrides = {}) {
   const view = {
     headers, rows, searchQuery: "",
     timelineGroupFilter: "all",
+    timelineGranularity: "auto",
     fileCfg: {}, resolveCol,
     titleKey: () => resolveCol(["Title", "Name"]) ?? undefined,
     getCategoryCol: () => resolveCol(["Category"]),
@@ -1603,6 +1604,25 @@ await test("timeline: buildTimelineTicks picks monthly marks for a short span, y
   const yearly = buildTimelineTicks(jan1_2020, jan1_2030);
   assert(yearly.length === 11, `one tick per year across a 10-year span (got ${yearly.length})`);
   assert(yearly[0].label === "2020", `year ticks label by year (got ${yearly[0].label})`);
+});
+
+await test("timeline: buildTimelineTicks rolls up to a coarse step on a multi-century span instead of one-per-year", async () => {
+  const year1 = Date.UTC(1, 0, 1, 12);
+  const year2026 = Date.UTC(2026, 0, 1, 12);
+  const ticks = buildTimelineTicks(year1, year2026);
+  assert(ticks.length <= 30, `~2025-year span stays legible instead of ~2025 crowded ticks (got ${ticks.length})`);
+  const dayMs = 86400000;
+  const step = ticks[1].ms - ticks[0].ms;
+  assert(step > 365 * dayMs, `step is coarser than a single year (got ${step / (365 * dayMs)} years)`);
+});
+
+await test("timeline: an explicit granularity pins the axis unit regardless of span", async () => {
+  const jan1_2020 = Date.UTC(2020, 0, 1, 12);
+  const jan1_2030 = Date.UTC(2030, 0, 1, 12);
+  const decade = buildTimelineTicks(jan1_2020, jan1_2030, "decade");
+  assert(decade.length === 2, `decade granularity steps by 10 years over a 10-year span (got ${decade.length})`);
+  const month = buildTimelineTicks(jan1_2020, jan1_2030, "month");
+  assert(month.length === 121, `month granularity forced on a 10-year span shows every month, not auto's yearly rollup (got ${month.length})`);
 });
 
 await test("timeline: renders one bar per dated row, skips rows with no Start", async () => {

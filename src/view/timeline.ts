@@ -50,33 +50,83 @@ function makeColorer(): (key: string) => string {
 
 export interface TimelineTick { ms: number; label: string; }
 
+// Manual override options for the axis granularity control — "auto" (the
+// default) picks a step from the domain span; the rest pin a fixed unit/step
+// regardless of span, so a user can force a coarser rollup on a long
+// horizon (or a finer one on a short one) than the auto-picked density.
+export const TIMELINE_GRANULARITIES: { value: string; label: string }[] = [
+  { value: "auto", label: "Auto" },
+  { value: "month", label: "Month" },
+  { value: "quarter", label: "Quarter" },
+  { value: "year", label: "Year" },
+  { value: "decade", label: "Decade" },
+  { value: "century", label: "Century" },
+];
+
+// Picks the smallest "nice" step (from a human-friendly ladder, so labels
+// read as 1/2/5/10/20/50/100… rather than arbitrary numbers) whose tick
+// count for the given span stays near `target`. Shared by the month and
+// year tiers below — same idea, different ladders.
+function pickStep(span: number, niceSteps: number[], target = 20): number {
+  const raw = span / target;
+  return niceSteps.find(s => s >= raw) ?? niceSteps[niceSteps.length - 1];
+}
+
+const MONTH_STEPS = [1, 2, 3, 6];
+const YEAR_STEPS = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000, 10000];
+
 /**
- * Axis gridlines across [domainStart, domainEnd]: month-start marks for
- * spans up to 3 years, else year-start marks — kept to two tiers so the
- * axis never gets crowded on a decades-long log or a two-week sprint alike.
- * Pure + exported for unit testing.
+ * Axis gridlines across [domainStart, domainEnd]. In "auto" granularity:
+ * month-start marks (adaptively stepped by 1/2/3/6 months) for spans up to
+ * 3 years, else year-start marks adaptively stepped from the 1/2/5/10/…
+ * ladder — so a two-week sprint and a centuries-long log both land near
+ * ~20 ticks instead of the long end crowding into unreadable overlap.
+ * A fixed `granularity` (see TIMELINE_GRANULARITIES) instead pins the
+ * unit/step regardless of span, for manual control. Pure + exported for
+ * unit testing.
  */
-export function buildTimelineTicks(domainStart: number, domainEnd: number): TimelineTick[] {
+export function buildTimelineTicks(domainStart: number, domainEnd: number, granularity: string = "auto"): TimelineTick[] {
   if (domainEnd <= domainStart) return [];
   const spanDays = (domainEnd - domainStart) / DAY_MS;
-  const yearly = spanDays > 3 * 365;
+
+  let unit: "month" | "year";
+  let step: number;
+  switch (granularity) {
+    case "month": unit = "month"; step = 1; break;
+    case "quarter": unit = "month"; step = 3; break;
+    case "year": unit = "year"; step = 1; break;
+    case "decade": unit = "year"; step = 10; break;
+    case "century": unit = "year"; step = 100; break;
+    default: {
+      const spanYears = spanDays / 365;
+      if (spanYears <= 3) {
+        unit = "month";
+        step = pickStep(spanDays / 30.44, MONTH_STEPS);
+      } else {
+        unit = "year";
+        step = pickStep(spanYears, YEAR_STEPS);
+      }
+    }
+  }
+
   const first = new Date(domainStart);
-  let cursor = yearly
+  let cursor = unit === "year"
     ? Date.UTC(first.getUTCFullYear(), 0, 1, 12)
     : Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), 1, 12);
   const ticks: TimelineTick[] = [];
-  // Safety valve against a corrupt/absurd date range spinning forever.
+  // Safety valve against a corrupt/absurd date range (or a fine-grained
+  // manual override on a huge span) spinning forever.
   for (let guard = 0; guard < 400 && cursor <= domainEnd; guard++) {
     const d = new Date(cursor);
     ticks.push({
       ms: cursor,
-      label: yearly
+      label: unit === "year"
         ? String(d.getUTCFullYear())
         : d.toLocaleDateString(undefined, { month: "short", year: "2-digit", timeZone: "UTC" }),
     });
-    cursor = yearly
-      ? Date.UTC(d.getUTCFullYear() + 1, 0, 1, 12)
-      : Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1, 12);
+    cursor = unit === "year"
+      ? Date.UTC(d.getUTCFullYear() + step, 0, 1, 12)
+      : Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + step, 1, 12);
   }
   return ticks;
 }
@@ -93,14 +143,17 @@ export function renderTimeline(view: CardView, container: HTMLElement): void {
   const titleCol = view.titleKey() ?? view.headers[0];
   const groupCol = effectiveGroupCol(view);
 
-  // ── Filter bar (group only — mirrors the Library/Tasks filter pattern) ──
+  // ── Filter bar (group filter + axis granularity — mirrors the
+  // Library/Tasks filter pattern). Always shown: the granularity control is
+  // useful even with a single group, and it's the user's manual override
+  // for when "Auto" rolls up further (or less) than they want.
   const groups = new Set<string>();
   if (groupCol) view.rows.forEach(r => {
     (r[groupCol] ?? "").split(",").map(s => s.trim()).filter(Boolean).forEach(g => groups.add(g));
   });
+  const filtersBar = container.createDiv({ cls: "csv-library-filters" });
   let groupSelect: HTMLSelectElement | null = null;
   if (groups.size > 1) {
-    const filtersBar = container.createDiv({ cls: "csv-library-filters" });
     groupSelect = filtersBar.createEl("select", { cls: "csv-library-filter-select" });
     groupSelect.createEl("option", { text: "All", value: "all" });
     Array.from(groups).sort().forEach(g => groupSelect!.createEl("option", { text: g, value: g }));
@@ -110,6 +163,13 @@ export function renderTimeline(view: CardView, container: HTMLElement): void {
       view.renderView(true);
     });
   }
+  const granularitySelect = filtersBar.createEl("select", { cls: "csv-library-filter-select", attr: { title: "Axis granularity" } });
+  TIMELINE_GRANULARITIES.forEach(g => granularitySelect.createEl("option", { text: g.label, value: g.value }));
+  granularitySelect.value = view.timelineGranularity;
+  granularitySelect.addEventListener("change", () => {
+    view.timelineGranularity = granularitySelect.value;
+    view.renderView(true);
+  });
 
   // ── Filter rows (group + toolbar search), then keep only ones with a parseable Start ──
   const q = view.searchQuery.toLowerCase().trim();
@@ -174,7 +234,7 @@ export function renderTimeline(view: CardView, container: HTMLElement): void {
   const axisRow = wrap.createDiv({ cls: "csv-timeline-axis-row" });
   axisRow.createDiv({ cls: "csv-timeline-row-label" });
   const axisTrack = axisRow.createDiv({ cls: "csv-timeline-axis-track" });
-  buildTimelineTicks(domainStart, domainEnd).forEach(t => {
+  buildTimelineTicks(domainStart, domainEnd, view.timelineGranularity).forEach(t => {
     const tick = axisTrack.createDiv({ cls: "csv-timeline-tick" });
     tick.style.left = `${pct(t.ms)}%`;
     tick.createSpan({ cls: "csv-timeline-tick-lbl", text: t.label });
