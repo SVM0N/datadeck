@@ -144,6 +144,7 @@ class TasksBlockHost extends MarkdownRenderChild {
   searchQuery = "";
   taskProjectFilter = "all";
   taskTypeFilter = "all";
+  taskStatusFilter = "all";
   fileCfg: Record<string, never> = {};
 
   private sources: LoadedSource[] = [];

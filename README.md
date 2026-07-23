@@ -91,7 +91,7 @@ columns:
 | **Kanban** | any groupable column | Columns by category (or any column via "Group by" — year columns bucket into decades), status subgroups, inline note editing |
 | **Chart** | a numeric column (2+ rows) | Scatter/line of any column pair with hue, size-by, fits, formulas, smoothing, bucketing, and bar aggregates — see [Charts](#charts) |
 | **Dashboard** | a date column | Habit tracker: daily toggles, progress chart, streaks, per-habit GitHub-style calendars |
-| **Tasks** | due/priority columns, or task-like type values | Project board: rows grouped by project, split into Tasks / Idea / Note sections, click-to-toggle done, overdue flags |
+| **Tasks** | due/priority columns, or task-like type values | Project board: rows grouped by project, split into Tasks / Idea / Note sections, click-to-toggle done, overdue flags, filter by project / type / done-or-open |
 | **Budget** | a `Price`/`Cost`/`Amount`/`Total` column (or one assigned in ⚙ Config) | Items grouped by category with per-category subtotals and a grand total, set an inline spending limit and the total turns blue under it, red over |
 | **Stats** | a category/status/rating/author column | Bar-chart insights: status breakdown, categories, rating histogram, entries per year — bars click through to the filtered library |
 | **Focus** | any non-empty file | One entry at a time with big typography — built for quotes and vocabulary. ←/→ keys navigate |

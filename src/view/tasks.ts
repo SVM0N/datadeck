@@ -117,7 +117,7 @@ export function renderTasks(view: CardView, container: HTMLElement): void {
   const priCol = taskPriorityCol(view);
   const titleCol = view.titleKey() ?? view.headers[0];
 
-  // ── Filters bar (project + type), mirrors the Library filter pattern ──
+  // ── Filters bar (project + type + done/open), mirrors the Library filter pattern ──
   const filtersBar = container.createDiv({ cls: "csv-library-filters" });
 
   const projects = new Set<string>();
@@ -139,15 +139,27 @@ export function renderTasks(view: CardView, container: HTMLElement): void {
     typeSelect.value = view.taskTypeFilter;
   }
 
+  // Done/open filter — only offered when there's a status column to read.
+  let statusSelect: HTMLSelectElement | null = null;
+  if (statusCol) {
+    statusSelect = filtersBar.createEl("select", { cls: "csv-library-filter-select" });
+    statusSelect.createEl("option", { text: "All", value: "all" });
+    statusSelect.createEl("option", { text: "○ open", value: "__open__" });
+    statusSelect.createEl("option", { text: "✓ done", value: "__done__" });
+    statusSelect.value = view.taskStatusFilter;
+  }
+
   const applyFilters = () => {
     view.taskProjectFilter = projectSelect.value;
     if (typeSelect) view.taskTypeFilter = typeSelect.value;
+    if (statusSelect) view.taskStatusFilter = statusSelect.value;
     view.renderView(true);
   };
   projectSelect.addEventListener("change", applyFilters);
   typeSelect?.addEventListener("change", applyFilters);
+  statusSelect?.addEventListener("change", applyFilters);
 
-  // ── Filter rows (project / type / toolbar search) ──
+  // ── Filter rows (project / type / status / toolbar search) ──
   const q = view.searchQuery.toLowerCase().trim();
   const filtered = view.rows.filter(row => {
     if (view.taskProjectFilter !== "all" && projectCol) {
@@ -157,11 +169,16 @@ export function renderTasks(view: CardView, container: HTMLElement): void {
     if (view.taskTypeFilter !== "all" && typeCol) {
       if ((row[typeCol] ?? "").trim().toLowerCase() !== view.taskTypeFilter.toLowerCase()) return false;
     }
+    if (view.taskStatusFilter !== "all" && statusCol) {
+      const done = isDone(view, row, statusCol);
+      if (view.taskStatusFilter === "__done__" && !done) return false;
+      if (view.taskStatusFilter === "__open__" && done) return false;
+    }
     if (q && !view.headers.some(h => (row[h] ?? "").toLowerCase().includes(q))) return false;
     return true;
   });
 
-  if (view.taskProjectFilter !== "all" || view.taskTypeFilter !== "all" || q) {
+  if (view.taskProjectFilter !== "all" || view.taskTypeFilter !== "all" || view.taskStatusFilter !== "all" || q) {
     container.createDiv({ cls: "csv-library-result-count", text: `Showing ${filtered.length} of ${view.rows.length} entries` });
   }
 
@@ -285,12 +302,13 @@ export function renderTasks(view: CardView, container: HTMLElement): void {
     renderSection(view, wrap, t === "Tasks" ? t : titleCase(t), buckets[t], fillSection, headersList);
   });
 
+  const hasActiveFilters = q || view.taskProjectFilter !== "all" || view.taskTypeFilter !== "all" || view.taskStatusFilter !== "all";
   if (typesArray.length === 0) {
     const empty = wrap.createDiv({ cls: "csv-empty-state" });
-    empty.createEl("p", { text: q || view.taskProjectFilter !== "all" || view.taskTypeFilter !== "all" ? "No entries match your filters." : "No tasks yet." });
-    if (q || view.taskProjectFilter !== "all" || view.taskTypeFilter !== "all") {
+    empty.createEl("p", { text: hasActiveFilters ? "No entries match your filters." : "No tasks yet." });
+    if (hasActiveFilters) {
       empty.createEl("button", { cls: "csv-clear-filters-btn", text: "Clear filters" }).addEventListener("click", () => {
-        view.taskProjectFilter = "all"; view.taskTypeFilter = "all"; view.searchQuery = "";
+        view.taskProjectFilter = "all"; view.taskTypeFilter = "all"; view.taskStatusFilter = "all"; view.searchQuery = "";
         view.renderView();
       });
     }

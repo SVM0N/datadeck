@@ -934,6 +934,7 @@ export class CardView extends FileView {
 
   taskProjectFilter: string = "all";
   taskTypeFilter: string = "all";
+  taskStatusFilter: string = "all";
 
   // ── Focus view ───────────────────────────────────────────────────────────────
 

@@ -83,8 +83,8 @@ Reference doc — load when editing `styles.css` or tracing a visual bug to its 
 | `.csv-dash-timeline-grid` | Dashboard | Heatmap grid of day cells |
 | `.csv-dash-timeline-cell` | Dashboard | Single day cell; `.done`, `.missed`, `.no-entry` |
 | `.csv-dash-timeline-month` | Dashboard | Month label in timeline |
-| `.csv-library-filters` | Library | Filters bar (flex, gap) |
-| `.csv-library-filter-select` | Library | Status/genre/sort dropdowns (also reused by the kanban group-by select) |
+| `.csv-library-filters` | Library | Filters bar (flex, gap); also reused by Tasks (project/type/done) |
+| `.csv-library-filter-select` | Library | Status/genre/sort dropdowns (also reused by the kanban group-by select and the Tasks project/type/done-status filters) |
 | `.csv-library-search` | Library | Search input |
 | `.csv-library-sections` | Library | Container for genre sections |
 | `.csv-library-section` | Library | Collapsible `<details>` element |
@@ -122,7 +122,7 @@ Reference doc — load when editing `styles.css` or tracing a visual bug to its 
 | `.csv-focus-nav` / `-nav-btn` / `-nav-rand` | Focus | Prev / 🔀 / next button row; full-width touch targets on mobile |
 | `.csv-th-sortable` | Table | Modifier on every `<th>`; pointer cursor + accent hover |
 | `.csv-th-sort-indicator` | Table | ▲/▼ span inside the sorted column's `<th>` |
-| `.csv-clear-filters-btn` | Library/Kanban/Focus | "Clear filters"/"Clear search" button in no-results empty states |
+| `.csv-clear-filters-btn` | Library/Kanban/Focus/Tasks | "Clear filters"/"Clear search" button in no-results empty states |
 | `.csv-tv-now` / `-now-loc` / `-now-sub` | Travel | "📍 Currently in …" banner under the stats (gold-tinted; only when today is inside a confirmed trip) |
 | `.cp-selected` | Travel | Accent stroke + brightness on the selected map country; overrides `.cp-tiny`'s transparent halo stroke |
 | `.csv-tv-seg.is-dim` | Travel | Timeline segment dimmed to 0.18 opacity while another country is selected |

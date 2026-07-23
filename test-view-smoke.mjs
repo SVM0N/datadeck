@@ -1216,7 +1216,7 @@ function tasksView(rows, overrides = {}) {
   };
   const view = {
     headers, rows, searchQuery: "",
-    taskProjectFilter: "all", taskTypeFilter: "all",
+    taskProjectFilter: "all", taskTypeFilter: "all", taskStatusFilter: "all",
     fileCfg: {}, resolveCol,
     titleKey: () => resolveCol(["Title", "Name"]) ?? undefined,
     getStatusCol: () => resolveCol(["Status", "State", "Done"]),
@@ -1313,6 +1313,32 @@ await test("tasks: not-done past-due rows are flagged overdue", async () => {
   const c = document.body.createDiv();
   renderTasks(tasksView(rows), c);
   assert(c.querySelectorAll(".csv-tasks-overdue").length === 1, "only the not-done past-due row is overdue");
+});
+
+await test("tasks: status filter narrows to open or done rows", async () => {
+  const rows = [
+    { Name: "Open A", Project: "P", Type: "task", Status: "", Due: "", Priority: "" },
+    { Name: "Open B", Project: "P", Type: "task", Status: "", Due: "", Priority: "" },
+    { Name: "Done A", Project: "P", Type: "task", Status: "done", Due: "", Priority: "" },
+  ];
+
+  const openOnly = document.body.createDiv();
+  renderTasks(tasksView(rows, { taskStatusFilter: "__open__" }), openOnly);
+  assert(
+    Array.from(openOnly.querySelectorAll(".csv-tasks-link")).map(l => l.textContent).sort().join(",") === "Open A,Open B",
+    "open filter hides done rows",
+  );
+
+  const doneOnly = document.body.createDiv();
+  renderTasks(tasksView(rows, { taskStatusFilter: "__done__" }), doneOnly);
+  assert(
+    Array.from(doneOnly.querySelectorAll(".csv-tasks-link")).map(l => l.textContent).join(",") === "Done A",
+    "done filter keeps only done rows",
+  );
+
+  const all = document.body.createDiv();
+  renderTasks(tasksView(rows, { taskStatusFilter: "all" }), all);
+  assert(all.querySelectorAll(".csv-tasks-link").length === 3, "'all' keeps every row");
 });
 
 await test("tasks: done toggle reuses the file's existing finished word", async () => {
