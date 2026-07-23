@@ -57,14 +57,14 @@ Until DataDeck is in the community store:
 
 - **Via [BRAT](https://github.com/TfTHacker/obsidian42-brat):** add
   `SVM0N/datadeck` as a beta plugin.
-- **Manual:** grab `main.js`, `manifest.json`, `styles.css`, and
-  `world-map.svg` from the latest
-  [release](https://github.com/SVM0N/datadeck/releases) into
+- **Manual:** grab `main.js`, `manifest.json`, and `styles.css` from the
+  latest [release](https://github.com/SVM0N/datadeck/releases) into
   `<vault>/.obsidian/plugins/datadeck/`, then enable **DataDeck** in
   Settings → Community plugins.
 
-> `world-map.svg` is loaded at runtime for the travel view — include it when
-> installing manually.
+> The travel view's world map is bundled straight into `main.js` at build
+> time (no separate `world-map.svg` to copy) — Obsidian's plugin installer
+> only ever fetches those three files, for community-store installs too.
 
 ## Quick start
 
