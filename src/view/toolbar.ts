@@ -12,6 +12,7 @@ import { hasStatsColumns } from "./stats";
 import { hasChartColumns } from "./chart";
 import { hasTaskColumns } from "./tasks";
 import { hasBudgetColumns } from "./budget";
+import { hasTimelineColumns } from "./timeline";
 import { effectiveGroupCol } from "./kanban";
 import { TITLE_COL_ALIASES, CATEGORY_COL_ALIASES, STATUS_COL_ALIASES, NOTES_COL_ALIASES, IMAGE_COL_ALIASES, PRICE_COL_ALIASES } from "../utils";
 
@@ -30,6 +31,9 @@ export function availableModes(view: CardView): {id: ViewMode, label: string}[] 
   // task/note/idea values (see hasTaskColumns). A native replacement for the
   // old DataviewJS project dashboard.
   if (hasTaskColumns(view)) modes.push({id: "tasks", label: "Tasks"});
+  // Timeline: a Gantt-lite horizontal view — needs a distinct Start and
+  // End/Due column pair to plot a span (see hasTimelineColumns).
+  if (hasTimelineColumns(view)) modes.push({id: "timeline", label: "Timeline"});
   // Budget: a named/assigned price column, rolled up per category against a
   // spending limit set inline in the view. Deliberately name-gated (not
   // "any numeric column") — see hasBudgetColumns.

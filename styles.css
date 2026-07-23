@@ -4175,6 +4175,105 @@ select.csv-add-row-control {
   .csv-budget-bar { flex-basis: 100%; }
 }
 
+/* ─── Timeline view ────────────────────────────────────────────────────────────
+   A Gantt-lite horizontal timeline: a fixed-width label column on the left,
+   the rest a percentage-positioned track shared by the axis row and every
+   entry row below it — .csv-timeline-row-label's flex-basis must match
+   between the axis row and each data row for the two to line up. */
+
+.csv-timeline-axis-row,
+.csv-timeline-row {
+  display: flex;
+  align-items: center;
+}
+.csv-timeline-row-label {
+  flex: 0 0 140px;
+  width: 140px;
+  padding-right: 10px;
+  font-size: 12px;
+  color: var(--csv-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.csv-timeline-link { cursor: pointer; }
+.csv-timeline-link:hover { color: var(--csv-text); text-decoration: underline; }
+
+.csv-timeline-axis-track,
+.csv-timeline-row-track {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.csv-timeline-axis-track { height: 20px; border-bottom: 1px solid var(--csv-border); margin-bottom: 6px; }
+.csv-timeline-tick {
+  position: absolute;
+  top: 0; bottom: 0;
+  border-left: 1px solid var(--csv-border);
+}
+.csv-timeline-tick-lbl {
+  position: absolute;
+  left: 4px; top: 1px;
+  font-size: 9px;
+  color: var(--csv-text-faint);
+  white-space: nowrap;
+}
+.csv-timeline-today-lbl {
+  position: absolute;
+  top: 1px;
+  font-size: 9px;
+  color: var(--csv-red);
+  white-space: nowrap;
+  transform: translateX(2px);
+}
+
+.csv-timeline-rows { display: flex; flex-direction: column; gap: 3px; }
+.csv-timeline-row { min-height: 26px; }
+.csv-timeline-row-track {
+  height: 22px;
+  background: var(--csv-surface);
+  border-radius: var(--csv-radius-sm);
+}
+.csv-timeline-today {
+  position: absolute;
+  top: 0; bottom: 0; width: 0;
+  border-left: 1px dashed var(--csv-red);
+  z-index: 1;
+}
+/* Arrow-shaped bar (points right, start → end) so each entry reads as a
+   span-with-direction on the shared axis rather than a plain rectangle. */
+.csv-timeline-bar {
+  position: absolute;
+  top: 2px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  background: var(--interactive-accent);
+  color: var(--csv-bg, #fff);
+  cursor: pointer;
+  font-size: 10px;
+  transition: filter 0.12s;
+  clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 50%, calc(100% - 7px) 100%, 0 100%);
+}
+.csv-timeline-bar:hover { filter: brightness(1.15); z-index: 2; }
+/* Ongoing (no end date) entries get a hatched fill — "still going" at a glance. */
+.csv-timeline-bar.is-ongoing {
+  background-image: repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.28) 0 5px, transparent 5px 10px);
+}
+.csv-timeline-bar-lbl {
+  padding: 0 9px 0 6px;
+  white-space: nowrap;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+@media (max-width: 600px) {
+  .csv-timeline-row-label { flex-basis: 90px; width: 90px; font-size: 11px; }
+  .csv-timeline-tick-lbl { font-size: 8px; }
+  .csv-timeline-bar-lbl { font-size: 9px; padding: 0 6px 0 4px; }
+}
+
 /* ─── Native <select> label alignment ─────────────────────────────────────────
    A styled <select> renders its label vertically off on macOS/Electron — left
    on its native appearance it sits a touch low; once you add vertical padding +

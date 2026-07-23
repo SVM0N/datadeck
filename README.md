@@ -30,10 +30,10 @@ diffs, syncs, and outlives any tool.
 
 ## Highlights
 
-- **Ten view modes**, auto-offered based on the columns in the file — a
+- **Eleven view modes**, auto-offered based on the columns in the file — a
   books CSV gets a library, a habit log gets a dashboard, a tasks file gets
   a project board, an expenses CSV gets a budget tracker, a travel log gets
-  a world map.
+  a world map, a Start/End dated log gets a Gantt-lite timeline.
 - **Everything is editable** — click a cell, toggle a habit, drag nothing:
   edits debounce-save back to the CSV. Notes-style columns render and edit
   as **Markdown**.
@@ -77,7 +77,7 @@ Until DataDeck is in the community store:
    for categorical columns, a date picker for dates, toggles for 0/1 habit
    columns, a Markdown textarea for notes.
 4. No CSV yet? Run a palette command: **Create tasks / travel / habit
-   tracker / chart file** scaffolds one preconfigured for its view.
+   tracker / chart / timeline file** scaffolds one preconfigured for its view.
 
 ## View modes
 
@@ -92,6 +92,7 @@ columns:
 | **Chart** | a numeric column (2+ rows) | Scatter/line of any column pair with hue, size-by, fits, formulas, smoothing, bucketing, and bar aggregates — see [Charts](#charts) |
 | **Dashboard** | a date column | Habit tracker: daily toggles, progress chart, streaks, per-habit GitHub-style calendars |
 | **Tasks** | due/priority columns, or task-like type values | Project board: rows grouped by project, split into Tasks / Idea / Note sections, click-to-toggle done, overdue flags, filter by project / type / done-or-open |
+| **Timeline** | a `Start` column plus an `End`/`Due` column | Gantt-lite horizontal timeline: one row per entry, drawn as an arrow spanning Start → End against a shared time axis; open-ended entries stretch to today, a dashed line marks "now", filter by category |
 | **Budget** | a `Price`/`Cost`/`Amount`/`Total` column (or one assigned in ⚙ Config) | Items grouped by category with per-category subtotals and a grand total, set an inline spending limit and the total turns blue under it, red over |
 | **Stats** | a category/status/rating/author column | Bar-chart insights: status breakdown, categories, rating histogram, entries per year — bars click through to the filtered library |
 | **Focus** | any non-empty file | One entry at a time with big typography — built for quotes and vocabulary. ←/→ keys navigate |
@@ -245,8 +246,8 @@ add-on and the Anki desktop app running; desktop-only (it talks to
 
 - **Add entry to current CSV** — the + Add form, hotkey-able.
 - **Cycle view mode** — steps through the file's valid views.
-- **Create tasks / travel / habit tracker / chart file** — scaffold a new
-  CSV preconfigured for that view.
+- **Create tasks / travel / habit tracker / chart / timeline file** — scaffold
+  a new CSV preconfigured for that view.
 
 ## Privacy & network use
 

@@ -11,8 +11,8 @@ datadeck/
 │                                 # post-CSV migration; was much larger with SheetJS)
 ├── bench-load.mjs                # Measures bundle parse/eval cost; run after big refactors
 ├── src/                          # types, utils, modals, and one file per view mode
-│                                 # under src/view/ (table, kanban, library, tasks, chart,
-│                                 # dashboard, focus, stats, toolbar, anki)
+│                                 # under src/view/ (table, kanban, library, tasks, budget,
+│                                 # timeline, chart, dashboard, focus, stats, toolbar, anki)
 ├── styles.css                    # All plugin CSS
 ├── manifest.json                 # Obsidian plugin manifest (id: datadeck)
 ├── package.json                  # deps: chart.js, papaparse, esbuild, obsidian types

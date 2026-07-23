@@ -133,6 +133,11 @@ Reference doc — load when editing `styles.css` or tracing a visual bug to its 
 | `.csv-picker-done` | Both | Done button at the bottom of a multi-select picker (raw Obsidian vars — picker mounts on body, outside the root's --csv-* scope) |
 | `.csv-random-card` / `-text` / `-sub` / `-foot` / `-src` / `-btn` | Code block | csv-random quote card (also raw Obsidian vars — renders in regular notes) |
 | `.csv-stats-bar-row.is-clickable` | Stats | Status/category bars that jump to the filtered library on click |
+| `.csv-timeline-row-label` / `-link` | Timeline | Fixed-width entry label column (axis row's is an empty spacer so the two align); click opens the entry expander |
+| `.csv-timeline-axis-track` / `-tick` / `-tick-lbl` | Timeline | Month/year gridlines above the rows (`buildTimelineTicks`) |
+| `.csv-timeline-today` / `-today-lbl` | Timeline | Dashed "now" line through every row track / its label on the axis, shown only when today falls inside the plotted domain |
+| `.csv-timeline-row-track` | Timeline | Per-row percentage-positioned track the bar is absolutely placed within |
+| `.csv-timeline-bar` / `-bar-lbl` | Timeline | Arrow-shaped (clip-path) span from Start → End; `.is-ongoing` (no End value) gets a hatched fill and clamps to today |
 
 ## Status colors
 

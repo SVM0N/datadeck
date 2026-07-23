@@ -35,6 +35,7 @@ import { renderChart, hasChartColumns } from "./src/view/chart";
 import { renderFocus } from "./src/view/focus";
 import { renderTasks, hasTaskColumns, taskProjectCol, taskTypeCol, taskPriorityCol } from "./src/view/tasks";
 import { renderBudget, hasBudgetColumns } from "./src/view/budget";
+import { renderTimeline, hasTimelineColumns } from "./src/view/timeline";
 import { registerCsvViewBlock } from "./src/inline-view";
 import { registerCsvChartBlock } from "./src/chart-block";
 import { registerCsvTasksBlock } from "./src/tasks-block";
@@ -141,7 +142,8 @@ export class CardView extends FileView {
         || (this.mode === "stats" && !hasStatsColumns(this))
         || (this.mode === "chart" && !hasChartColumns(this))
         || (this.mode === "tasks" && !hasTaskColumns(this))
-        || (this.mode === "budget" && !hasBudgetColumns(this))) {
+        || (this.mode === "budget" && !hasBudgetColumns(this))
+        || (this.mode === "timeline" && !hasTimelineColumns(this))) {
       this.mode = "table";
     }
     this.selectedDate = null; // Reset selected date when loading new file
@@ -688,6 +690,7 @@ export class CardView extends FileView {
     else if (this.mode === "focus") renderFocus(this, content);
     else if (this.mode === "tasks") renderTasks(this, content);
     else if (this.mode === "budget") renderBudget(this, content);
+    else if (this.mode === "timeline") renderTimeline(this, content);
     else renderTable(this, content);
   }
 
@@ -936,6 +939,10 @@ export class CardView extends FileView {
   taskTypeFilter: string = "all";
   taskStatusFilter: string = "all";
 
+  // ── Timeline view ─────────────────────────────────────────────────────────────
+
+  timelineGroupFilter: string = "all";
+
   // ── Focus view ───────────────────────────────────────────────────────────────
 
   focusIndex: number = 0;
@@ -1077,6 +1084,21 @@ const FILE_TEMPLATES: FileTemplate[] = [
       habitColumns: [],
     }
   },
+  {
+    id: "timeline",
+    command: "Create timeline file",
+    defaultName: "Timeline",
+    // Start + End satisfy hasTimelineColumns by name alone; Category matches
+    // CATEGORY_COL_ALIASES so effectiveGroupCol picks it up for the per-row
+    // color coding without any override.
+    headers: ["Title", "Start", "End", "Category", "Notes"],
+    mode: "timeline",
+    configOverrides: {
+      dateColumns: ["Start", "End"],
+      categoricalColumns: ["Category"],
+      notesColumn: "Notes",
+    }
+  },
 ];
 
 // ─── Plugin ───────────────────────────────────────────────────────────────────
@@ -1159,6 +1181,7 @@ export default class CardViewPlugin extends Plugin {
     //  - travel: isTravelFile() (country + date_entered + date_left + source)
     //  - dashboard: a date column + boolean habit columns.
     //  - budget: hasBudgetColumns() (a Price/Cost/Amount/Total/Spend/Value column)
+    //  - timeline: hasTimelineColumns() (distinct Start + End/Due columns)
     for (const tpl of FILE_TEMPLATES) {
       this.addCommand({
         id: `create-${tpl.id}`,

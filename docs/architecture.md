@@ -227,6 +227,9 @@ src/
     ├── table.ts library.ts kanban.ts toolbar.ts dashboard.ts mobile.ts
     ├── stats.ts             # bar-chart insights (pure DOM, no Chart.js) + hasStatsColumns/parseRating
     ├── tasks.ts             # native CSV-backed Tasks/projects view (group-by-project)
+    ├── budget.ts             # category rollups against a spending limit
+    ├── chart.ts              # scatter/line charts, best-fit + formula overlays (Chart.js)
+    ├── timeline.ts           # Gantt-lite Start/End horizontal timeline
     ├── anki.ts              # 🎴 Anki toolbar button → AnkiConnect (127.0.0.1:8765) live push; desktop-only
     └── focus.ts             # one-entry-at-a-time reader (focusIndex/focusNavPending state on CardView)
 ```

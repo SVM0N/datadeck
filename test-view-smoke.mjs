@@ -1558,6 +1558,119 @@ await test("budget: price cell opens a modal too, not an inline input", async ()
   c.querySelector(".csv-budget-price-cell").click(); // should not throw
 });
 
+// ── Timeline view ─────────────────────────────────────────────────────────────
+const { renderTimeline, hasTimelineColumns, buildTimelineTicks } = await load("./src/view/timeline.ts");
+
+function timelineView(rows, overrides = {}) {
+  const headers = Object.keys(rows[0] ?? {});
+  const resolveCol = (cands) => {
+    for (const cand of cands) {
+      const f = headers.find(h => h.toLowerCase() === cand.toLowerCase());
+      if (f) return f;
+    }
+    return null;
+  };
+  const view = {
+    headers, rows, searchQuery: "",
+    timelineGroupFilter: "all",
+    fileCfg: {}, resolveCol,
+    titleKey: () => resolveCol(["Title", "Name"]) ?? undefined,
+    getCategoryCol: () => resolveCol(["Category"]),
+    getNotesCol: () => resolveCol(["Notes", "Note"]),
+    getDateCol: () => null, isNotesCol: () => false, isDateCol: () => false,
+    renderView: () => {}, renderViewPreservingScroll: () => {},
+    openNoteExpander: () => {}, openOrCreateNotes: () => {}, openRowContextMenu: () => {},
+    ...overrides,
+  };
+  return view;
+}
+
+await test("timeline: hasTimelineColumns needs a distinct Start and End/Due pair", async () => {
+  assert(hasTimelineColumns(timelineView([{ Title: "A", Start: "2024-01-01", End: "2024-01-05" }])), "Start+End → available");
+  assert(hasTimelineColumns(timelineView([{ Title: "A", Start: "2024-01-01", Due: "2024-01-05" }])), "Start+Due alias → available");
+  assert(!hasTimelineColumns(timelineView([{ Title: "A", Start: "2024-01-01" }])), "Start only → not available");
+  assert(!hasTimelineColumns(timelineView([{ Title: "A", Notes: "x" }])), "no date columns → not available");
+});
+
+await test("timeline: buildTimelineTicks picks monthly marks for a short span, yearly for a long one", async () => {
+  const jan1_2024 = Date.UTC(2024, 0, 1, 12);
+  const jul1_2024 = Date.UTC(2024, 6, 1, 12);
+  const monthly = buildTimelineTicks(jan1_2024, jul1_2024);
+  assert(monthly.length === 7, `one tick per month across a 6-month span (got ${monthly.length})`);
+
+  const jan1_2020 = Date.UTC(2020, 0, 1, 12);
+  const jan1_2030 = Date.UTC(2030, 0, 1, 12);
+  const yearly = buildTimelineTicks(jan1_2020, jan1_2030);
+  assert(yearly.length === 11, `one tick per year across a 10-year span (got ${yearly.length})`);
+  assert(yearly[0].label === "2020", `year ticks label by year (got ${yearly[0].label})`);
+});
+
+await test("timeline: renders one bar per dated row, skips rows with no Start", async () => {
+  const rows = [
+    { Title: "Has both", Start: "2024-01-01", End: "2024-01-10" },
+    { Title: "No start", Start: "", End: "2024-01-10" },
+  ];
+  const c = document.body.createDiv();
+  renderTimeline(timelineView(rows), c);
+  assert(c.querySelectorAll(".csv-timeline-bar").length === 1, "only the dated row gets a bar");
+  assert(c.querySelector(".csv-timeline-link").textContent === "Has both", "the plotted row is the one with a Start date");
+});
+
+await test("timeline: rows sort earliest-start first", async () => {
+  const rows = [
+    { Title: "March", Start: "2024-03-01", End: "2024-03-05" },
+    { Title: "January", Start: "2024-01-01", End: "2024-01-05" },
+    { Title: "February", Start: "2024-02-01", End: "2024-02-05" },
+  ];
+  const c = document.body.createDiv();
+  renderTimeline(timelineView(rows), c);
+  const order = Array.from(c.querySelectorAll(".csv-timeline-link")).map(l => l.textContent);
+  assert(order.join(",") === "January,February,March", `sorted by start ascending (got ${order})`);
+});
+
+await test("timeline: no End value marks the bar ongoing", async () => {
+  const rows = [
+    { Title: "Open", Start: "2024-01-01", End: "" },
+    { Title: "Closed", Start: "2024-01-01", End: "2024-01-05" },
+  ];
+  const c = document.body.createDiv();
+  renderTimeline(timelineView(rows), c);
+  const bars = Array.from(c.querySelectorAll(".csv-timeline-bar"));
+  assert(bars.find(b => b.querySelector(".csv-timeline-bar-lbl").textContent === "Open").classList.contains("is-ongoing"), "open-ended row is marked ongoing");
+  assert(!bars.find(b => b.querySelector(".csv-timeline-bar-lbl").textContent === "Closed").classList.contains("is-ongoing"), "closed row is not");
+});
+
+await test("timeline: group filter narrows to the selected category", async () => {
+  const rows = [
+    { Title: "A", Start: "2024-01-01", End: "2024-01-05", Category: "Work" },
+    { Title: "B", Start: "2024-02-01", End: "2024-02-05", Category: "Personal" },
+  ];
+  const c = document.body.createDiv();
+  renderTimeline(timelineView(rows, { timelineGroupFilter: "work" }), c);
+  const links = Array.from(c.querySelectorAll(".csv-timeline-link")).map(l => l.textContent);
+  assert(links.join(",") === "A", `only the Work-category row shows (got ${links})`);
+});
+
+await test("timeline: clicking the label or the bar opens the entry expander", async () => {
+  const rows = [{ Title: "T", Start: "2024-01-01", End: "2024-01-05", Notes: "body" }];
+  let expanded = 0;
+  const c = document.body.createDiv();
+  renderTimeline(timelineView(rows, { openNoteExpander: () => { expanded++; } }), c);
+  c.querySelector(".csv-timeline-link").click();
+  c.querySelector(".csv-timeline-bar").click();
+  assert(expanded === 2, `both the label and the bar open the expander (got ${expanded})`);
+});
+
+await test("timeline: empty states for no matches vs. no dated rows", async () => {
+  const noMatch = document.body.createDiv();
+  renderTimeline(timelineView([{ Title: "A", Start: "2024-01-01", End: "2024-01-05" }], { searchQuery: "zzz" }), noMatch);
+  assert(noMatch.querySelector(".csv-clear-filters-btn"), "search with no matches offers Clear filters");
+
+  const noDates = document.body.createDiv();
+  renderTimeline(timelineView([{ Title: "A", Start: "", End: "" }]), noDates);
+  assert(noDates.querySelector(".csv-empty-state") && !noDates.querySelector(".csv-timeline-bar"), "rows with no Start render an empty state, no bars");
+});
+
 // ── Anki sync ────────────────────────────────────────────────────────────────
 const { syncToAnki, ankiFrontCol } = await load("./src/view/anki.ts");
 
