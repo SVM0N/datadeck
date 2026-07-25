@@ -21,6 +21,10 @@ export function renderTable(view: CardView, container: HTMLElement): void {
 
   view.headers.forEach(h => {
     const th = hr.createEl("th");
+    // Exposes the column name on the DOM so a user's own CSS snippet can
+    // target one column (e.g. a different font-family) without any plugin
+    // config — see td below for the matching attribute on data cells.
+    th.setAttribute("data-col", h);
     th.setText(h);
     // Click-to-sort: asc → desc → off. The resize handle is a child of the
     // th, so guard against clicks that originate from it; a drag-resize must
@@ -78,6 +82,7 @@ export function renderTable(view: CardView, container: HTMLElement): void {
     tr.addEventListener("contextmenu", e => view.openRowContextMenu(row, e));
     view.headers.forEach(h => {
       const td = tr.createEl("td");
+      td.setAttribute("data-col", h);
       if (view.isNotesCol(h)) {
         td.addClass("csv-table-notes-cell");
         const preview = (row[h]??"").replace(/#{1,6}\s/g,"").replace(/[*_>`]/g,"").split("\n").filter(l=>l.trim()).slice(0,3).join(" · ");

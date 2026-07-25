@@ -996,6 +996,17 @@ interface FileTemplate {
 
 const FILE_TEMPLATES: FileTemplate[] = [
   {
+    id: "table",
+    command: "Create table file",
+    defaultName: "Table",
+    // No detector to satisfy — "table" is the plain spreadsheet grid and the
+    // guard's default fallback, so pinning defaultMode is enough to land here
+    // regardless of headers. Generic columns so it reads as a blank sheet
+    // rather than nudging toward any other view's shape.
+    headers: ["Name", "Value", "Notes"],
+    mode: "table",
+  },
+  {
     id: "tasks",
     command: "Create tasks file",
     defaultName: "Tasks",
@@ -1193,6 +1204,7 @@ export default class CardViewPlugin extends Plugin {
     // defaultMode so it opens straight into the right renderer, and opens it.
     // Always available (no active-view gate), so they're the entry point to a
     // new tracker from anywhere. Headers must satisfy each view's detector:
+    //  - table: none — plain spreadsheet grid, the guard's own fallback
     //  - tasks: hasTaskColumns() (Priority/Due present)
     //  - travel: isTravelFile() (country + date_entered + date_left + source)
     //  - dashboard: a date column + boolean habit columns.
