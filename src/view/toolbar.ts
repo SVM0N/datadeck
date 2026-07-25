@@ -6,7 +6,7 @@
 import { Menu, Notice } from "obsidian";
 import type { CardView } from "../../main";
 import { ViewMode } from "../types";
-import { FileConfigModal, AutoDetectedRoles, SearchModal } from "../modals";
+import { FileConfigModal, AutoDetectedRoles, SearchModal, AnkiExportModal } from "../modals";
 import { syncToAnki, autoAnkiFrontCol } from "./anki";
 import { hasStatsColumns } from "./stats";
 import { hasChartColumns } from "./chart";
@@ -268,13 +268,25 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
     ).open();
   };
   const openBackup = () => { void view.backupToArchive(); };
-  const openAnki = () => { void syncToAnki(view); };
+  // Opens the deck/note-type/field-mapping settings rather than syncing
+  // straight away — export shape (which deck, which note type, which column
+  // fills which field) is per-file config, so it needs a place to live
+  // before syncToAnki can use it. Saving there is what actually persists the
+  // config to fileCfg; the "Save & sync" button then triggers the same
+  // syncToAnki this button used to call directly.
+  const openAnki = () => {
+    new AnkiExportModal(
+      view.app, view.headers, view.file?.basename ?? "", view.fileCfg, autoAnkiFrontCol(view),
+      (cfg) => view.saveFileCfg(cfg),
+      () => { void syncToAnki(view); },
+    ).open();
+  };
 
   ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-secondary", text: "⚙ Config", title: "Configure this file's columns and views" })
     .addEventListener("click", openColumns);
   ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-secondary", text: "💾 Backup", title: "Copy this file to archive/ with today's date" })
     .addEventListener("click", openBackup);
-  ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-secondary", text: "🎴 Anki", title: "Sync rows to Anki (needs Anki desktop + AnkiConnect)" })
+  ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-secondary", text: "🎴 Anki", title: "Configure and sync rows to Anki (needs Anki desktop + AnkiConnect)" })
     .addEventListener("click", openAnki);
 
   ctrl.createEl("button",{cls:"csv-add-btn",text:"+ add"}).addEventListener("click",()=>view.openAddModal());
@@ -288,7 +300,7 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
     const menu = new Menu();
     menu.addItem(i => i.setTitle("Config").setIcon("settings").onClick(openColumns));
     menu.addItem(i => i.setTitle("Backup").setIcon("save").onClick(openBackup));
-    menu.addItem(i => i.setTitle("Sync to Anki").setIcon("layers").onClick(openAnki));
+    menu.addItem(i => i.setTitle("Anki export…").setIcon("layers").onClick(openAnki));
     menu.addSeparator();
     // Build timestamp baked in at compile time. Lets the user confirm on
     // mobile that sync has actually delivered the latest deploy.

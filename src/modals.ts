@@ -8,6 +8,7 @@ import {
 import { CSVRow, FileConfig, ViewMode } from "./types";
 import { showSelectPicker, titleCase, isMultiValueColName, looksCategorical, isTruthyVal } from "./utils";
 import { suggestionsFor, isDateCol, ISO_DATE } from "./field-types";
+import { listAnkiModelNames, listAnkiModelFieldNames, ANKI_REST_FIELD } from "./view/anki";
 
 // ─── Shared field input ─────────────────────────────────────────────────────
 //
@@ -1145,6 +1146,186 @@ export class PromptModal extends Modal {
     const btnRow = contentEl.createDiv({ cls: "csv-modal-btns" });
     btnRow.createEl("button", { text: "Cancel", cls: "csv-modal-cancel" }).addEventListener("click", () => this.close());
     btnRow.createEl("button", { text: this.submitLabel, cls: "csv-modal-submit" }).addEventListener("click", submit);
+  }
+
+  onClose(): void { this.contentEl.empty(); }
+}
+
+// ─── Anki export modal ──────────────────────────────────────────────────────
+//
+// Settings for the "🎴 Anki" toolbar button: which deck to sync into (with
+// optional subdeck nesting), which Anki note type to use, and which column
+// fills each of that note type's fields. Note types and their field lists
+// come live from AnkiConnect (listAnkiModelNames/listAnkiModelFieldNames) so
+// the picker always matches what's actually installed in Anki; if Anki isn't
+// reachable, the note type falls back to a free-text input defaulting to
+// "Basic" with a manual Front/Back mapping. All edits are local to
+// `this.current` until Save/Sync, same as FileConfigModal.
+export class AnkiExportModal extends Modal {
+  headers: string[];
+  fileBasename: string;
+  current: FileConfig;
+  autoFrontCol: string | null;
+  onSave: (cfg: FileConfig) => void;
+  onSync: () => void;
+
+  constructor(
+    app: App, headers: string[], fileBasename: string, current: FileConfig,
+    autoFrontCol: string | null, onSave: (cfg: FileConfig) => void, onSync: () => void,
+  ) {
+    super(app);
+    this.headers = headers;
+    this.fileBasename = fileBasename;
+    this.current = { ...current, ankiFieldMap: current.ankiFieldMap ? { ...current.ankiFieldMap } : undefined };
+    this.autoFrontCol = autoFrontCol;
+    this.onSave = onSave;
+    this.onSync = onSync;
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("csv-add-modal");
+    contentEl.createEl("h2", { text: "Anki export settings", cls: "csv-modal-title" });
+    contentEl.createEl("p", {
+      cls: "csv-modal-desc",
+      text: "Configure where and how this file's rows sync to Anki. Needs the Anki desktop app open with the AnkiConnect add-on installed.",
+    });
+
+    const form = contentEl.createDiv({ cls: "csv-modal-form" });
+
+    // ── Deck / subdeck ──
+    const deckRow = form.createDiv({ cls: "csv-modal-row" });
+    deckRow.createEl("label", { text: "Deck name", cls: "csv-modal-label" });
+    const deckInput = deckRow.createEl("input", {
+      cls: "csv-modal-input", type: "text",
+      attr: { placeholder: this.fileBasename },
+    });
+    deckInput.value = this.current.ankiDeckName ?? "";
+
+    const subRow = form.createDiv({ cls: "csv-modal-row" });
+    subRow.createEl("label", { text: "Nest under (subdeck of)", cls: "csv-modal-label" });
+    const subInput = subRow.createEl("input", {
+      cls: "csv-modal-input", type: "text",
+      attr: { placeholder: "Leave blank for a top-level deck, e.g. \"language\"" },
+    });
+    subInput.value = this.current.ankiParentDeck ?? "";
+
+    const previewEl = form.createDiv({ cls: "csv-modal-hint" });
+    const updatePreview = () => {
+      const name = deckInput.value.trim() || this.fileBasename;
+      const parent = subInput.value.trim();
+      previewEl.setText(`Syncs into: "${parent ? `${parent}::${name}` : name}"`);
+    };
+    deckInput.addEventListener("input", updatePreview);
+    subInput.addEventListener("input", updatePreview);
+    updatePreview();
+
+    // ── Note type ──
+    const modelRow = form.createDiv({ cls: "csv-modal-row" });
+    modelRow.createEl("label", { text: "Note type", cls: "csv-modal-label" });
+    const modelHost = modelRow.createDiv();
+    modelHost.createSpan({ cls: "csv-modal-hint", text: "Loading note types from Anki…" });
+
+    // ── Field mapping ──
+    const fieldSection = contentEl.createDiv({ cls: "csv-modal-section", attr: { style: "margin-top: 20px;" } });
+    fieldSection.createEl("h3", { text: "Field mapping", cls: "csv-modal-h3" });
+    fieldSection.createEl("p", {
+      cls: "csv-modal-desc",
+      text: "Which column fills each Anki field. \"everything else\" packs every remaining non-empty column in as label: value lines.",
+    });
+    const fieldTableWrap = fieldSection.createDiv({ cls: "csv-modal-colcfg-table-wrap" });
+    const fieldTable = fieldTableWrap.createEl("table", { cls: "csv-modal-colcfg-table" });
+    const fieldThead = fieldTable.createEl("thead").createEl("tr");
+    ["Anki field", "Column"].forEach(h => fieldThead.createEl("th", { text: h }));
+    const fieldTbody = fieldTable.createEl("tbody");
+    fieldTbody.createEl("tr").createEl("td", { text: "…", attr: { colspan: "2" } });
+
+    // Renders the field-mapping rows for one note type's field list. Reseeds
+    // this.current.ankiFieldMap only when the saved map doesn't cover every
+    // field in `fields` (new note type, or first time configuring this
+    // file) — an already-compatible saved map (e.g. re-selecting the same
+    // model) is kept verbatim so in-progress edits survive re-renders.
+    const renderFieldRows = (fields: string[], savedMap: Record<string, string> | undefined) => {
+      const map = savedMap && fields.every(f => f in savedMap)
+        ? { ...savedMap }
+        : Object.fromEntries(fields.map((f, i) => [f, i === 0 ? (this.autoFrontCol ?? "") : i === 1 ? ANKI_REST_FIELD : ""]));
+      this.current.ankiFieldMap = map;
+      fieldTbody.empty();
+      fields.forEach(field => {
+        const row = fieldTbody.createEl("tr");
+        row.createEl("td", { text: field });
+        const cell = row.createEl("td");
+        const sel = cell.createEl("select", { cls: "csv-modal-select" });
+        sel.createEl("option", { text: "— empty —", value: "" });
+        sel.createEl("option", { text: "Everything else (label: value)", value: ANKI_REST_FIELD });
+        this.headers.forEach(h => sel.createEl("option", { text: h, value: h }));
+        sel.value = map[field] ?? "";
+        sel.addEventListener("change", () => {
+          if (!this.current.ankiFieldMap) this.current.ankiFieldMap = {};
+          this.current.ankiFieldMap[field] = sel.value;
+        });
+      });
+    };
+
+    const currentModel = this.current.ankiNoteType || "Basic";
+    void (async () => {
+      let models: string[] | null = null;
+      try { models = await listAnkiModelNames(); } catch { /* Anki unreachable — fall back below */ }
+
+      modelHost.empty();
+      if (models && models.length) {
+        const sel = modelHost.createEl("select", { cls: "csv-modal-select" });
+        models.forEach(m => {
+          const opt = sel.createEl("option", { text: m, value: m });
+          if (m === currentModel) opt.selected = true;
+        });
+        if (!models.includes(currentModel)) sel.createEl("option", { text: currentModel, value: currentModel }).selected = true;
+
+        const loadFields = async (savedMap: Record<string, string> | undefined) => {
+          this.current.ankiNoteType = sel.value === "Basic" ? undefined : sel.value;
+          try {
+            const fields = await listAnkiModelFieldNames(sel.value);
+            renderFieldRows(fields, savedMap);
+          } catch {
+            renderFieldRows(["Front", "Back"], savedMap);
+          }
+        };
+        sel.addEventListener("change", () => { void loadFields(this.current.ankiFieldMap); });
+        await loadFields(this.current.ankiFieldMap);
+      } else {
+        const modelInput = modelHost.createEl("input", {
+          cls: "csv-modal-input", type: "text",
+          attr: { placeholder: "Basic" },
+        });
+        modelInput.value = currentModel === "Basic" ? "" : currentModel;
+        modelInput.addEventListener("input", () => {
+          const v = modelInput.value.trim();
+          this.current.ankiNoteType = v && v !== "Basic" ? v : undefined;
+        });
+        modelHost.createEl("p", {
+          cls: "csv-modal-hint",
+          text: "Couldn't reach Anki — type the note type name and map fields manually.",
+        });
+        renderFieldRows(["Front", "Back"], this.current.ankiFieldMap);
+      }
+    })();
+
+    const btnRow = contentEl.createDiv({ cls: "csv-modal-btns" });
+    btnRow.createEl("button", { text: "Cancel", cls: "csv-modal-cancel" }).addEventListener("click", () => this.close());
+    btnRow.createEl("button", { text: "Save", cls: "csv-modal-cancel" }).addEventListener("click", () => {
+      this.current.ankiDeckName = deckInput.value.trim() || undefined;
+      this.current.ankiParentDeck = subInput.value.trim() || undefined;
+      this.onSave(this.current);
+      this.close();
+    });
+    btnRow.createEl("button", { text: "Save & sync", cls: "csv-modal-submit" }).addEventListener("click", () => {
+      this.current.ankiDeckName = deckInput.value.trim() || undefined;
+      this.current.ankiParentDeck = subInput.value.trim() || undefined;
+      this.onSave(this.current);
+      this.close();
+      this.onSync();
+    });
   }
 
   onClose(): void { this.contentEl.empty(); }

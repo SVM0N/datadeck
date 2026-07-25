@@ -51,6 +51,18 @@ export interface FileConfig {
   ankiFrontCol?: string;      // Column used as the Anki card front on sync.
                               // Unset = the title/primary field; every other
                               // non-empty column becomes the card back.
+  ankiDeckName?: string;      // Anki deck to sync into. Unset = the file's
+                              // basename.
+  ankiParentDeck?: string;    // Parent deck path to nest ankiDeckName under
+                              // as a subdeck ("Parent::Deck"). Unset = a
+                              // top-level deck.
+  ankiNoteType?: string;      // Anki note type / model name. Unset = "Basic".
+  ankiFieldMap?: { [ankiField: string]: string }; // Anki field name → CSV
+                              // column name. The sentinel value "__rest__"
+                              // means "every other non-empty column, as
+                              // Label: value lines" (the legacy Back
+                              // behaviour). Unset = the legacy two-field
+                              // Front/Back auto-mapping.
   categoricalColumns?: string[]; // Columns that render as a dropdown (Add
                               // entry / entry editor / mobile add form)
                               // instead of free text. Unset = auto-detect
