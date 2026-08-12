@@ -22,3 +22,4 @@ Test/
 
 # Claude Code local settings — machine-specific paths, never track.
 .claude/
+/CLAUDE.md

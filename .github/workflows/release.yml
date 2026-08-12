@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  build-and-attest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check manifest version matches tag
+        run: |
+          manifest_version=$(node -p "require('./manifest.json').version")
+          tag="${{ github.event.release.tag_name }}"
+          if [ "$manifest_version" != "$tag" ]; then
+            echo "manifest.json version ($manifest_version) does not match release tag ($tag)"
+            exit 1
+          fi
+
+      - name: Type check, test, lint
+        run: |
+          npm run typecheck
+          npm run test:all
+          npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            main.js manifest.json styles.css \
+            --repo "${{ github.repository }}" \
+            --clobber
