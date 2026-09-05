@@ -31,7 +31,7 @@ const isoOf = f => {
   return a2 ?? byName[f.properties.name] ?? "";
 };
 
-let out = `<svg id="world-svg" viewBox="0 0 960 500">`;
+let out = `<svg id="world-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 500">`;
 out += `<path fill="none" stroke="#1a1e2a" stroke-width="0.3" d="${q(path(geoGraticule10()))}"/>`;
 let keyed = 0, unkeyed = [];
 for (const f of land.features) {
