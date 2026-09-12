@@ -4,7 +4,7 @@ Reference doc — load when editing `styles.css` or tracing a visual bug to its 
 
 | Class | Where | Description |
 |---|---|---|
-| `.datadeck-root` | Root | Sets CSS vars, flex column layout |
+| `.datadeck-root` | Root | Flex column layout for a full view. The `--csv-*` vars live on `:root`, not here — inline blocks and body-mounted pickers render outside this element, and an unresolved `var()` silently voids the whole declaration (it made the inline sticky header transparent) |
 | `.csv-toolbar` | Both | Top toolbar; `flex-wrap: wrap` so controls drop to a second row on narrow viewports |
 | `.csv-toolbar-controls` | Both | Right-hand group; also wraps |
 | `.csv-toolbar-title` | Both | Filename header; hidden on `max-width: 600px` (redundant with tab) |
@@ -37,7 +37,7 @@ Reference doc — load when editing `styles.css` or tracing a visual bug to its 
 | `.csv-table-expand-btn` | Table | "⤢" button, shown on row hover |
 | `.csv-table-image-cell` | Table | Cell of the image column; narrower than a text column and opted out of the 7.5em text clamp |
 | `.csv-table-img-stack` | Table | Wrapper stacking a cell's images (`;`-separated values) top-to-bottom |
-| `.csv-table-img` | Table | A table thumbnail; `contain`-fitted, capped at 56px tall (44px on mobile) |
+| `.csv-table-img` | Table | A table thumbnail. `--csv-img-h` caps its height (default 56px / 44px mobile), `--csv-img-w` sets its width (default `auto`) — set both per column from a snippet to switch fit-height → fit-width |
 | `.csv-col-resize-handle` | Table | Drag handle on `<th>` right edge |
 | `.csv-cell--clipped` | Table | Added at render time when a cell's content overflows its clamp; shows the bottom-fade |
 | `.csv-content-area` | Both | Scroll container for view content |

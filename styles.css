@@ -15,7 +15,15 @@
   --csv-amber-bg: rgba(255, 149, 0, 0.13);
 }
 
-.datadeck-root {
+/* Surface/text/accent vars live on :root, not on .datadeck-root. The plugin
+   renders in places that are not inside a view root — `csv-view` / `csv-tasks`
+   blocks embedded in a note, and pickers mounted on document.body — and there
+   a `var(--csv-…)` that resolves to nothing makes the whole declaration invalid:
+   `background: var(--csv-surface)` becomes transparent. That is what made the
+   inline table's sticky header see-through, so rows scrolled visibly through
+   the column titles. Defining them globally costs nothing (they are all
+   derived from Obsidian's own vars) and makes every mount point correct. */
+:root {
   --csv-bg: var(--background-primary);
   --csv-surface: var(--background-secondary);
   --csv-surface-2: var(--background-modifier-border);
@@ -30,7 +38,9 @@
   --csv-shadow: 0 1px 4px rgba(0,0,0,0.08), 0 0 0 1px var(--csv-border);
   --csv-shadow-hover: 0 4px 16px rgba(0,0,0,0.12), 0 0 0 1px var(--csv-accent);
   --csv-font-mono: var(--font-monospace);
+}
 
+.datadeck-root {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -3329,7 +3339,7 @@ select.csv-add-row-control {
     min-width: 70px;
     max-width: 110px;
   }
-  .csv-table-img { max-height: 44px; }
+  .csv-table-img { max-height: var(--csv-img-h, 44px); }
 }
 
 /* ─── Travel view ─────────────────────────────────────────────────────────────
@@ -4444,11 +4454,16 @@ select.csv-add-row-control {
   overflow-wrap: anywhere;
   max-width: 100%;
 }
+/* Two knobs, settable per column from a CSS snippet (see README → Styling a
+   column). Default is fit-height: cap the height, let the width follow the
+   aspect ratio. Setting --csv-img-w (e.g. 100%) and --csv-img-h: none flips it
+   to fit-width: the image takes that share of the column and the height
+   follows. */
 .csv-table-img {
   display: block;
   max-width: 100%;
-  max-height: 56px;
-  width: auto;
+  max-height: var(--csv-img-h, 56px);
+  width: var(--csv-img-w, auto);
   object-fit: contain;
   border-radius: 4px;
   background: var(--csv-surface-2);

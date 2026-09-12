@@ -248,27 +248,31 @@ add-on and the Anki desktop app running; desktop-only (it talks to
 
 ## Styling a column
 
-Every table header and cell carries its column name as a `data-col`
-attribute, so a CSS snippet (Settings → Appearance → CSS snippets) can style
-one column without any plugin config:
+Every header and cell carries its column name as `data-col`, so a CSS snippet
+(Settings → Appearance → CSS snippets) can style one column:
 
 ```css
-/* Big serif hanzi in the Character column, everywhere it renders */
+/* Big serif hanzi in the Character column */
 .csv-table td[data-col="Character"] {
   font-family: "Songti SC", serif;
   font-size: 26px;
-  line-height: 1.2;
 }
 
-/* Narrow that column only inside an inline csv-view block */
+/* Images: fill the column's width instead of being capped at 56px tall */
+.csv-table td[data-col="Image"] { --csv-img-w: 100%; --csv-img-h: none; }
+
+/* Any of the above, only inside an inline csv-view block */
 .csv-inline-view .csv-table td[data-col="Character"] { min-width: 48px; }
 ```
 
-Column names are matched exactly, including case and spaces. Cell values are
-inserted as plain text, so HTML written into a cell shows up as text rather
-than markup — style the column instead. Dragging a header's right edge also
-resizes a column and the width is remembered (per column name, shared between
-the full view and `csv-view` blocks).
+Names match exactly, case and spaces included. Two knobs control thumbnails:
+`--csv-img-h` caps the height (default `56px`, width follows the aspect
+ratio) and `--csv-img-w` sets the width (`100%`, `60%`, …) — set `--csv-img-h:
+none` alongside it to switch from fit-height to fit-width.
+
+Cell values are inserted as plain text, so HTML typed into a cell shows up as
+text — style the column instead. Dragging a header's right edge also resizes a
+column, and the width is remembered per column name.
 
 ## Commands
 
