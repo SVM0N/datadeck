@@ -885,6 +885,60 @@ await test("csv-view: parses the columns/hide directives", async () => {
   assert(none.columns.length === 0 && none.hide.length === 0, "absent directives are empty lists");
 });
 
+await test("csv-view: a hidden column survives an edit — the file keeps every column", async () => {
+  // End-to-end through the real block: register it, render it over a stub
+  // vault, edit a *visible* cell, and inspect what gets written back. The
+  // guarantee being pinned: `hide:` is display-only, so the CSV keeps its
+  // full shape and the hidden column's values are not dropped on save.
+  const { registerCsvViewBlock } = await load("./src/inline-view.ts");
+  const DISK = "Character,Explanation,Source\n\u4e00,one,book\n\u4e8c,two,notes\n";
+  let written = null;
+  const file = { path: "h.csv", name: "h.csv", basename: "h", parent: { path: "" } };
+  const app = {
+    vault: {
+      getAbstractFileByPath: (p) => (p === "h.csv" ? file : null),
+      read: async () => DISK,
+      modify: async (_f, c) => { written = c; },
+      on: () => ({}),
+      adapter: { exists: async () => false, mkdir: async () => {}, write: async () => {} },
+    },
+    metadataCache: { getFirstLinkpathDest: () => null },
+    workspace: { getActiveFile: () => null, on: () => ({}) },
+  };
+  let handler = null;
+  const settings = {
+    defaultMode: "table", notesColumns: ["notes", "Notes"], statusColumn: "status",
+    categoryColumn: "category", notesSubfolder: "Notes", columnWidths: {},
+    selectColumns: [], fileConfigs: {}, residencyRules: [], showResidency: false,
+  };
+  registerCsvViewBlock(app, settings, async () => {}, (_lang, h) => { handler = h; });
+  assert(handler, "block processor registered");
+
+  const el = document.body.createDiv();
+  let host = null;
+  handler("file: h.csv\nhide: Source", el, { sourcePath: "note.md", addChild: (c) => { host = c; } });
+  host.onload();
+  await new Promise(r => setTimeout(r, 30));   // reload() is async
+
+  assert(host.headers.join("|") === "Character|Explanation|Source", "headers keep the file's real shape");
+  assert(host.displayHeaders.join("|") === "Character|Explanation", "Source is hidden from the display");
+  assert(!el.querySelector('th[data-col="Source"]'), "hidden column is not drawn");
+
+  // Edit a visible cell the way a user would, then let the debounced save run.
+  const cell = el.querySelector('td[data-col="Explanation"]');
+  cell.click();
+  const input = cell.querySelector("input.csv-inline-input");
+  input.value = "ONE";
+  input.dispatchEvent(new window.Event("blur"));
+  await new Promise(r => setTimeout(r, 700));  // 600ms save debounce
+
+  assert(written, "a save happened");
+  const headerRow = written.split(/\r?\n/)[0];   // Papa writes CRLF
+  assert(headerRow === "Character,Explanation,Source", `header row unchanged (got "${headerRow}")`);
+  assert(written.includes("book") && written.includes("notes"), "hidden column's values are still on disk");
+  assert(written.includes("ONE"), "the edit was written");
+});
+
 // ── Boolean/habit-column auto-detection ─────────────────────────────────────
 const { looksBoolean, isTruthyVal, splitImageRefs, resolveFirstImageSrc } = await load("./src/utils.ts");
 
