@@ -34,6 +34,9 @@ Reference doc — load when editing `styles.css` or tracing a visual bug to its 
 | `.csv-table` | Table | Main table element |
 | `.csv-table-notes-cell` | Table | Notes cell (relative-positioned for expand btn) |
 | `.csv-table-expand-btn` | Table | "⤢" button, shown on row hover |
+| `.csv-table-image-cell` | Table | Cell of the image column; narrower than a text column and opted out of the 7.5em text clamp |
+| `.csv-table-img-stack` | Table | Wrapper stacking a cell's images (`;`-separated values) top-to-bottom |
+| `.csv-table-img` | Table | A table thumbnail; `contain`-fitted, capped at 56px tall (44px on mobile) |
 | `.csv-col-resize-handle` | Table | Drag handle on `<th>` right edge |
 | `.csv-cell--clipped` | Table | Added at render time when a cell's content overflows its clamp; shows the bottom-fade |
 | `.csv-content-area` | Both | Scroll container for view content |

@@ -6,6 +6,7 @@
 import type { CardView } from "../../main";
 import { CSVRow } from "../types";
 import { isDateCol, ISO_DATE } from "../field-types";
+import { resolveImageSrc, splitImageRefs } from "../utils";
 
 export function renderTable(view: CardView, container: HTMLElement): void {
   const filteredRows = view.getFilteredRows();
@@ -76,6 +77,11 @@ export function renderTable(view: CardView, container: HTMLElement): void {
   // forced reflows per render on phones (the prime cause of table-view lag
   // on mobile when the file has hundreds of rows).
   const isTouch = matchMedia("(pointer: coarse)").matches;
+  // Image column (same resolution Cards/Kanban use) so a table row shows the
+  // thumbnail rather than a raw vault path — the cell stays editable, it just
+  // renders the picture instead of the string.
+  const imageCol = view.getImageCol?.() ?? null;
+  const sourcePath = view.file?.path ?? "";
   const tbody = table.createEl("tbody");
   filteredRows.forEach((row) => {
     const tr = tbody.createEl("tr");
@@ -94,6 +100,12 @@ export function renderTable(view: CardView, container: HTMLElement): void {
         // too, but the cell is the obvious click target — the button was
         // redundant noise.
         td.addEventListener("click", (e) => { e.stopPropagation(); view.openNoteExpander(row, h); });
+      } else if (h === imageCol) {
+        td.addClass("csv-table-image-cell");
+        renderImageCell(view, td, row, h, sourcePath);
+        // Restore the thumbnail (not the raw path) once the inline editor
+        // commits, otherwise editing a cell once turns it back into text.
+        makeEditable(view, td, row, h, el => renderImageCell(view, el, row, h, sourcePath));
       } else if (view.isSelectCol(h)) {
         view.renderSelectField(td, row, h);
       } else {
@@ -115,14 +127,42 @@ export function renderTable(view: CardView, container: HTMLElement): void {
   // cheaper than per-row rAF on big files. Skipped entirely on touch.
   if (!isTouch) {
     window.requestAnimationFrame(() => {
-      tbody.querySelectorAll<HTMLElement>("td:not(.csv-table-notes-cell):not(.csv-table-action)").forEach(cell => {
+      tbody.querySelectorAll<HTMLElement>("td:not(.csv-table-notes-cell):not(.csv-table-action):not(.csv-table-image-cell)").forEach(cell => {
         if (cell.scrollHeight > cell.clientHeight + 1) cell.addClass("csv-cell--clipped");
       });
     });
   }
 }
 
-export function makeEditable(view: CardView, el: HTMLElement, row: CSVRow, h: string): void {
+/**
+ * Paint an image cell: each reference becomes a thumbnail when it resolves to
+ * a usable image, otherwise its raw text (so an unresolvable path is still
+ * visible and fixable). A src that fails to load falls back to its text the
+ * same way, so a broken link never leaves a blank gap. Several references
+ * stack vertically inside the one cell.
+ */
+function renderImageCell(view: CardView, td: HTMLElement, row: CSVRow, h: string, sourcePath: string): void {
+  const val = row[h] ?? "";
+  const parts = splitImageRefs(val);
+  if (!parts.length) { td.setText(val); return; }
+  // Wrapper (not the td itself) carries the stacking — a display other than
+  // table-cell on the td misaligns the row's borders against its neighbours.
+  const stack = td.createDiv({ cls: "csv-table-img-stack" });
+  parts.forEach(part => {
+    const src = resolveImageSrc(view.app, part, sourcePath);
+    if (!src) { stack.createSpan({ text: part }); return; }
+    const img = stack.createEl("img", { cls: "csv-table-img", attr: { src, loading: "lazy", alt: "" } });
+    img.title = part;
+    img.addEventListener("error", () => { const span = stack.createSpan({ text: part }); img.replaceWith(span); });
+  });
+}
+
+/**
+ * Click-to-edit for a data cell. `restore` lets a caller re-render richer
+ * content (e.g. an image thumbnail) after the edit commits; without it the
+ * cell falls back to plain text.
+ */
+export function makeEditable(view: CardView, el: HTMLElement, row: CSVRow, h: string, restore?: (el: HTMLElement) => void): void {
   el.addEventListener("click", (e) => {
     // If we're already editing (e.g. user clicked the input), do not reset it
     if (el.querySelector("input")) return;
@@ -164,7 +204,8 @@ export function makeEditable(view: CardView, el: HTMLElement, row: CSVRow, h: st
         view.scheduleSave();
       }
       el.empty();
-      el.setText((row[h] ?? "") || "—");
+      if (restore) restore(el);
+      else el.setText((row[h] ?? "") || "—");
     });
     input.addEventListener("keydown", ev => {
       if (ev.key === "Enter") input.blur();

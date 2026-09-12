@@ -4,7 +4,7 @@
 
 import type { CardView } from "../../main";
 import { CSVRow, LibrarySort } from "../types";
-import { formatRatingForDisplay, resolveImageSrc } from "../utils";
+import { formatRatingForDisplay, resolveFirstImageSrc } from "../utils";
 import { parseRating } from "./stats";
 import { effectiveGroupCol } from "./kanban";
 
@@ -254,7 +254,7 @@ export function renderLibrary(view: CardView, container: HTMLElement): void {
       // Cover image (when an image column resolves to a usable src). Lazy so a
       // genre section with many cards doesn't fetch every image up front.
       if (imageCol) {
-        const src = resolveImageSrc(view.app, row[imageCol] ?? "", view.file?.path ?? "");
+        const src = resolveFirstImageSrc(view.app, row[imageCol] ?? "", view.file?.path ?? "");
         if (src) {
           const img = card.createEl("img", { cls: "csv-library-card-img", attr: { src, loading: "lazy", alt: "" } });
           img.addEventListener("error", () => img.remove()); // drop broken images quietly

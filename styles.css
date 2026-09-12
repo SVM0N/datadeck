@@ -3325,6 +3325,11 @@ select.csv-add-row-control {
     max-width: 220px;
     font-size: 11px;
   }
+  .csv-table td.csv-table-image-cell {
+    min-width: 70px;
+    max-width: 110px;
+  }
+  .csv-table-img { max-height: 44px; }
 }
 
 /* ─── Travel view ─────────────────────────────────────────────────────────────
@@ -4393,6 +4398,44 @@ select.csv-add-row-control {
   border-radius: 6px;
   margin-bottom: 8px;
   background: var(--csv-surface-2);
+}
+
+/* Table thumbnails. Narrower than a text column (a path string needed the
+   width, a thumbnail doesn't) and height-capped well under the td's 7.5em
+   clamp so an image row stays the same height as a text row. `contain` keeps
+   the picture whole — a table scan is about recognising the image, not
+   filling a tile as the card views do. */
+.csv-table td.csv-table-image-cell {
+  min-width: 90px;
+  max-width: 160px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  /* Opt out of the td text clamp: a cell holding several stacked images is
+     meant to be as tall as its pictures, not cut off at 7.5em. */
+  max-height: none;
+  overflow: visible;
+}
+/* Semicolon-separated values stack top-to-bottom inside the one cell. The
+   flex lives on a wrapper, not the td — a display other than table-cell on a
+   td misaligns the row's borders against its neighbours. */
+.csv-table-img-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  /* Unresolvable entries render as their raw text next to the thumbnails. */
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+.csv-table-img {
+  display: block;
+  max-width: 100%;
+  max-height: 56px;
+  width: auto;
+  object-fit: contain;
+  border-radius: 4px;
+  background: var(--csv-surface-2);
+  cursor: pointer;
 }
 
 /* ─── Toggle (habit 0/1 columns in the add form) ─────────────────────────────

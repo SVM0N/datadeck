@@ -4,7 +4,7 @@
 
 import type { CardView } from "../../main";
 import { CSVRow } from "../types";
-import { showSelectPicker, isMultiValueColName, isYearLikeColumn, decadeLabel, pickFallbackGroupCol, resolveImageSrc } from "../utils";
+import { showSelectPicker, isMultiValueColName, isYearLikeColumn, decadeLabel, pickFallbackGroupCol, resolveFirstImageSrc } from "../utils";
 
 /**
  * The column Cards/Kanban group by, resolved in priority order:
@@ -144,7 +144,7 @@ function renderKanbanCard(view: CardView, container: HTMLElement, row: CSVRow, s
   // Thumbnail (when an image column resolves). Lazy-loaded; broken srcs drop out.
   const imageCol = view.getImageCol?.() ?? null;
   if (imageCol) {
-    const src = resolveImageSrc(view.app, row[imageCol] ?? "", view.file?.path ?? "");
+    const src = resolveFirstImageSrc(view.app, row[imageCol] ?? "", view.file?.path ?? "");
     if (src) {
       const img = card.createEl("img", { cls: "csv-kanban-card-img", attr: { src, loading: "lazy", alt: "" } });
       img.addEventListener("error", () => img.remove());

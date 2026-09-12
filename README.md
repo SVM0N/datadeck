@@ -86,7 +86,7 @@ columns:
 
 | Mode | Appears when… | What it shows |
 |------|---------------|---------------|
-| **Table** | always | Editable spreadsheet: resizable columns, click-to-sort headers, sticky header |
+| **Table** | always | Editable spreadsheet: resizable columns, click-to-sort headers, sticky header, inline thumbnails for an image column (several per cell when `;`-separated) |
 | **Cards** | any groupable column | A library grouped by category — status dots, star ratings, tags, cover images, per-file sort |
 | **Kanban** | any groupable column | Columns by category (or any column via "Group by" — year columns bucket into decades), status subgroups, inline note editing |
 | **Chart** | a numeric column (2+ rows) | Scatter/line of any column pair with hue, size-by, fits, formulas, smoothing, bucketing, and bar aggregates — see [Charts](#charts) |

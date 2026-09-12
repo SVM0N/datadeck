@@ -176,6 +176,159 @@ await test("table: search count appears when a query is set", async () => {
   assert(c.querySelector(".csv-search-results"), "search result count shown");
 });
 
+await test("table: image column renders a thumbnail, and keeps it after an edit", async () => {
+  const rows = [{ Title: "Dune", Image: "https://example.com/dune.png" }];
+  const view = {
+    headers: ["Title", "Image"], rows, searchQuery: "", settings: { columnWidths: {} },
+    app: {}, file: { path: "books.csv" },
+    getFilteredRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
+    openRowContextMenu: () => {}, isNotesCol: () => false, openNoteExpander: () => {},
+    isSelectCol: () => false, renderSelectField: (td) => td, notesFileExists: () => false,
+    openOrCreateNotes: () => {}, deleteWithUndo: () => {}, getImageCol: () => "Image",
+    fileCfg: {},
+  };
+  const c = document.body.createDiv();
+  renderTable(view, c);
+  const cell = c.querySelector("td.csv-table-image-cell");
+  assert(cell, "image column gets an image cell");
+  assert(cell.querySelector("img.csv-table-img"), "thumbnail rendered instead of the raw path");
+  // The cell stays editable — and committing an edit repaints the thumbnail
+  // rather than dropping back to the path string.
+  cell.click();
+  const input = cell.querySelector("input.csv-inline-input");
+  assert(input, "clicking the cell opens the inline editor");
+  input.value = "https://example.com/other.png";
+  input.dispatchEvent(new window.Event("blur"));
+  assert(rows[0].Image === "https://example.com/other.png", "edit written back to the row");
+  assert(cell.querySelector("img.csv-table-img"), "thumbnail re-rendered after the edit");
+});
+
+await test("table: unresolvable image value falls back to its text", async () => {
+  const rows = [{ Image: "not-a-real-file.png" }];
+  const view = {
+    headers: ["Image"], rows, searchQuery: "", settings: { columnWidths: {} },
+    app: { metadataCache: { getFirstLinkpathDest: () => null }, vault: { getResourcePath: () => "" } },
+    file: { path: "books.csv" },
+    getFilteredRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
+    openRowContextMenu: () => {}, isNotesCol: () => false, openNoteExpander: () => {},
+    isSelectCol: () => false, renderSelectField: (td) => td, notesFileExists: () => false,
+    openOrCreateNotes: () => {}, deleteWithUndo: () => {}, getImageCol: () => "Image",
+    fileCfg: {},
+  };
+  const c = document.body.createDiv();
+  renderTable(view, c);
+  const cell = c.querySelector("td.csv-table-image-cell");
+  assert(!cell.querySelector("img"), "no <img> when the path resolves to nothing");
+  assert(cell.textContent === "not-a-real-file.png", "raw value stays visible so it can be fixed");
+});
+
+await test("table: wikilink/markdown image values are unwrapped before the vault lookup", async () => {
+  const rows = [{ Image: "![[Screenshot one.png]]" }, { Image: "![](sub/two.png)" }];
+  const asked = [];
+  const view = {
+    headers: ["Image"], rows, searchQuery: "", settings: { columnWidths: {} },
+    app: {
+      metadataCache: { getFirstLinkpathDest: (link, src) => { asked.push([link, src]); return null; } },
+      vault: { getResourcePath: () => "" },
+    },
+    file: { path: "notes/books.csv" },
+    getFilteredRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
+    openRowContextMenu: () => {}, isNotesCol: () => false, openNoteExpander: () => {},
+    isSelectCol: () => false, renderSelectField: (td) => td, notesFileExists: () => false,
+    openOrCreateNotes: () => {}, deleteWithUndo: () => {}, getImageCol: () => "Image",
+    fileCfg: {},
+  };
+  renderTable(view, document.body.createDiv());
+  assert(asked.length === 2, "both rows attempted a vault lookup");
+  assert(asked[0][0] === "Screenshot one.png", `wikilink unwrapped (got "${asked[0][0]}")`);
+  assert(asked[1][0] === "sub/two.png", `markdown image unwrapped (got "${asked[1][0]}")`);
+  assert(asked[0][1] === "notes/books.csv", "resolved relative to the sheet's own path");
+});
+
+await test("table: empty image cell renders empty and stays editable", async () => {
+  const rows = [{ Image: "" }];
+  const view = {
+    headers: ["Image"], rows, searchQuery: "", settings: { columnWidths: {} },
+    app: {}, file: { path: "books.csv" },
+    getFilteredRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
+    openRowContextMenu: () => {}, isNotesCol: () => false, openNoteExpander: () => {},
+    isSelectCol: () => false, renderSelectField: (td) => td, notesFileExists: () => false,
+    openOrCreateNotes: () => {}, deleteWithUndo: () => {}, getImageCol: () => "Image",
+    fileCfg: {},
+  };
+  const c = document.body.createDiv();
+  renderTable(view, c);
+  const cell = c.querySelector("td.csv-table-image-cell");
+  assert(cell && !cell.querySelector("img"), "no <img> for an empty value");
+  cell.click();
+  const input = cell.querySelector("input.csv-inline-input");
+  assert(input, "an empty image cell can still be filled in");
+  input.value = "https://example.com/new.png";
+  input.dispatchEvent(new window.Event("blur"));
+  assert(cell.querySelector("img.csv-table-img"), "the new value renders as a thumbnail immediately");
+});
+
+await test("table: semicolon-separated images stack in the one cell", async () => {
+  const rows = [{ Image: "https://example.com/a.png; https://example.com/b.png" }];
+  const view = {
+    headers: ["Image"], rows, searchQuery: "", settings: { columnWidths: {} },
+    app: {}, file: { path: "books.csv" },
+    getFilteredRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
+    openRowContextMenu: () => {}, isNotesCol: () => false, openNoteExpander: () => {},
+    isSelectCol: () => false, renderSelectField: (td) => td, notesFileExists: () => false,
+    openOrCreateNotes: () => {}, deleteWithUndo: () => {}, getImageCol: () => "Image",
+    fileCfg: {},
+  };
+  const c = document.body.createDiv();
+  renderTable(view, c);
+  const imgs = c.querySelectorAll("td.csv-table-image-cell img.csv-table-img");
+  assert(imgs.length === 2, `both images rendered (got ${imgs.length})`);
+  assert(imgs[0].getAttribute("src") === "https://example.com/a.png", "first src kept, whitespace trimmed");
+  assert(imgs[1].getAttribute("src") === "https://example.com/b.png", "second src kept, whitespace trimmed");
+  assert(c.querySelector(".csv-table-img-stack"), "stacked inside a wrapper, not directly on the td");
+});
+
+await test("table: a data: URI is never split on its own semicolons", async () => {
+  const uri = "data:image/png;base64,iVBORw0KGgo=";
+  const rows = [{ Image: uri }];
+  const view = {
+    headers: ["Image"], rows, searchQuery: "", settings: { columnWidths: {} },
+    app: {}, file: { path: "books.csv" },
+    getFilteredRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
+    openRowContextMenu: () => {}, isNotesCol: () => false, openNoteExpander: () => {},
+    isSelectCol: () => false, renderSelectField: (td) => td, notesFileExists: () => false,
+    openOrCreateNotes: () => {}, deleteWithUndo: () => {}, getImageCol: () => "Image",
+    fileCfg: {},
+  };
+  const c = document.body.createDiv();
+  renderTable(view, c);
+  const imgs = c.querySelectorAll("td.csv-table-image-cell img.csv-table-img");
+  assert(imgs.length === 1, `one image, not two halves (got ${imgs.length})`);
+  assert(imgs[0].getAttribute("src") === uri, "base64 payload intact");
+});
+
+await test("table: in a mixed list, resolvable images render and the rest stay as text", async () => {
+  const rows = [{ Image: "https://example.com/a.png;missing.png" }];
+  const view = {
+    headers: ["Image"], rows, searchQuery: "", settings: { columnWidths: {} },
+    app: {
+      metadataCache: { getFirstLinkpathDest: () => null },
+      vault: { getResourcePath: () => "" },
+    },
+    file: { path: "books.csv" },
+    getFilteredRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
+    openRowContextMenu: () => {}, isNotesCol: () => false, openNoteExpander: () => {},
+    isSelectCol: () => false, renderSelectField: (td) => td, notesFileExists: () => false,
+    openOrCreateNotes: () => {}, deleteWithUndo: () => {}, getImageCol: () => "Image",
+    fileCfg: {},
+  };
+  const c = document.body.createDiv();
+  renderTable(view, c);
+  const cell = c.querySelector("td.csv-table-image-cell");
+  assert(cell.querySelectorAll("img.csv-table-img").length === 1, "the resolvable half renders as an image");
+  assert(cell.textContent === "missing.png", "the unresolvable half stays readable as text");
+});
+
 // ── Library view ─────────────────────────────────────────────────────────────
 const { renderLibrary } = await load("./src/view/library.ts");
 
@@ -699,7 +852,24 @@ await test("table: clicking a header cycles sort asc → desc → off", async ()
 });
 
 // ── Boolean/habit-column auto-detection ─────────────────────────────────────
-const { looksBoolean, isTruthyVal } = await load("./src/utils.ts");
+const { looksBoolean, isTruthyVal, splitImageRefs, resolveFirstImageSrc } = await load("./src/utils.ts");
+
+await test("splitImageRefs: splits on \";\", trims, and leaves data: URIs whole", async () => {
+  assert(splitImageRefs("") .length === 0, "empty value has no refs");
+  assert(splitImageRefs("a.png").join("|") === "a.png", "single value passes through");
+  assert(splitImageRefs(" a.png ; sub/b.png ").join("|") === "a.png|sub/b.png", "split and trimmed");
+  assert(splitImageRefs("data:image/png;base64,AAA=").length === 1, "data: URI is never split");
+  assert(splitImageRefs(";;").join("|") === ";;", "a value that is only separators stays intact");
+});
+
+await test("resolveFirstImageSrc: card/kanban thumbnails use the first resolvable ref", async () => {
+  const app = { metadataCache: { getFirstLinkpathDest: () => null }, vault: { getResourcePath: () => "" } };
+  // Regression guard: before multi-image support the whole "a;b" string was
+  // resolved as one path, so a two-image cell showed no card thumbnail at all.
+  assert(resolveFirstImageSrc(app, "missing.png;https://example.com/b.png", "x.csv") === "https://example.com/b.png",
+    "falls through to the ref that resolves");
+  assert(resolveFirstImageSrc(app, "missing.png", "x.csv") === null, "still null when nothing resolves");
+});
 
 await test("looksBoolean: empty column (no rows yet) is never boolean", async () => {
   // Regression test: [].every(...) is vacuously true in JS, which used to

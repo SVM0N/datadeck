@@ -61,6 +61,34 @@ export const PRICE_COL_ALIASES = [
 ];
 
 /**
+ * Split an image cell into its individual references. Semicolon-separated
+ * values hold several pictures (the table view stacks them; the card views
+ * show the first that resolves), but a lone `data:` URI is never split —
+ * base64 payloads carry their own semicolons (`data:image/png;base64,…`) and
+ * splitting one would destroy it.
+ */
+export function splitImageRefs(val: string): string[] {
+  const v = (val ?? "").trim();
+  if (!v) return [];
+  if (/^data:/i.test(v)) return [v];
+  const parts = v.split(";").map(p => p.trim()).filter(Boolean);
+  return parts.length ? parts : [v];
+}
+
+/**
+ * Resolve the first reference in a cell that points at a usable image, or
+ * null. Single-image cells behave exactly as before; multi-image cells give
+ * the card/kanban thumbnail something to show instead of nothing.
+ */
+export function resolveFirstImageSrc(app: App, raw: string, sourcePath: string): string | null {
+  for (const ref of splitImageRefs(raw)) {
+    const src = resolveImageSrc(app, ref, sourcePath);
+    if (src) return src;
+  }
+  return null;
+}
+
+/**
  * Resolve a cell value into an <img> src, or null if it isn't resolvable.
  * Accepts: http(s)/data URLs (used as-is), `![[wikilink]]` / `[[wikilink]]`,
  * `![](path)` markdown images, and bare vault paths / filenames (resolved
