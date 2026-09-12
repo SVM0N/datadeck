@@ -4369,8 +4369,18 @@ select.csv-add-row-control {
    shorthand, and zebra/alt-column fills that overrode our hover tint. Re-
    assert our own chrome at a specificity that actually wins (0,2,3), for both
    the csv-view table and the csv-tasks board. */
+/* Not sticky inside a note. A sticky header has rows passing underneath it,
+   and in Obsidian's renderer a scrolled row's images and buttons paint on top
+   of the frozen titles instead of behind them — z-index on the cell, a
+   stacking context on the row group, border-collapse: separate and an
+   absolutely-positioned backdrop inside the cell were all tried against a
+   reproduction and none of them put the header in front. An embedded block is
+   a screenful at most, so the header simply scrolls with the content: no
+   overlap is possible, which is the behaviour asked for. The full view, which
+   is a whole tab of rows, keeps its sticky header. */
 .csv-inline-view .csv-table thead > tr > th,
 .csv-inline-view .csv-tasks-table thead > tr > th {
+  position: static;
   background: var(--csv-surface);
   white-space: nowrap;
   overflow: visible;
