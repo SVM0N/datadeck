@@ -151,7 +151,9 @@ card/kanban fields.
 
 Table mode inside a block uses a narrower column floor than a full tab does
 (the note's text column is much narrower than a leaf), so a few-column sheet
-fits instead of scrolling sideways.
+fits instead of scrolling sideways, and its header scrolls with the rows
+rather than staying frozen — a block is a screenful, and a frozen header
+inside a note is drawn over by the rows passing under it.
 
 ### `csv-chart` — a chart (or pure function plot) in a note
 
