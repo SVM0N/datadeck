@@ -141,6 +141,10 @@ Fully editable — inline cells, status chips, the entry expander, + Add, and
 delete-with-undo all write back to the source CSV. Other open views of the
 same file re-sync automatically.
 
+Table mode inside a block uses a narrower column floor than a full tab does
+(the note's text column is much narrower than a leaf), so a few-column sheet
+fits instead of scrolling sideways.
+
 ### `csv-chart` — a chart (or pure function plot) in a note
 
 ````
@@ -241,6 +245,30 @@ click repeatedly.
 Requires the [AnkiConnect](https://ankiweb.net/shared/info/2055492159)
 add-on and the Anki desktop app running; desktop-only (it talks to
 `http://127.0.0.1:8765`).
+
+## Styling a column
+
+Every table header and cell carries its column name as a `data-col`
+attribute, so a CSS snippet (Settings → Appearance → CSS snippets) can style
+one column without any plugin config:
+
+```css
+/* Big serif hanzi in the Character column, everywhere it renders */
+.csv-table td[data-col="Character"] {
+  font-family: "Songti SC", serif;
+  font-size: 26px;
+  line-height: 1.2;
+}
+
+/* Narrow that column only inside an inline csv-view block */
+.csv-inline-view .csv-table td[data-col="Character"] { min-width: 48px; }
+```
+
+Column names are matched exactly, including case and spaces. Cell values are
+inserted as plain text, so HTML written into a cell shows up as text rather
+than markup — style the column instead. Dragging a header's right edge also
+resizes a column and the width is remembered (per column name, shared between
+the full view and `csv-view` blocks).
 
 ## Commands
 

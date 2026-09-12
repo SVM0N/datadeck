@@ -4333,6 +4333,23 @@ select.csv-add-row-control {
   padding: 12px;
 }
 
+/* Narrower columns than the full view. The 160px td floor exists so a
+   full-tab table doesn't squeeze 15 headers to ~50px each — but an inline
+   block sits in a note's text column, where that floor wastes most of the
+   width on short columns (a single-glyph Character column rendered 160px
+   wide). Columns still grow to fit their content; this only lowers the
+   floor, and the wrapper still x-scrolls when the table can't fit. */
+.csv-inline-view .csv-table td {
+  min-width: 64px;
+  max-width: 280px;
+}
+.csv-inline-view .csv-table td.csv-table-notes-cell {
+  min-width: 120px;
+}
+.csv-inline-view .csv-table td.csv-table-image-cell {
+  min-width: 60px;
+}
+
 /* Compact toolbar — slimmer than the full-view bar, and the title is a
    click target that opens the source .csv in its own tab. */
 .csv-inline-toolbar {

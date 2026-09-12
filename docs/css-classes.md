@@ -32,6 +32,7 @@ Reference doc — load when editing `styles.css` or tracing a visual bug to its 
 | `.csv-picker-search` | Both | Picker search input |
 | `.csv-picker-item` | Both | List item; `.active`/`--hover` = current; `.csv-picker-add` = new value |
 | `.csv-table` | Table | Main table element |
+| `[data-col="<name>"]` | Table | On every `<th>`/`<td>` — the column's name, verbatim. The hook for per-column CSS snippets |
 | `.csv-table-notes-cell` | Table | Notes cell (relative-positioned for expand btn) |
 | `.csv-table-expand-btn` | Table | "⤢" button, shown on row hover |
 | `.csv-table-image-cell` | Table | Cell of the image column; narrower than a text column and opted out of the 7.5em text clamp |
@@ -41,6 +42,7 @@ Reference doc — load when editing `styles.css` or tracing a visual bug to its 
 | `.csv-cell--clipped` | Table | Added at render time when a cell's content overflows its clamp; shows the bottom-fade |
 | `.csv-content-area` | Both | Scroll container for view content |
 | `.csv-content-area--no-yscroll` | Kanban | Modifier that hides outer y-scroll (kanban supplies its own) |
+| `.csv-inline-view` | `csv-view` block | Bounded wrapper for an embedded view; also scopes a narrower table column floor (64px vs the full view's 160px) since a note's text column is far narrower than a leaf |
 | `.csv-search-wrap` | Toolbar | Search bar container (`flex: 1` on mobile, `min-width: 0` so it can shrink) |
 | `.csv-search-input` | Toolbar | Search input; desktop `width: 180px` (220px on focus); mobile `width: 100% !important` to defeat the focus expansion |
 | `.csv-search-clear` | Toolbar | Clear search button (×) |
