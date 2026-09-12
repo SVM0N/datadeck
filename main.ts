@@ -46,6 +46,11 @@ import worldMapSvg from "./world-map.svg";
 export class CardView extends FileView {
   settings: CardViewSettings;
   headers: string[] = [];
+  // Columns to draw, when something wants a subset. Only the `csv-view`
+  // block sets it (its `columns:`/`hide:` directives); a full view always
+  // shows every column, so it stays undefined here. Display only — `headers`
+  // is the file's real shape and is what gets written back.
+  displayHeaders: string[] | undefined;
   rows: CSVRow[] = [];
   mode: ViewMode;
   private renderComponent: Component;

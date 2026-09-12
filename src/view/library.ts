@@ -245,7 +245,7 @@ export function renderLibrary(view: CardView, container: HTMLElement): void {
     // Resolve which extra columns to surface on each card.
     // If the user picked cardFields in the per-file Columns modal, use that list verbatim.
     // Otherwise default to ALL columns visible.
-    const cardFields = view.fileCfg.cardFields ?? view.headers;
+    const cardFields = view.displayHeaders ?? view.fileCfg.cardFields ?? view.headers;
     const imageCol = view.getImageCol?.() ?? null;
 
     items.forEach(row => {

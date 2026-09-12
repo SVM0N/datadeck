@@ -179,7 +179,7 @@ function renderKanbanCard(view: CardView, container: HTMLElement, row: CSVRow, s
   const skipInCard = new Set([sc, tk, ak, groupCol].filter(Boolean) as string[]);
   const metaEl = card.createDiv({cls:"csv-kanban-card-meta"});
   
-  const displayCols = view.fileCfg.cardFields ?? view.headers;
+  const displayCols = view.displayHeaders ?? view.fileCfg.cardFields ?? view.headers;
 
   displayCols.forEach(h => {
     if (!view.headers.includes(h) || skipInCard.has(h) || view.isNotesCol(h)) return;

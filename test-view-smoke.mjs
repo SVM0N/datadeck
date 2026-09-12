@@ -329,6 +329,28 @@ await test("table: in a mixed list, resolvable images render and the rest stay a
   assert(cell.textContent === "missing.png", "the unresolvable half stays readable as text");
 });
 
+await test("table: displayHeaders draws a subset, in its order, without touching the data", async () => {
+  const rows = [{ Character: "\u4e00", Explanation: "one", Image: "a.png", Source: "book" }];
+  const view = {
+    headers: ["Character", "Explanation", "Image", "Source"],
+    displayHeaders: ["Image", "Character"],
+    rows, searchQuery: "", settings: { columnWidths: {} }, file: { path: "h.csv" },
+    app: { metadataCache: { getFirstLinkpathDest: () => null }, vault: { getResourcePath: () => "" } },
+    getFilteredRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
+    openRowContextMenu: () => {}, isNotesCol: () => false, openNoteExpander: () => {},
+    isSelectCol: () => false, renderSelectField: (td) => td, notesFileExists: () => false,
+    openOrCreateNotes: () => {}, deleteWithUndo: () => {}, getImageCol: () => "Image",
+    fileCfg: {},
+  };
+  const c = document.body.createDiv();
+  renderTable(view, c);
+  const heads = [...c.querySelectorAll("thead th")].map(t => t.textContent.trim()).filter(Boolean);
+  assert(heads.join("|") === "Image|Character", `only the listed columns, in order (got "${heads.join("|")}")`);
+  assert(c.querySelectorAll("tbody tr td").length === 3, "2 data cells + the action cell");
+  assert(!c.querySelector('td[data-col="Source"]'), "a hidden column is not drawn");
+  assert(rows[0].Source === "book", "hiding a column does not touch the row data");
+});
+
 // ── Library view ─────────────────────────────────────────────────────────────
 const { renderLibrary } = await load("./src/view/library.ts");
 
@@ -849,6 +871,18 @@ await test("table: clicking a header cycles sort asc → desc → off", async ()
   assert(view.tableSortDir === "desc", "second click flips to desc");
   th().click();
   assert(view.tableSortCol === null, "third click clears the sort");
+});
+
+// ── csv-view block directives ────────────────────────────────────────────────
+const { parseBlockSource } = await load("./src/inline-view.ts");
+
+await test("csv-view: parses the columns/hide directives", async () => {
+  const o = parseBlockSource("file: a.csv\nmode: table\ncolumns: Character, Image\nhide: Source");
+  assert(o.file === "a.csv" && o.mode === "table", "existing directives still parse");
+  assert(o.columns.join("|") === "Character|Image", "columns list parsed and trimmed");
+  assert(o.hide.join("|") === "Source", "hide list parsed");
+  const none = parseBlockSource("file: a.csv");
+  assert(none.columns.length === 0 && none.hide.length === 0, "absent directives are empty lists");
 });
 
 // ── Boolean/habit-column auto-detection ─────────────────────────────────────

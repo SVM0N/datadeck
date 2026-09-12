@@ -10,6 +10,10 @@ import { resolveImageSrc, splitImageRefs } from "../utils";
 
 export function renderTable(view: CardView, container: HTMLElement): void {
   const filteredRows = view.getFilteredRows();
+  // Columns to draw. A `csv-view` block can narrow this with `columns:` /
+  // `hide:`; everywhere else it is every column. Hidden columns are still
+  // searched, saved, and editable in the expander — they are just not drawn.
+  const cols = view.displayHeaders ?? view.headers;
 
   // Show search result count if searching
   if (view.searchQuery.trim()) {
@@ -20,7 +24,7 @@ export function renderTable(view: CardView, container: HTMLElement): void {
   const table = wrap.createEl("table",{cls:"csv-table"});
   const hr = table.createEl("thead").createEl("tr");
 
-  view.headers.forEach(h => {
+  cols.forEach(h => {
     const th = hr.createEl("th");
     // Exposes the column name on the DOM so a user's own CSS snippet can
     // target one column (e.g. a different font-family) without any plugin
@@ -86,7 +90,7 @@ export function renderTable(view: CardView, container: HTMLElement): void {
   filteredRows.forEach((row) => {
     const tr = tbody.createEl("tr");
     tr.addEventListener("contextmenu", e => view.openRowContextMenu(row, e));
-    view.headers.forEach(h => {
+    cols.forEach(h => {
       const td = tr.createEl("td");
       td.setAttribute("data-col", h);
       if (view.isNotesCol(h)) {

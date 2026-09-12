@@ -10,6 +10,8 @@
 //   file: ../movies.csv      (sibling / ../ walked / vault-relative, like csv-add)
 //   mode: table              (table | cards | kanban — default: table)
 //   height: 480              (optional max content height in px)
+//   columns: Character, Image   (optional: show only these, in this order)
+//   hide: Notes, Source         (optional: drop these from the display)
 //   ```
 //
 // Edits (inline cell edits, status chips, drag-free status changes via the
@@ -64,10 +66,15 @@ interface BlockOptions {
   mode: InlineMode;
   height: number | null;
   collapse: string[];   // group values collapsed by default in Cards view
+  columns: string[];    // display allow-list (in order); empty = every column
+  hide: string[];       // display deny-list, applied after `columns`
 }
 
-/** Parse the `key: value` lines of a csv-view block. Forgiving, like csv-random. */
-function parseBlockSource(source: string): BlockOptions {
+/**
+ * Parse the `key: value` lines of a csv-view block. Forgiving, like
+ * csv-random. Exported for the smoke tests — nothing else imports it.
+ */
+export function parseBlockSource(source: string): BlockOptions {
   const lines = source.split("\n").map(l => l.trim()).filter(Boolean);
   const opt = (key: string) =>
     lines.find(l => l.toLowerCase().startsWith(key + ":"))?.slice(key.length + 1).trim() ?? "";
@@ -84,6 +91,8 @@ function parseBlockSource(source: string): BlockOptions {
     mode,
     height: Number.isFinite(heightRaw) && heightRaw > 0 ? heightRaw : null,
     collapse: opt("collapse").split(",").map(s => s.trim()).filter(Boolean),
+    columns: opt("columns").split(",").map(s => s.trim()).filter(Boolean),
+    hide: opt("hide").split(",").map(s => s.trim()).filter(Boolean),
   };
 }
 
@@ -116,6 +125,12 @@ export class InlineCardHost extends MarkdownRenderChild {
   // Group values (lowercased) collapsed by default in Cards view — from the
   // block's `collapse:` directive. Read by renderLibrary.
   collapsedGroups: Set<string> = new Set();
+  // Columns this block displays, from its `columns:`/`hide:` directives.
+  // Undefined = show everything. Display only: `headers` stays complete, so a
+  // hidden column is still searched, still written back on save, and still
+  // editable in the entry expander — it is just not drawn as a table column
+  // or a card field. Recomputed whenever headers are (re)loaded.
+  displayHeaders: string[] | undefined;
 
   private saveTimer: number | null = null;
   // Serialized form of our own last write. On a vault `modify` event we re-read
@@ -171,7 +186,7 @@ export class InlineCardHost extends MarkdownRenderChild {
         // every save after an external change false-flagged a conflict.
         this.lastWritten = text;
         const parsed = parseCSV(text);
-        this.headers = parsed.headers;
+        this.setHeaders(parsed.headers);
         this.rows = parsed.rows;
         this.renderView();
       }));
@@ -186,6 +201,27 @@ export class InlineCardHost extends MarkdownRenderChild {
     if (this.saveTimer) window.clearTimeout(this.saveTimer);
   }
 
+  /**
+   * Take the file's headers and resolve the block's display list against
+   * them. `columns:` is an allow-list that also sets the order; `hide:` then
+   * drops names from whatever is left. Both match case-insensitively and
+   * ignore names the file doesn't have, so a typo or a renamed column costs
+   * you that entry, not the whole table. With neither directive (or when
+   * they'd leave nothing to show) the block displays every column.
+   */
+  private setHeaders(headers: string[]): void {
+    this.headers = headers;
+    const { columns, hide } = this.opts;
+    if (!columns.length && !hide.length) { this.displayHeaders = undefined; return; }
+    const find = (name: string) => headers.find(h => h.toLowerCase() === name.toLowerCase());
+    const picked = columns.length
+      ? columns.map(find).filter((h): h is string => !!h)
+      : [...headers];
+    const hidden = new Set(hide.map(h => find(h)).filter(Boolean));
+    const shown = picked.filter(h => !hidden.has(h));
+    this.displayHeaders = shown.length ? shown : undefined;
+  }
+
   /** Read the source file (path already resolved at registration). Returns false (and renders an error) on failure. */
   private async reload(): Promise<boolean> {
     const file = asFile(this.app.vault.getAbstractFileByPath(this.opts.file));
@@ -197,7 +233,7 @@ export class InlineCardHost extends MarkdownRenderChild {
     try {
       const text = await this.app.vault.read(file);
       const parsed = parseCSV(text);
-      this.headers = parsed.headers;
+      this.setHeaders(parsed.headers);
       this.rows = parsed.rows;
       // Seed the sync anchor with what we just read — doSave compares the
       // disk against this to detect another writer's changes.

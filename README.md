@@ -134,12 +134,20 @@ file: ../movies.csv
 mode: kanban             ← table | cards | kanban   (default: table)
 height: 480              ← optional max content height in px
 collapse: Removed, Done  ← optional: card groups collapsed by default
+columns: Title, Rating   ← optional: show only these columns, in this order
+hide: Notes, Source      ← optional: drop these columns from the display
 ```
 ````
 
 Fully editable — inline cells, status chips, the entry expander, + Add, and
 delete-with-undo all write back to the source CSV. Other open views of the
 same file re-sync automatically.
+
+`columns:` and `hide:` change what the block *draws* — a hidden column is
+still searched, still written back on save, and still editable in the entry
+expander. Names match the CSV's headers case-insensitively; ones the file
+doesn't have are ignored. They apply to the block's table columns and its
+card/kanban fields.
 
 Table mode inside a block uses a narrower column floor than a full tab does
 (the note's text column is much narrower than a leaf), so a few-column sheet
