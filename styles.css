@@ -4360,6 +4360,49 @@ select.csv-add-row-control {
   min-width: 60px;
 }
 
+/* Obsidian styles every <table> inside a rendered note, and those selectors
+   outrank ours — `.markdown-rendered thead tr > th:nth-child(2n+2)` (0,1,3)
+   beats `.csv-table th` (0,1,1). So an embedded view silently inherited
+   markdown-table chrome: header cells in even columns painted transparent
+   (which is why rows scrolled visibly through the sticky column titles),
+   header labels wrapped mid-word, a full cell grid from the `border:`
+   shorthand, and zebra/alt-column fills that overrode our hover tint. Re-
+   assert our own chrome at a specificity that actually wins (0,2,3), for both
+   the csv-view table and the csv-tasks board. */
+.csv-inline-view .csv-table thead > tr > th,
+.csv-inline-view .csv-tasks-table thead > tr > th {
+  background: var(--csv-surface);
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  border: none;
+  border-bottom: 1px solid var(--csv-border);
+}
+.csv-inline-view .csv-table tbody > tr > td,
+.csv-inline-view .csv-tasks-table tbody > tr > td {
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--csv-border);
+}
+.csv-inline-view .csv-table tbody > tr:nth-child(odd),
+.csv-inline-view .csv-tasks-table tbody > tr:nth-child(odd) {
+  background: none;               /* no markdown zebra striping */
+}
+.csv-inline-view .csv-table tbody > tr:last-child > td,
+.csv-inline-view .csv-tasks-table tbody > tr:last-child > td {
+  border-bottom: none;
+}
+.csv-inline-view .csv-table tbody > tr > td.csv-table-image-cell {
+  overflow: visible;              /* stacked images are not clipped content */
+}
+/* Hover tint last, so it outranks the td rule above it. */
+@media (hover: hover) {
+  .csv-inline-view .csv-table tbody > tr:hover > td,
+  .csv-inline-view .csv-tasks-table tbody > tr:hover > td {
+    background: color-mix(in srgb, var(--text-normal) 16%, transparent);
+  }
+}
+
 /* Compact toolbar — slimmer than the full-view bar, and the title is a
    click target that opens the source .csv in its own tab. */
 .csv-inline-toolbar {
