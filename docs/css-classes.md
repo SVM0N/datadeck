@@ -4,7 +4,7 @@ Reference doc — load when editing `styles.css` or tracing a visual bug to its 
 
 | Class | Where | Description |
 |---|---|---|
-| `.datadeck-root` | Root | Flex column layout for a full view. The `--csv-*` vars live on `:root`, not here — inline blocks and body-mounted pickers render outside this element, and an unresolved `var()` silently voids the whole declaration (it made the inline sticky header transparent) |
+| `.datadeck-root` | Root | Flex column layout for a full view. The theme-derived `--csv-*` vars live on `body`, not here and not on `:root` — inline blocks and body-mounted pickers render outside this element, and Obsidian defines the theme vars they reference on `body.theme-*`, so on `:root` they resolve to nothing. An unresolved `var()` silently voids the whole declaration |
 | `.csv-toolbar` | Both | Top toolbar; `flex-wrap: wrap` so controls drop to a second row on narrow viewports |
 | `.csv-toolbar-controls` | Both | Right-hand group; also wraps |
 | `.csv-toolbar-title` | Both | Filename header; hidden on `max-width: 600px` (redundant with tab) |

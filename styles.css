@@ -15,15 +15,19 @@
   --csv-amber-bg: rgba(255, 149, 0, 0.13);
 }
 
-/* Surface/text/accent vars live on :root, not on .datadeck-root. The plugin
-   renders in places that are not inside a view root — `csv-view` / `csv-tasks`
-   blocks embedded in a note, and pickers mounted on document.body — and there
-   a `var(--csv-…)` that resolves to nothing makes the whole declaration invalid:
-   `background: var(--csv-surface)` becomes transparent. That is what made the
-   inline table's sticky header see-through, so rows scrolled visibly through
-   the column titles. Defining them globally costs nothing (they are all
-   derived from Obsidian's own vars) and makes every mount point correct. */
-:root {
+/* Surface/text/accent vars live on `body`: not on .datadeck-root, and not on
+   :root. Not .datadeck-root, because the plugin also renders outside a view
+   root — `csv-view` / `csv-tasks` blocks embedded in a note, and pickers
+   mounted on document.body — and there an unresolved `var(--csv-…)` voids the
+   whole declaration (`background: var(--csv-surface)` → transparent). Not
+   :root, because these are all references to Obsidian's theme vars, which
+   Obsidian defines on `body.theme-dark` / `body.theme-light`; a var() is
+   substituted where the custom property is declared, so on <html> every one
+   of them resolved to nothing and blanked the plugin's colours everywhere,
+   full view included (shipped in 1.10.0). `body` is where the theme vars
+   exist and is an ancestor of every place the plugin draws. Literal values
+   (the status palette above) are safe on :root. */
+body {
   --csv-bg: var(--background-primary);
   --csv-surface: var(--background-secondary);
   --csv-surface-2: var(--background-modifier-border);
