@@ -121,7 +121,7 @@ export function renderTasks(view: CardView, container: HTMLElement): void {
   const filtersBar = container.createDiv({ cls: "csv-library-filters" });
 
   const projects = new Set<string>();
-  if (projectCol) view.rows.forEach(r => {
+  if (projectCol) view.baseRows().forEach(r => {
     (r[projectCol] ?? "").split(",").map(s => s.trim()).filter(Boolean).forEach(p => projects.add(p));
   });
   const projectSelect = filtersBar.createEl("select", { cls: "csv-library-filter-select" });
@@ -130,7 +130,7 @@ export function renderTasks(view: CardView, container: HTMLElement): void {
   projectSelect.value = view.taskProjectFilter;
 
   const types = new Set<string>();
-  if (typeCol) view.rows.forEach(r => { const t = (r[typeCol] ?? "").trim(); if (t) types.add(t); });
+  if (typeCol) view.baseRows().forEach(r => { const t = (r[typeCol] ?? "").trim(); if (t) types.add(t); });
   let typeSelect: HTMLSelectElement | null = null;
   if (types.size > 0) {
     typeSelect = filtersBar.createEl("select", { cls: "csv-library-filter-select" });
@@ -161,7 +161,7 @@ export function renderTasks(view: CardView, container: HTMLElement): void {
 
   // ── Filter rows (project / type / status / toolbar search) ──
   const q = view.searchQuery.toLowerCase().trim();
-  const filtered = view.rows.filter(row => {
+  const filtered = view.baseRows().filter(row => {
     if (view.taskProjectFilter !== "all" && projectCol) {
       const ps = (row[projectCol] ?? "").split(",").map(s => s.trim().toLowerCase());
       if (!ps.includes(view.taskProjectFilter.toLowerCase())) return false;
@@ -179,7 +179,7 @@ export function renderTasks(view: CardView, container: HTMLElement): void {
   });
 
   if (view.taskProjectFilter !== "all" || view.taskTypeFilter !== "all" || view.taskStatusFilter !== "all" || q) {
-    container.createDiv({ cls: "csv-library-result-count", text: `Showing ${filtered.length} of ${view.rows.length} entries` });
+    container.createDiv({ cls: "csv-library-result-count", text: `Showing ${filtered.length} of ${view.baseRows().length} entries` });
   }
 
   // ── Split into sections based on Type, each grouped by project ──

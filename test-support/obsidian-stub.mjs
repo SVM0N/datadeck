@@ -37,6 +37,12 @@ export class Setting extends Base {
 }
 export function normalizePath(p) { return p; }
 
+// Enough YAML for main.ts to bundle — CardView writes note frontmatter with
+// it. Only the shape matters here; no test asserts on the output.
+export function stringifyYaml(obj) {
+  return Object.entries(obj ?? {}).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join("\n") + "\n";
+}
+
 // AnkiConnect transport stub. Tests set `globalThis.__ankiRequestUrl` to a
 // handler that inspects the request and returns a fake `{ json }` response;
 // unset, it behaves like a reachable-but-empty Anki (null result, no error).

@@ -46,6 +46,11 @@ diffs, syncs, and outlives any tool.
   `csv-chart`, `csv-tasks` (a cross-file tasks board),
   `csv-random` (quote of the day), and `csv-add` (a mobile-friendly entry
   form).
+- **Filter rows** in any view with the ⧩ button: `HSK == 2`, `Rating >= 7.5`,
+  `Status in Watching, Queued`, `Notes not empty` — one condition per line,
+  all of them have to hold. The filter is remembered per file, the row count
+  reads `N of M` while it's on, and it only ever changes what you see: every
+  hidden row is still in the CSV and comes back when you clear it.
 - **Sync-safe saves** — if the file changed on disk while you were editing
   (another device, another tab), the other version is stashed to `Archive/`
   instead of being silently overwritten.
@@ -153,7 +158,8 @@ card/kanban fields.
 
 `filter:` is the row-wise counterpart: the block draws only the rows that
 match. One condition per line, and several `filter:` lines narrow together
-(all of them have to hold):
+(all of them have to hold). It's the same syntax the ⧩ filter button uses in
+a full tab — a block writes it in the note, a tab remembers it per file:
 
 | | |
 |---|---|

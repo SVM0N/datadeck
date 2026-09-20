@@ -638,7 +638,7 @@ export async function renderChart(view: CardView, container: HTMLElement): Promi
   }
 
   if (view.searchQuery.trim()) {
-    container.createDiv({ cls: "csv-search-results", text: `Chart over ${rows.length} of ${view.rows.length} entries` });
+    container.createDiv({ cls: "csv-search-results", text: `Chart over ${rows.length} of ${view.baseRows().length} entries` });
   }
 
   const cfg = view.fileCfg;

@@ -48,6 +48,11 @@ export interface FileConfig {
                               // card/kanban thumbnails. Unset = auto-detect by name.
   collapsedGroups?: string[]; // Card-view group values (lowercased) collapsed by
                               // default; remembers manual collapse/expand toggles.
+  rowFilter?: string[];       // Row conditions ("HSK == 2"), AND-ed — the same
+                              // syntax a csv-view block's `filter:` takes (see
+                              // src/row-filter.ts). Display only: filtered-out
+                              // rows are still saved, still synced, and come
+                              // back the moment the filter is cleared.
   ankiFrontCol?: string;      // Column used as the Anki card front on sync.
                               // Unset = the title/primary field; every other
                               // non-empty column becomes the card back.

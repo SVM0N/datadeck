@@ -132,6 +132,55 @@ body {
   box-shadow: 0 0 0 1px var(--csv-surface);
 }
 
+/* Row-filter button (⧩). Unlike the other secondary actions it never collapses
+   into the ⋯ menu — a filter hides rows, so the control that clears it has to
+   stay reachable on a phone. When a filter is on, the button is filled in
+   accent rather than dotted: this is a persistent state, not a transient one
+   like a search query, and it should read as "this view is narrowed" at a
+   glance from across the toolbar. */
+.csv-filter-btn {
+  padding: 4px 8px;
+  font-size: 14px;
+  opacity: 0.6;
+}
+.csv-filter-btn:hover { opacity: 1; }
+.csv-filter-btn.has-filter {
+  opacity: 1;
+  color: var(--csv-accent);
+  background: var(--csv-surface);
+  border-color: var(--csv-accent);
+}
+
+/* Warning line under the filter textarea — conditions that named a column the
+   file doesn't have. Amber, not red: the rest of the filter still applied. */
+.csv-modal-hint-warn {
+  color: var(--color-yellow, #b8860b);
+}
+.csv-modal-hint-warn.is-hidden { display: none; }
+
+/* The filter editor itself: a few lines of conditions, monospaced so columns
+   and operators line up while you read down the list. */
+.csv-modal-textarea {
+  font-family: var(--csv-font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  width: 100%;
+}
+.csv-modal-oplist {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--csv-text-muted);
+  line-height: 1.6;
+}
+.csv-modal-oplist code {
+  font-size: 12px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--csv-surface);
+}
+
 /* Mobile: hide the filename title (already in the tab) and let the search
    bar shrink so the action buttons don't get pushed off-screen. */
 @media (max-width: 600px) {

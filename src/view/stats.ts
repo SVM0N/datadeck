@@ -78,7 +78,7 @@ export function renderStats(view: CardView, container: HTMLElement): void {
   const rows = view.getFilteredRows();
 
   if (view.searchQuery.trim()) {
-    container.createDiv({ cls: "csv-search-results", text: `Stats over ${rows.length} of ${view.rows.length} entries` });
+    container.createDiv({ cls: "csv-search-results", text: `Stats over ${rows.length} of ${view.baseRows().length} entries` });
   }
   if (!rows.length) {
     container.createEl("p", { text: "No entries to chart.", cls: "csv-empty-state" });

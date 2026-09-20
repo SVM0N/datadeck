@@ -37,6 +37,7 @@ import { renderTasks, hasTaskColumns, taskProjectCol, taskTypeCol, taskPriorityC
 import { renderBudget, hasBudgetColumns } from "./src/view/budget";
 import { renderTimeline, hasTimelineColumns } from "./src/view/timeline";
 import { registerCsvViewBlock } from "./src/inline-view";
+import { CompiledFilter, parseFilterLine, compileRowFilter } from "./src/row-filter";
 import { registerCsvChartBlock } from "./src/chart-block";
 import { registerCsvTasksBlock } from "./src/tasks-block";
 import worldMapSvg from "./world-map.svg";
@@ -602,7 +603,11 @@ export class CardView extends FileView {
         // Keep the user where they were — the new entry's discoverable via
         // the Notice; yanking to (0,0) just disorients them.
         this.renderViewPreservingScroll();
-        new Notice(`Added: ${this.getTitle(row)}`);
+        // It's in the file either way — but with a filter on it may not be on
+        // screen, and a successful add that appears to do nothing reads as a bug.
+        const f = this.rowFilter();
+        const hidden = f ? !f.test(row) : false;
+        new Notice(`Added: ${this.getTitle(row)}${hidden ? " — hidden by the current filter" : ""}`);
       },
       optionPresets,
       // Habit/0-1 columns render as toggles in the add form.
@@ -681,10 +686,38 @@ export class CardView extends FileView {
       wrap.createEl("p", { cls: "csv-empty-state-hint", text: `${this.headers.length} column${this.headers.length === 1 ? "" : "s"} detected: ${this.headers.slice(0, 5).join(", ")}${this.headers.length > 5 ? "…" : ""}` });
       return;
     }
+    // A row filter that resolved to nothing drawable: say so, and give them the
+    // way out. Rendering an empty grid here would read as a broken file rather
+    // than a filter the user set days ago and forgot.
+    if (this.baseRows().length === 0) {
+      const wrap = content.createDiv({ cls: "csv-empty-state csv-empty-state--big" });
+      wrap.createEl("h3", { text: "No entries match this filter" });
+      wrap.createEl("p", { text: `All ${this.rows.length} entries in this file are filtered out. The file itself is untouched.` });
+      const clear = wrap.createEl("button", { cls: "csv-empty-state-action", text: "Clear the filter" });
+      clear.addEventListener("click", () => {
+        const cfg = this.fileCfg;
+        cfg.rowFilter = undefined;
+        this.saveFileCfg(cfg);
+        this.renderView();
+      });
+      wrap.createEl("p", { cls: "csv-empty-state-hint", text: (this.fileCfg.rowFilter ?? []).join("  ·  ") });
+      return;
+    }
+    // A condition naming a column this file doesn't have is dropped, which
+    // fails open — without saying so, the view would just quietly show more
+    // than it was asked to.
+    const filterProblems = [
+      ...(this.rowFilter()?.unknown ?? []).map(u => `no column named "${u}"`),
+      ...this.rowFilterErrors().map(b => `couldn't read "${b}"`),
+    ];
+    if (filterProblems.length) {
+      content.createEl("p", { cls: "csv-add-error", text: `Filter: ${filterProblems.join("; ")} — ignored` });
+    }
+
     // renderDashboard is async (lazy-loads Chart.js); no one awaits renderView,
     // so the fire-and-forget here is intentional — dashboard chrome paints
     // synchronously, the chart lands a tick later.
-    if (this.mode === "travel") void renderTravel(content, this.rows, () => this.loadMapSvg(), () => this.scheduleSave(),
+    if (this.mode === "travel") void renderTravel(content, this.baseRows(), () => this.loadMapSvg(), () => this.scheduleSave(),
       this.settings.showResidency === false ? null : (this.settings.residencyRules ?? null),
       (teardown) => this.renderComponent.register(teardown));
     else if (this.mode === "dashboard") void renderDashboard(this, content);
@@ -793,18 +826,53 @@ export class CardView extends FileView {
 
   // ── Search filtering ─────────────────────────────────────────────────────────
 
+  // Memoised compile of fileCfg.rowFilter. baseRows() runs several times per
+  // render (the count, the empty check, the renderer), and the filter only
+  // changes when the config or the file's headers do — so key the cache on
+  // both rather than re-parsing the conditions each call.
+  private filterCache: { key: string; compiled: CompiledFilter | null } | null = null;
+
+  /**
+   * The file's row filter, compiled — null when there isn't one. Also hands
+   * back the conditions that named a column the file doesn't have, which the
+   * toolbar reports rather than quietly showing more rows than asked for.
+   */
+  rowFilter(): CompiledFilter | null {
+    const lines = this.fileCfg.rowFilter ?? [];
+    const key = lines.join("\n") + "\u0000" + this.headers.join("\u0000");
+    if (this.filterCache?.key === key) return this.filterCache.compiled;
+    const conds = lines.map(l => parseFilterLine(l)).filter((c): c is NonNullable<typeof c> => !!c);
+    const compiled = compileRowFilter(conds, this.headers);
+    this.filterCache = { key, compiled };
+    return compiled;
+  }
+
+  /** `filter:` lines that aren't a readable condition at all. Reported alongside unknown columns. */
+  rowFilterErrors(): string[] {
+    return (this.fileCfg.rowFilter ?? []).filter(l => l.trim() && !parseFilterLine(l));
+  }
+
   /**
    * The rows a renderer is allowed to draw before search and the Cards view's
-   * own filters narrow them further. Only the inline `csv-view` block has a
-   * reason to return less than everything (its `filter:` directive); a full
-   * view always draws the whole file.
+   * own filters narrow them further: everything, minus what this file's row
+   * filter excludes. Display only — `rows` stays the whole file, which is what
+   * doSave writes back, so a filter can never prune the CSV.
+   *
+   * An inline `csv-view` block overrides this with its own `filter:` directive
+   * (see InlineCardHost.baseRows); the two use the same engine and syntax.
+   *
+   * What deliberately keeps reading `rows` instead: column and mode detection
+   * (numericColumns, effectiveGroupCol, hasTaskColumns…), so a filter never
+   * makes a view mode or a dropdown option disappear; the Anki sync, which
+   * pushes the file rather than the view; and every write path.
    */
   baseRows(): CSVRow[] {
-    return this.rows;
+    const f = this.rowFilter();
+    return f ? this.rows.filter(f.test) : this.rows;
   }
 
   getFilteredRows(): CSVRow[] {
-    let result = this.rows;
+    let result = this.baseRows();
 
     // Filter by search query
     if (this.searchQuery.trim()) {

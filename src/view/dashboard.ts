@@ -22,7 +22,7 @@ export async function renderDashboard(view: CardView, container: HTMLElement): P
   const today = view.formatDate(new Date());
 
   // Sort rows by date
-  const sortedRows = [...view.rows].sort((a, b) => {
+  const sortedRows = [...view.baseRows()].sort((a, b) => {
     return (a[dateCol] ?? "").localeCompare(b[dateCol] ?? "");
   });
 

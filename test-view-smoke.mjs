@@ -29,7 +29,7 @@ const CHART_STUB = fileURLToPath(new URL("./test-support/chartjs-stub.mjs", impo
 async function load(entryRel) {
   const entry = fileURLToPath(new URL(entryRel, import.meta.url));
   const out = path.join(os.tmpdir(), `smoke-${path.basename(entryRel)}.${process.pid}.mjs`);
-  await esbuild.build({ entryPoints: [entry], bundle: true, format: "esm", outfile: out, alias: { obsidian: STUB, "chart.js": CHART_STUB }, define: { __BUILD_TIME__: JSON.stringify("test") }, logLevel: "error" });
+  await esbuild.build({ entryPoints: [entry], bundle: true, format: "esm", outfile: out, alias: { obsidian: STUB, "chart.js": CHART_STUB }, define: { __BUILD_TIME__: JSON.stringify("test") }, loader: { ".svg": "text" }, logLevel: "error" });
   const mod = await import(pathToFileURL(out).href);
   fs.rmSync(out, { force: true });
   return mod;
@@ -582,7 +582,7 @@ const { renderToolbar } = await load("./src/view/toolbar.ts");
 function toolbarView(overrides = {}) {
   return {
     file: { basename: "movies", path: "movies.csv" },
-    rows: [{}, {}], mode: "table", searchQuery: "",
+    rows: [{}, {}], baseRows() { return this.rows; }, mode: "table", searchQuery: "",
     isTravelFile: () => false, hasDateColumn: () => false, getCategoryCol: () => "Category",
     getStatusCol: () => null, authorKey: () => undefined, resolveCol: () => null,
     isNotesCol: () => false, getDateCol: () => null, titleKey: () => "Title",
@@ -662,7 +662,7 @@ function dashView() {
     { date: "2024-01-02", gym: "1", read: "1" },
   ];
   return {
-    rows, headers: ["date", "gym", "read"],
+    rows, baseRows: () => rows, headers: ["date", "gym", "read"],
     selectedDate: null, selectedHabit: null, chartInstance: null, timelineYear: 2024,
     getDateCol: () => "date", getBooleanColumns: () => ["gym", "read"], getNotesCol: () => null,
     formatDate: (d) => d.toISOString().slice(0, 10),
@@ -1118,6 +1118,140 @@ await test("csv-view: a hidden column survives an edit — the file keeps every 
   assert(headerRow === "Character,Explanation,Source", `header row unchanged (got "${headerRow}")`);
   assert(written.includes("book") && written.includes("notes"), "hidden column's values are still on disk");
   assert(written.includes("ONE"), "the edit was written");
+});
+
+// ── Full-view row filter (fileCfg.rowFilter) ─────────────────────────────────
+// Drives the real CardView, not a stub: baseRows() is the single seam the whole
+// feature hangs off, and the point of these is that a filter narrows the view
+// and nothing else.
+const { CardView } = await load("./main.ts");
+
+function filterView(rowFilter, rows) {
+  const settings = {
+    defaultMode: "table", notesColumns: ["Notes"], statusColumn: "status",
+    categoryColumn: "category", notesSubfolder: "Notes", columnWidths: {},
+    selectColumns: [], fileConfigs: { "a.csv": rowFilter ? { rowFilter } : {} },
+    residencyRules: [], showResidency: false,
+  };
+  const v = new CardView({}, settings, async () => {});
+  v.file = { path: "a.csv", basename: "a", name: "a.csv" };
+  v.headers = ["Character", "HSK", "Status"];
+  v.rows = rows;
+  return v;
+}
+
+const HANZI = [
+  { Character: "\u4e00", HSK: "1", Status: "Known" },
+  { Character: "\u4e8c", HSK: "2", Status: "New" },
+  { Character: "\u4e09", HSK: "2", Status: "Known" },
+];
+
+await test("full view: fileCfg.rowFilter narrows baseRows, never rows", async () => {
+  const v = filterView(["HSK == 2"], [...HANZI]);
+  assert(v.baseRows().length === 2, "only the matching rows are drawable");
+  assert(v.rows.length === 3, "every row is still loaded — this is what doSave writes back");
+  assert(v.getFilteredRows().length === 2, "search starts from the filtered set");
+
+  // Search composes with the filter rather than replacing it.
+  v.searchQuery = "Known";
+  assert(v.getFilteredRows().length === 1, "search narrows within the filter");
+  v.searchQuery = "";
+
+  // Several conditions AND together, same as a block's `filter:` lines.
+  const both = filterView(["HSK == 2", "Status != Known"], [...HANZI]);
+  assert(both.baseRows().length === 1, "two conditions both have to hold");
+  assert(filterView(null, [...HANZI]).baseRows().length === 3, "no filter draws everything");
+});
+
+await test("full view: the compiled filter is cached, and invalidated by config or header changes", async () => {
+  const v = filterView(["HSK == 2"], [...HANZI]);
+  assert(v.baseRows().length === 2, "filter applies");
+  assert(v.rowFilter() === v.rowFilter(), "repeat calls reuse the compiled filter");
+
+  // Editing the config has to be picked up — baseRows() runs several times per
+  // render, so a cache that never invalidated would strand the old filter.
+  v.settings.fileConfigs["a.csv"].rowFilter = ["HSK == 1"];
+  assert(v.baseRows().length === 1, "a changed condition recompiles");
+  v.settings.fileConfigs["a.csv"].rowFilter = undefined;
+  assert(v.baseRows().length === 3, "clearing the filter restores every row");
+
+  // A column added/renamed under the same conditions must re-resolve too.
+  const v2 = filterView(["Level == 2"], [...HANZI]);
+  assert(v2.baseRows().length === 3 && v2.rowFilter().unknown.join("|") === "Level",
+    "unknown column fails open and is named");
+  v2.headers = ["Character", "Level", "Status"];
+  v2.rows = [{ Character: "\u4e00", Level: "1" }, { Character: "\u4e8c", Level: "2" }];
+  assert(v2.baseRows().length === 1 && v2.rowFilter().unknown.length === 0,
+    "the same condition resolves once the column exists");
+});
+
+await test("full view: unreadable filter lines are reported, not applied", async () => {
+  const v = filterView(["HSK 2", "HSK == 2"], [...HANZI]);
+  assert(v.rowFilterErrors().join("|") === "HSK 2", "the line with no operator is named");
+  assert(v.baseRows().length === 2, "the readable condition still applies");
+});
+
+await test("toolbar: the filter button shows the filter's state, and the count says N of M", async () => {
+  const plain = toolbarView();
+  const c1 = document.body.createDiv();
+  renderToolbar(plain, c1);
+  const btn1 = c1.querySelector(".csv-filter-btn");
+  assert(btn1, "the ⧩ filter button is always rendered");
+  assert(!btn1.classList.contains("has-filter"), "and is off when there's no filter");
+  assert(c1.querySelector(".csv-row-count").textContent === "2 entries", "plain count");
+
+  const filtered = toolbarView({
+    rows: [{}, {}, {}, {}],
+    baseRows: () => [{}, {}],
+    fileCfg: { rowFilter: ["HSK == 2"] },
+  });
+  const c2 = document.body.createDiv();
+  renderToolbar(filtered, c2);
+  const btn2 = c2.querySelector(".csv-filter-btn");
+  assert(btn2.classList.contains("has-filter"), "an active filter lights the button up");
+  assert(btn2.title.includes("HSK == 2"), "and its tooltip says what's being filtered");
+  assert(c2.querySelector(".csv-row-count").textContent === "2 of 4 entries",
+    "the count is the standing reminder that rows are hidden");
+});
+
+await test("RowFilterModal: previews as you type, applies lines, and clears to nothing", async () => {
+  const { RowFilterModal } = await load("./src/modals.ts");
+  let applied = null;
+  const preview = (lines) => ({
+    matched: lines.length ? 2 : 6, total: 6,
+    unknown: lines.includes("Nope == 1") ? ["Nope"] : [],
+    bad: lines.filter(l => !l.includes("==")),
+  });
+  const open = (current) => {
+    const m = new RowFilterModal({}, ["HSK", "Status"], current, preview, (l) => { applied = l; });
+    m.contentEl = document.body.createDiv();
+    m.close = () => {};
+    m.onOpen();
+    return m;
+  };
+
+  const m = open(["HSK == 2"]);
+  const ta = m.contentEl.querySelector("textarea");
+  assert(ta.value === "HSK == 2", "opens on the current filter");
+  const hints = m.contentEl.querySelectorAll(".csv-modal-hint");
+  assert(hints[0].textContent === "Shows 2 of 6 entries.", "live preview of what it would show");
+  assert(m.contentEl.querySelectorAll(".csv-modal-oplist li").length === 6, "the operator crib sheet is shown");
+
+  ta.value = "Nope == 1";
+  ta.dispatchEvent(new window.Event("input"));
+  const warn = m.contentEl.querySelector(".csv-modal-hint-warn");
+  assert(warn.textContent.includes('"Nope"') && warn.textContent.includes("ignored"),
+    "a column the file lacks is called out before you apply it");
+
+  const btns = Array.from(m.contentEl.querySelectorAll(".csv-modal-btns button"));
+  btns.find(b => b.textContent === "Apply").click();
+  assert(applied.join("|") === "Nope == 1", "Apply hands back the typed conditions");
+
+  applied = null;
+  const m2 = open(["HSK == 2"]);
+  Array.from(m2.contentEl.querySelectorAll(".csv-modal-btns button"))
+    .find(b => b.textContent === "Clear filter").click();
+  assert(Array.isArray(applied) && applied.length === 0, "Clear filter applies an empty filter");
 });
 
 // ── Boolean/habit-column auto-detection ─────────────────────────────────────
@@ -1654,7 +1788,7 @@ function tasksView(rows, overrides = {}) {
     return null;
   };
   const view = {
-    headers, rows, searchQuery: "",
+    headers, rows, baseRows: () => rows, searchQuery: "",
     taskProjectFilter: "all", taskTypeFilter: "all", taskStatusFilter: "all",
     fileCfg: {}, resolveCol,
     titleKey: () => resolveCol(["Title", "Name"]) ?? undefined,
@@ -2010,7 +2144,7 @@ function timelineView(rows, overrides = {}) {
     return null;
   };
   const view = {
-    headers, rows, searchQuery: "",
+    headers, rows, baseRows: () => rows, searchQuery: "",
     timelineGroupFilter: "all",
     timelineGranularity: "auto",
     fileCfg: {}, resolveCol,

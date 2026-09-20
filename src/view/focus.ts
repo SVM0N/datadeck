@@ -12,7 +12,7 @@ export function renderFocus(view: CardView, container: HTMLElement): void {
   const rows = view.getFilteredRows();
 
   if (view.searchQuery.trim()) {
-    container.createDiv({ cls: "csv-search-results", text: `Found ${rows.length} of ${view.rows.length} entries` });
+    container.createDiv({ cls: "csv-search-results", text: `Found ${rows.length} of ${view.baseRows().length} entries` });
   }
   if (!rows.length) {
     const empty = container.createDiv({ cls: "csv-empty-state" });

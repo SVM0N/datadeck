@@ -145,6 +145,9 @@ export async function syncToAnki(view: CardView): Promise<void> {
   const modelName = view.fileCfg.ankiNoteType || "Basic";
   // Only rows with a non-empty front are sendable — a blank front makes a
   // useless card and AnkiConnect rejects it.
+  // Deliberately view.rows, not baseRows(): a row filter narrows what you're
+  // looking at, and silently syncing a subset of the deck because of a filter
+  // set days ago is the kind of thing you'd only notice in Anki.
   const rows = view.rows.filter(r => (r[frontCol] ?? "").trim());
   if (!rows.length) {
     new Notice(`Nothing to sync — no rows with a "${frontCol}" value.`, 6000);

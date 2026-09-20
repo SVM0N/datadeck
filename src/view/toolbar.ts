@@ -6,7 +6,7 @@
 import { Menu, Notice } from "obsidian";
 import type { CardView } from "../../main";
 import { ViewMode } from "../types";
-import { FileConfigModal, AutoDetectedRoles, SearchModal, AnkiExportModal } from "../modals";
+import { FileConfigModal, AutoDetectedRoles, SearchModal, AnkiExportModal, RowFilterModal } from "../modals";
 import { syncToAnki, autoAnkiFrontCol } from "./anki";
 import { hasStatsColumns } from "./stats";
 import { hasChartColumns } from "./chart";
@@ -14,6 +14,7 @@ import { hasTaskColumns } from "./tasks";
 import { hasBudgetColumns } from "./budget";
 import { hasTimelineColumns } from "./timeline";
 import { effectiveGroupCol } from "./kanban";
+import { FilterCond, parseFilterLine, compileRowFilter } from "../row-filter";
 import { TITLE_COL_ALIASES, CATEGORY_COL_ALIASES, STATUS_COL_ALIASES, NOTES_COL_ALIASES, IMAGE_COL_ALIASES, PRICE_COL_ALIASES } from "../utils";
 
 declare const __BUILD_TIME__: string;
@@ -65,10 +66,15 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
   // would leave `root` stuck with the class and the "Found X of Y" header
   // hidden for good.
   root.removeClass("csv-toolbar--search-expanded");
+  const activeFilter = view.fileCfg.rowFilter ?? [];
   const bar = root.createDiv({cls:"csv-toolbar"});
   bar.createDiv({cls:"csv-toolbar-title", text: view.file?.basename??""});
   const ctrl = bar.createDiv({cls:"csv-toolbar-controls"});
-  ctrl.createDiv({cls:"csv-row-count", text:`${view.rows.length} entries`});
+  // With a row filter on, the count is what's drawn out of what's in the file —
+  // the standing reminder that the view is narrowed, next to the ⧩ button.
+  const shownCount = view.baseRows().length, totalCount = view.rows.length;
+  ctrl.createDiv({cls:"csv-row-count", text: shownCount === totalCount
+    ? `${totalCount} entries` : `${shownCount} of ${totalCount} entries`});
   const mg = ctrl.createDiv({cls:"csv-mode-group"});
 
   // View-mode dropdown. One compact control instead of a row of buttons —
@@ -195,7 +201,7 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
           view.app,
           view.searchQuery,
           (q) => { view.searchQuery = q; view.renderView(); },
-          () => ({ matched: view.getFilteredRows().length, total: view.rows.length }),
+          () => ({ matched: view.getFilteredRows().length, total: view.baseRows().length }),
           () => view.getFilteredRows().map(row => ({ title: view.getTitle(row), subtitle: view.getSubtitle(row) || undefined, row })),
           (row) => { if (notesCol) view.openNoteExpander(row, notesCol); else void view.openOrCreateNotes(row); },
         ).open();
@@ -267,6 +273,32 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
       (header) => view.cleanupBooleanColumn(header),
     ).open();
   };
+  // Row filter — the same conditions a `csv-view` block takes in its `filter:`
+  // directive, persisted per file. Kept out of ⚙ Config: this is something you
+  // flip on and off while reading, not something you set once and forget.
+  const openFilter = () => {
+    new RowFilterModal(
+      view.app, view.headers, view.fileCfg.rowFilter ?? [],
+      (lines) => {
+        // Preview against the real rows without touching the saved config, so
+        // the modal can show what a filter would do before it's applied.
+        const conds = lines.map(l => parseFilterLine(l)).filter((c): c is FilterCond => !!c);
+        const compiled = compileRowFilter(conds, view.headers);
+        return {
+          matched: compiled ? view.rows.filter(compiled.test).length : view.rows.length,
+          total: view.rows.length,
+          unknown: compiled?.unknown ?? [],
+          bad: lines.filter(l => !parseFilterLine(l)),
+        };
+      },
+      (lines) => {
+        const cfg = view.fileCfg;
+        cfg.rowFilter = lines.length ? lines : undefined;
+        view.saveFileCfg(cfg);
+        view.renderView();
+      },
+    ).open();
+  };
   const openBackup = () => { void view.backupToArchive(); };
   // Opens the deck/note-type/field-mapping settings rather than syncing
   // straight away — export shape (which deck, which note type, which column
@@ -281,6 +313,16 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
       () => { void syncToAnki(view); },
     ).open();
   };
+
+  const filterBtn = ctrl.createEl("button", {
+    cls: "csv-cfg-btn csv-filter-btn",
+    text: "⧩",
+    title: activeFilter.length ? `Filtering: ${activeFilter.join("; ")}` : "Filter which rows are shown",
+  });
+  // Always visible (not a ⋯ secondary): a filter hides rows, so the control
+  // that turns it off has to stay on screen, phone included.
+  filterBtn.toggleClass("has-filter", activeFilter.length > 0);
+  filterBtn.addEventListener("click", openFilter);
 
   ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-secondary", text: "⚙ Config", title: "Configure this file's columns and views" })
     .addEventListener("click", openColumns);
@@ -298,6 +340,7 @@ export function renderToolbar(view: CardView, root: HTMLElement): void {
   const overflowBtn = ctrl.createEl("button", { cls: "csv-cfg-btn csv-cfg-btn-overflow", text: "⋯", title: "More actions" });
   overflowBtn.addEventListener("click", (e) => {
     const menu = new Menu();
+    menu.addItem(i => i.setTitle(activeFilter.length ? "Filter rows (on)…" : "Filter rows…").setIcon("filter").onClick(openFilter));
     menu.addItem(i => i.setTitle("Config").setIcon("settings").onClick(openColumns));
     menu.addItem(i => i.setTitle("Backup").setIcon("save").onClick(openBackup));
     menu.addItem(i => i.setTitle("Anki export…").setIcon("layers").onClick(openAnki));

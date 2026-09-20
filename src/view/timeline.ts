@@ -148,7 +148,7 @@ export function renderTimeline(view: CardView, container: HTMLElement): void {
   // useful even with a single group, and it's the user's manual override
   // for when "Auto" rolls up further (or less) than they want.
   const groups = new Set<string>();
-  if (groupCol) view.rows.forEach(r => {
+  if (groupCol) view.baseRows().forEach(r => {
     (r[groupCol] ?? "").split(",").map(s => s.trim()).filter(Boolean).forEach(g => groups.add(g));
   });
   const filtersBar = container.createDiv({ cls: "csv-library-filters" });
@@ -173,7 +173,7 @@ export function renderTimeline(view: CardView, container: HTMLElement): void {
 
   // ── Filter rows (group + toolbar search), then keep only ones with a parseable Start ──
   const q = view.searchQuery.toLowerCase().trim();
-  const filtered = view.rows.filter(row => {
+  const filtered = view.baseRows().filter(row => {
     if (groupCol && view.timelineGroupFilter !== "all") {
       const gs = (row[groupCol] ?? "").split(",").map(s => s.trim().toLowerCase());
       if (!gs.includes(view.timelineGroupFilter.toLowerCase())) return false;
@@ -215,7 +215,7 @@ export function renderTimeline(view: CardView, container: HTMLElement): void {
     return;
   }
   if (hasActiveFilters || plotted.length !== filtered.length) {
-    wrap.createDiv({ cls: "csv-library-result-count", text: `Showing ${plotted.length} of ${view.rows.length} entries` });
+    wrap.createDiv({ cls: "csv-library-result-count", text: `Showing ${plotted.length} of ${view.baseRows().length} entries` });
   }
 
   // ── Domain: data's own min/max, padded a little for breathing room.

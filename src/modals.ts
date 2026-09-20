@@ -1330,3 +1330,101 @@ export class AnkiExportModal extends Modal {
 
   onClose(): void { this.contentEl.empty(); }
 }
+
+/**
+ * Row filter editor for the full view — the UI counterpart of a `csv-view`
+ * block's `filter:` directive, over the same engine and the same syntax
+ * (src/row-filter.ts). One condition per line, AND-ed.
+ *
+ * The filter persists per file (fileCfg.rowFilter), so the modal shows a live
+ * "matches N of M" as you type and names any column the file doesn't have.
+ * Hiding rows is the sort of thing you want to see the effect of *before*
+ * closing the dialog, not discover afterwards.
+ */
+export class RowFilterModal extends Modal {
+  private headers: string[];
+  private lines: string[];
+  private preview: (lines: string[]) => { matched: number; total: number; unknown: string[]; bad: string[] };
+  private onApply: (lines: string[]) => void;
+
+  constructor(
+    app: App,
+    headers: string[],
+    current: string[],
+    preview: (lines: string[]) => { matched: number; total: number; unknown: string[]; bad: string[] },
+    onApply: (lines: string[]) => void,
+  ) {
+    super(app);
+    this.headers = headers;
+    this.lines = [...current];
+    this.preview = preview;
+    this.onApply = onApply;
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("csv-add-modal");
+    contentEl.createEl("h2", { text: "Filter rows", cls: "csv-modal-title" });
+    contentEl.createEl("p", {
+      cls: "csv-modal-desc",
+      text: "One condition per line. All of them have to hold for a row to show. This only changes what you see — filtered-out rows are still in the file, still saved when you edit, and come back when you clear the filter.",
+    });
+
+    const form = contentEl.createDiv({ cls: "csv-modal-form" });
+    const input = form.createEl("textarea", {
+      cls: "csv-modal-input csv-modal-textarea",
+      // Prose, not a syntax sample: the concrete examples live in the operator
+      // list below, where they're marked up as code rather than as UI text.
+      attr: { rows: "4", placeholder: "One condition per line", spellcheck: "false" },
+    });
+    input.value = this.lines.join("\n");
+
+    const status = form.createDiv({ cls: "csv-modal-hint" });
+    const problems = form.createDiv({ cls: "csv-modal-hint csv-modal-hint-warn" });
+
+    const hint = contentEl.createDiv({ cls: "csv-modal-section" });
+    hint.createEl("h3", { text: "Operators", cls: "csv-modal-h3" });
+    const list = hint.createEl("ul", { cls: "csv-modal-oplist" });
+    ([
+      ["== !=", "the whole cell — numbers compare as numbers, text ignores case"],
+      ["> >= < <=", "numbers and ISO dates; a blank cell is outside every range"],
+      ["contains / !contains", "substring, ignoring case — use this for multi-value cells"],
+      ["in / not in", "any of a comma-separated list: Status in Watching, Queued"],
+      ["empty / not empty", "whether the cell has anything in it"],
+      ["HSK == 2", "a complete example — column, operator, value"],
+    ] as [string, string][]).forEach(([op, what]) => {
+      const li = list.createEl("li");
+      li.createEl("code", { text: op });
+      li.createSpan({ text: ` — ${what}` });
+    });
+    if (this.headers.length) {
+      hint.createEl("p", { cls: "csv-modal-hint", text: `Columns: ${this.headers.join(", ")}` });
+    }
+
+    const read = () => input.value.split("\n").map(l => l.trim()).filter(Boolean);
+    const refresh = () => {
+      const p = this.preview(read());
+      status.setText(p.matched === p.total
+        ? `Shows all ${p.total} entries.`
+        : `Shows ${p.matched} of ${p.total} entries.`);
+      const parts: string[] = [];
+      if (p.unknown.length) parts.push(`no column named ${p.unknown.map(u => `"${u}"`).join(", ")}`);
+      if (p.bad.length) parts.push(`couldn't read ${p.bad.map(b => `"${b}"`).join(", ")}`);
+      problems.setText(parts.length ? `${parts.join("; ")} — ignored` : "");
+      problems.toggleClass("is-hidden", !parts.length);
+    };
+    input.addEventListener("input", refresh);
+    refresh();
+
+    const btnRow = contentEl.createDiv({ cls: "csv-modal-btns" });
+    btnRow.createEl("button", { text: "Cancel", cls: "csv-modal-cancel" })
+      .addEventListener("click", () => this.close());
+    btnRow.createEl("button", { text: "Clear filter", cls: "csv-modal-cancel" })
+      .addEventListener("click", () => { this.onApply([]); this.close(); });
+    btnRow.createEl("button", { text: "Apply", cls: "csv-modal-submit" })
+      .addEventListener("click", () => { this.onApply(read()); this.close(); });
+  }
+
+  onClose(): void { this.contentEl.empty(); }
+}

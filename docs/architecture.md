@@ -75,7 +75,7 @@ Wide modal (~780px) for viewing/editing a full entry. Three sections: header (ti
 | `openOrCreateNotes(row)` | Creates/opens sidecar `.md` |
 | `resolveCol(candidates)` | First header matching any candidate (case-insensitive) |
 | `getNotesCol/getStatusCol/getCategoryCol/getDateCol` | Per-file override → fallback chain |
-| `baseRows()` | Rows a renderer may draw before search narrows them. Everything, except in an inline `csv-view` block, where its `filter:` directive applies (`src/row-filter.ts`) |
+| `baseRows()` | Rows a renderer may draw before search narrows them: everything, minus this file's row filter (`fileCfg.rowFilter`, set via the toolbar's ⧩ button) or, in an inline `csv-view` block, its `filter:` directive. Both compile through `src/row-filter.ts`. Column/mode detection, the Anki sync and every write path deliberately keep reading `rows` |
 | `getFilteredRows()` | `baseRows()` matching the current search query |
 | `deleteWithUndo(row)` | Routes every delete path through a 6s Notice with Undo |
 | `backupToArchive()` | Copies the current csv to `Archive/<basename>_YYYY-MM-DD.csv` (byte-identical, `readBinary` → `writeBinary`) |
