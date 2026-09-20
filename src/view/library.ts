@@ -20,9 +20,14 @@ export function renderLibrary(view: CardView, container: HTMLElement): void {
     return;
   }
 
+  // Rows this view may draw at all — everything, unless an inline block's
+  // `filter:` directive narrowed it. Taken once: the genre/status dropdowns,
+  // the row filter below and the count all have to agree on the same universe.
+  const base = view.baseRows();
+
   // Collect all genres
   const allGenres = new Set<string>();
-  view.rows.forEach(row => {
+  base.forEach(row => {
     const cats = (row[cc] ?? "").split(",").map(c => c.trim()).filter(Boolean);
     cats.forEach(c => allGenres.add(c));
   });
@@ -30,7 +35,7 @@ export function renderLibrary(view: CardView, container: HTMLElement): void {
   // Collect all statuses
   const allStatuses = new Set<string>();
   if (sc) {
-    view.rows.forEach(row => {
+    base.forEach(row => {
       const status = (row[sc] ?? "").trim();
       if (status) allStatuses.add(status);
     });
@@ -114,7 +119,7 @@ export function renderLibrary(view: CardView, container: HTMLElement): void {
   genreSelect.addEventListener("change", applyFilters);
 
   // Filter rows
-  let filtered = view.rows.filter(row => {
+  let filtered = base.filter(row => {
     // Status filter
     if (view.libraryStatusFilter !== "all" && sc) {
       const rowStatus = (row[sc] ?? "").toLowerCase();
@@ -150,7 +155,7 @@ export function renderLibrary(view: CardView, container: HTMLElement): void {
   if (view.libraryStatusFilter !== "all" || view.libraryGenreFilter !== "all" || view.searchQuery.trim()) {
     container.createDiv({
       cls: "csv-library-result-count",
-      text: `Showing ${filtered.length} of ${view.rows.length} entries`
+      text: `Showing ${filtered.length} of ${base.length} entries`
     });
   }
 

@@ -17,7 +17,7 @@ export function renderTable(view: CardView, container: HTMLElement): void {
 
   // Show search result count if searching
   if (view.searchQuery.trim()) {
-    container.createDiv({ cls: "csv-search-results", text: `Found ${filteredRows.length} of ${view.rows.length} entries` });
+    container.createDiv({ cls: "csv-search-results", text: `Found ${filteredRows.length} of ${view.baseRows().length} entries` });
   }
 
   const wrap = container.createDiv({cls:"csv-table-wrapper"});

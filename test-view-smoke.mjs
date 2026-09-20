@@ -142,7 +142,7 @@ await test("table: renders headers + rows without throwing", async () => {
     rows,
     searchQuery: "",
     settings: { columnWidths: {} },
-    getFilteredRows: () => rows,
+    getFilteredRows: () => rows, baseRows: () => rows,
     persistSettings: async () => {},
     scheduleSave: () => {},
     openRowContextMenu: () => {},
@@ -166,7 +166,7 @@ await test("table: search count appears when a query is set", async () => {
   const rows = [{ Title: "Dune" }];
   const view = {
     headers: ["Title"], rows, searchQuery: "du", settings: { columnWidths: {} },
-    getFilteredRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
+    getFilteredRows: () => rows, baseRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
     openRowContextMenu: () => {}, isNotesCol: () => false, openNoteExpander: () => {},
     isSelectCol: () => false, renderSelectField: (td) => td, notesFileExists: () => false,
     openOrCreateNotes: () => {}, deleteWithUndo: () => {},
@@ -181,7 +181,7 @@ await test("table: image column renders a thumbnail, and keeps it after an edit"
   const view = {
     headers: ["Title", "Image"], rows, searchQuery: "", settings: { columnWidths: {} },
     app: {}, file: { path: "books.csv" },
-    getFilteredRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
+    getFilteredRows: () => rows, baseRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
     openRowContextMenu: () => {}, isNotesCol: () => false, openNoteExpander: () => {},
     isSelectCol: () => false, renderSelectField: (td) => td, notesFileExists: () => false,
     openOrCreateNotes: () => {}, deleteWithUndo: () => {}, getImageCol: () => "Image",
@@ -209,7 +209,7 @@ await test("table: unresolvable image value falls back to its text", async () =>
     headers: ["Image"], rows, searchQuery: "", settings: { columnWidths: {} },
     app: { metadataCache: { getFirstLinkpathDest: () => null }, vault: { getResourcePath: () => "" } },
     file: { path: "books.csv" },
-    getFilteredRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
+    getFilteredRows: () => rows, baseRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
     openRowContextMenu: () => {}, isNotesCol: () => false, openNoteExpander: () => {},
     isSelectCol: () => false, renderSelectField: (td) => td, notesFileExists: () => false,
     openOrCreateNotes: () => {}, deleteWithUndo: () => {}, getImageCol: () => "Image",
@@ -232,7 +232,7 @@ await test("table: wikilink/markdown image values are unwrapped before the vault
       vault: { getResourcePath: () => "" },
     },
     file: { path: "notes/books.csv" },
-    getFilteredRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
+    getFilteredRows: () => rows, baseRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
     openRowContextMenu: () => {}, isNotesCol: () => false, openNoteExpander: () => {},
     isSelectCol: () => false, renderSelectField: (td) => td, notesFileExists: () => false,
     openOrCreateNotes: () => {}, deleteWithUndo: () => {}, getImageCol: () => "Image",
@@ -250,7 +250,7 @@ await test("table: empty image cell renders empty and stays editable", async () 
   const view = {
     headers: ["Image"], rows, searchQuery: "", settings: { columnWidths: {} },
     app: {}, file: { path: "books.csv" },
-    getFilteredRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
+    getFilteredRows: () => rows, baseRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
     openRowContextMenu: () => {}, isNotesCol: () => false, openNoteExpander: () => {},
     isSelectCol: () => false, renderSelectField: (td) => td, notesFileExists: () => false,
     openOrCreateNotes: () => {}, deleteWithUndo: () => {}, getImageCol: () => "Image",
@@ -273,7 +273,7 @@ await test("table: semicolon-separated images stack in the one cell", async () =
   const view = {
     headers: ["Image"], rows, searchQuery: "", settings: { columnWidths: {} },
     app: {}, file: { path: "books.csv" },
-    getFilteredRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
+    getFilteredRows: () => rows, baseRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
     openRowContextMenu: () => {}, isNotesCol: () => false, openNoteExpander: () => {},
     isSelectCol: () => false, renderSelectField: (td) => td, notesFileExists: () => false,
     openOrCreateNotes: () => {}, deleteWithUndo: () => {}, getImageCol: () => "Image",
@@ -294,7 +294,7 @@ await test("table: a data: URI is never split on its own semicolons", async () =
   const view = {
     headers: ["Image"], rows, searchQuery: "", settings: { columnWidths: {} },
     app: {}, file: { path: "books.csv" },
-    getFilteredRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
+    getFilteredRows: () => rows, baseRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
     openRowContextMenu: () => {}, isNotesCol: () => false, openNoteExpander: () => {},
     isSelectCol: () => false, renderSelectField: (td) => td, notesFileExists: () => false,
     openOrCreateNotes: () => {}, deleteWithUndo: () => {}, getImageCol: () => "Image",
@@ -316,7 +316,7 @@ await test("table: in a mixed list, resolvable images render and the rest stay a
       vault: { getResourcePath: () => "" },
     },
     file: { path: "books.csv" },
-    getFilteredRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
+    getFilteredRows: () => rows, baseRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
     openRowContextMenu: () => {}, isNotesCol: () => false, openNoteExpander: () => {},
     isSelectCol: () => false, renderSelectField: (td) => td, notesFileExists: () => false,
     openOrCreateNotes: () => {}, deleteWithUndo: () => {}, getImageCol: () => "Image",
@@ -336,7 +336,7 @@ await test("table: displayHeaders draws a subset, in its order, without touching
     displayHeaders: ["Image", "Character"],
     rows, searchQuery: "", settings: { columnWidths: {} }, file: { path: "h.csv" },
     app: { metadataCache: { getFirstLinkpathDest: () => null }, vault: { getResourcePath: () => "" } },
-    getFilteredRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
+    getFilteredRows: () => rows, baseRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
     openRowContextMenu: () => {}, isNotesCol: () => false, openNoteExpander: () => {},
     isSelectCol: () => false, renderSelectField: (td) => td, notesFileExists: () => false,
     openOrCreateNotes: () => {}, deleteWithUndo: () => {}, getImageCol: () => "Image",
@@ -361,7 +361,7 @@ await test("library: groups cards by category", async () => {
   ];
   const view = {
     headers: ["Title", "Category", "Status"], rows, searchQuery: "",
-    libraryStatusFilter: "all", libraryGenreFilter: "all", fileCfg: {},
+    libraryStatusFilter: "all", libraryGenreFilter: "all", fileCfg: {}, baseRows: () => rows,
     getCategoryCol: () => "Category", getStatusCol: () => "Status",
     titleKey: () => "Title", authorKey: () => undefined,
     resolveCol: () => null, getNotesCol: () => null,
@@ -381,7 +381,7 @@ await test("library: highlighted entry gets the highlight class on its title", a
   ];
   const view = {
     headers: ["Title", "Category", "Status"], rows, searchQuery: "",
-    libraryStatusFilter: "all", libraryGenreFilter: "all", fileCfg: {},
+    libraryStatusFilter: "all", libraryGenreFilter: "all", fileCfg: {}, baseRows: () => rows,
     getCategoryCol: () => "Category", getStatusCol: () => "Status",
     titleKey: () => "Title", authorKey: () => undefined,
     resolveCol: () => null, getNotesCol: () => null,
@@ -414,7 +414,7 @@ await test("library: sort selector orders cards by year, newest first, undated l
   ];
   const view = {
     headers: ["Title", "Category", "Status", "Year"], rows, searchQuery: "",
-    libraryStatusFilter: "all", libraryGenreFilter: "all",
+    libraryStatusFilter: "all", libraryGenreFilter: "all", baseRows: () => rows,
     fileCfg: { librarySort: "year" }, saveFileCfg: () => {},
     getCategoryCol: () => "Category", getStatusCol: () => "Status",
     titleKey: () => "Title", authorKey: () => undefined,
@@ -439,7 +439,7 @@ function kanbanView(rows, overrides = {}) {
     settings: { categoryColumn: "Category" },
     getDateCol: () => null,
     getCategoryCol: () => "Category", getStatusCol: () => "Status",
-    getFilteredRows: () => rows, getNotesCol: () => null,
+    getFilteredRows: () => rows, baseRows: () => rows, getNotesCol: () => null,
     getTitle: (r) => r.Title, getSubtitle: () => "",
     titleKey: () => "Title", authorKey: () => undefined,
     isNotesCol: () => false, isSelectCol: () => false, getColumnValues: () => [],
@@ -701,7 +701,7 @@ const { renderStats, parseRating, hasStatsColumns } = await load("./src/view/sta
 function statsView(rows) {
   return {
     headers: Object.keys(rows[0] ?? {}), rows, searchQuery: "",
-    getFilteredRows: () => rows,
+    getFilteredRows: () => rows, baseRows: () => rows,
     getCategoryCol: () => "Category", getStatusCol: () => "Status",
     authorKey: () => "Author",
     resolveCol: (cands) => {
@@ -762,7 +762,7 @@ function focusView(rows, overrides = {}) {
   const view = {
     headers: Object.keys(rows[0] ?? {}), rows, searchQuery: "",
     focusIndex: 0, focusNavPending: false,
-    getFilteredRows: () => rows,
+    getFilteredRows: () => rows, baseRows: () => rows,
     titleKey: () => "Title", authorKey: () => "Author", getNotesCol: () => "Notes",
     getTitle: (r) => r.Title ?? "—", getSubtitle: (r) => r.Author ?? "",
     isSelectCol: () => false, getColumnValues: () => [],
@@ -853,7 +853,7 @@ await test("table: clicking a header cycles sort asc → desc → off", async ()
   const view = {
     headers: ["Title"], rows, searchQuery: "", settings: { columnWidths: {} },
     tableSortCol: null, tableSortDir: "asc",
-    getFilteredRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
+    getFilteredRows: () => rows, baseRows: () => rows, persistSettings: async () => {}, scheduleSave: () => {},
     openRowContextMenu: () => {}, isNotesCol: () => false, openNoteExpander: () => {},
     isSelectCol: () => false, renderSelectField: (td) => td, notesFileExists: () => false,
     openOrCreateNotes: () => {}, deleteWithUndo: () => {}, renderView: () => {},
@@ -883,6 +883,187 @@ await test("csv-view: parses the columns/hide directives", async () => {
   assert(o.hide.join("|") === "Source", "hide list parsed");
   const none = parseBlockSource("file: a.csv");
   assert(none.columns.length === 0 && none.hide.length === 0, "absent directives are empty lists");
+});
+
+await test("row-filter: parses each operator, and takes the leftmost one", async () => {
+  const { parseFilterLine } = await load("./src/row-filter.ts");
+  const p = (l) => { const c = parseFilterLine(l); return c ? `${c.col}|${c.op}|${c.value}` : null; };
+  assert(p("HSK == 2") === "HSK|==|2", "==");
+  assert(p("HSK = 2") === "HSK|==|2", "a single = reads as ==");
+  assert(p("Rating >= 7.5") === "Rating|>=|7.5", ">= is not read as > then =");
+  assert(p("Status != Done") === "Status|!=|Done", "!=");
+  assert(p("Tags contains noun") === "Tags|contains|noun", "contains");
+  assert(p("Tags !contains noun") === "Tags|!contains|noun", "!contains");
+  assert(p("Status in Watching, Queued") === "Status|in|Watching, Queued", "in keeps the list unsplit");
+  assert(p("Status not in Done, Dropped") === "Status|not in|Done, Dropped", "not in beats in");
+  assert(p("Notes empty") === "Notes|empty|", "unary empty");
+  assert(p("Notes not empty") === "Notes|not empty|", "unary not empty");
+  // The operator is the leftmost one, so a word op can't hijack a value and a
+  // symbol can't hijack one either.
+  assert(p("Status == in progress") === "Status|==|in progress", "a value may contain a word operator");
+  assert(p("Tags contains a=b") === "Tags|contains|a=b", "a value may contain an operator symbol");
+  assert(p("HSK 2") === null, "a line with no operator is not a condition");
+  assert(p("== 2") === null, "an operator with no column is not a condition");
+  assert(p("HSK ==") === null, "an operator with no value is not a condition");
+});
+
+await test("row-filter: compiles against real headers, numerically where both sides are numbers", async () => {
+  const { parseFilterLine, compileRowFilter } = await load("./src/row-filter.ts");
+  const headers = ["HSK", "Status", "Notes", "Built in Year"];
+  const keep = (line, row) => {
+    const f = compileRowFilter([parseFilterLine(line)], headers);
+    return f.test(row);
+  };
+  assert(keep("HSK == 2", { HSK: "2" }), "equal numbers match");
+  assert(keep("hsk == 2", { HSK: "2" }), "the column name matches case-insensitively");
+  assert(keep("HSK == 2", { HSK: "2.0" }), '"2.0" is the number 2, not the string "2"');
+  assert(!keep("HSK == 2", { HSK: "20" }), "== is the whole cell, not a prefix");
+  assert(keep("Status == done", { Status: "Done" }), "string equality ignores case");
+  assert(keep("HSK >= 2", { HSK: "3" }) && !keep("HSK >= 2", { HSK: "1" }), ">= on numbers");
+  assert(!keep("HSK >= 2", { HSK: "" }), "a blank cell is outside every range");
+  assert(keep("Status in a, b", { Status: "B" }) && !keep("Status in a, b", { Status: "c" }), "in splits the list");
+  assert(keep("Notes empty", { Notes: "  " }) && !keep("Notes not empty", { Notes: "" }), "empty ignores whitespace");
+  assert(keep("Built in Year >= 1990", { "Built in Year": "1991" }),
+    "a column whose name embeds a word operator is recovered on the retry");
+
+  // Several conditions AND together; an unknown column is dropped and named,
+  // never treated as a condition nothing can satisfy.
+  const both = compileRowFilter(
+    [parseFilterLine("HSK == 2"), parseFilterLine("Status != Done")], headers);
+  assert(both.test({ HSK: "2", Status: "New" }), "both conditions hold");
+  assert(!both.test({ HSK: "2", Status: "Done" }), "one failing condition drops the row");
+  const missing = compileRowFilter([parseFilterLine("Nope == 1")], headers);
+  assert(missing.unknown.join("|") === "Nope", "the missing column is reported");
+  assert(missing.test({ HSK: "9" }), "a dropped condition fails open");
+  assert(compileRowFilter([], headers) === null, "no conditions compiles to no filter");
+});
+
+await test("csv-view: parses the filter directive, one condition per line", async () => {
+  const o = parseBlockSource("file: a.csv\nfilter: HSK == 2\nfilter: Status != Done");
+  assert(o.filters.length === 2, "both filter lines are kept — they AND together");
+  assert(o.filters[0].col === "HSK" && o.filters[0].op === "==" && o.filters[0].value === "2", "first parsed");
+  assert(o.filters[1].op === "!=", "second parsed");
+  const bad = parseBlockSource("file: a.csv\nfilter: HSK 2");
+  assert(bad.filters.length === 0 && bad.filterErrors.join("|") === "HSK 2", "an unreadable line is reported, not dropped");
+  assert(parseBlockSource("file: a.csv").filters.length === 0, "absent directive is an empty list");
+});
+
+await test("csv-view: filter narrows what's drawn, never what's saved", async () => {
+  // The guarantee that matters: `filter:` is display-only. An edit to a visible
+  // row must write the file back whole — filtered-out rows included — or the
+  // directive would quietly delete data.
+  const { registerCsvViewBlock } = await load("./src/inline-view.ts");
+  const DISK = "Character,HSK\n\u4e00,1\n\u4e8c,2\n\u4e09,2\n";
+  let written = null;
+  const file = { path: "f.csv", name: "f.csv", basename: "f", parent: { path: "" } };
+  const app = {
+    vault: {
+      getAbstractFileByPath: (p) => (p === "f.csv" ? file : null),
+      read: async () => DISK,
+      modify: async (_f, c) => { written = c; },
+      on: () => ({}),
+      adapter: { exists: async () => false, mkdir: async () => {}, write: async () => {} },
+    },
+    metadataCache: { getFirstLinkpathDest: () => null },
+    workspace: { getActiveFile: () => null, on: () => ({}) },
+  };
+  let handler = null;
+  const settings = {
+    defaultMode: "table", notesColumns: ["notes", "Notes"], statusColumn: "status",
+    categoryColumn: "category", notesSubfolder: "Notes", columnWidths: {},
+    selectColumns: [], fileConfigs: {}, residencyRules: [], showResidency: false,
+  };
+  registerCsvViewBlock(app, settings, async () => {}, (_lang, h) => { handler = h; });
+
+  const el = document.body.createDiv();
+  let host = null;
+  handler("file: f.csv\nfilter: HSK == 2", el, { sourcePath: "note.md", addChild: (c) => { host = c; } });
+  host.onload();
+  await new Promise(r => setTimeout(r, 30));
+
+  assert(host.rows.length === 3, "every row is still loaded");
+  assert(host.baseRows().length === 2, "only the matching rows are drawable");
+  assert(el.querySelectorAll("tbody tr").length === 2, "only the matching rows are drawn");
+  assert(el.querySelector(".csv-row-count").textContent === "2 of 3 entries", "the count says what it's showing");
+  assert(!el.querySelector(".csv-add-error"), "a filter that resolved warns about nothing");
+
+  const cell = el.querySelector('td[data-col="Character"]');
+  cell.click();
+  const input = cell.querySelector("input.csv-inline-input");
+  input.value = "X";
+  input.dispatchEvent(new window.Event("blur"));
+  await new Promise(r => setTimeout(r, 700));
+
+  assert(written, "a save happened");
+  assert(written.includes("X"), "the edit was written");
+  assert(written.split(/\r?\n/).filter(Boolean).length === 4, "header + all 3 rows — nothing was dropped");
+  assert(written.includes("\u4e00,1"), "the filtered-out row is untouched on disk");
+});
+
+await test("csv-view: a filter naming a column the file lacks is reported, not silently ignored", async () => {
+  const { registerCsvViewBlock } = await load("./src/inline-view.ts");
+  const file = { path: "g.csv", name: "g.csv", basename: "g", parent: { path: "" } };
+  const app = {
+    vault: {
+      getAbstractFileByPath: (p) => (p === "g.csv" ? file : null),
+      read: async () => "Character,HSK\n\u4e00,1\n",
+      modify: async () => {}, on: () => ({}),
+      adapter: { exists: async () => false, mkdir: async () => {}, write: async () => {} },
+    },
+    metadataCache: { getFirstLinkpathDest: () => null },
+    workspace: { getActiveFile: () => null, on: () => ({}) },
+  };
+  let handler = null;
+  const settings = {
+    defaultMode: "table", notesColumns: ["notes", "Notes"], statusColumn: "status",
+    categoryColumn: "category", notesSubfolder: "Notes", columnWidths: {},
+    selectColumns: [], fileConfigs: {}, residencyRules: [], showResidency: false,
+  };
+  registerCsvViewBlock(app, settings, async () => {}, (_lang, h) => { handler = h; });
+
+  const el = document.body.createDiv();
+  let host = null;
+  handler("file: g.csv\nfilter: HSKK == 2\nfilter: nonsense", el,
+    { sourcePath: "note.md", addChild: (c) => { host = c; } });
+  host.onload();
+  await new Promise(r => setTimeout(r, 30));
+
+  const warn = el.querySelector(".csv-add-error");
+  assert(warn, "the block says the directive didn't apply");
+  assert(warn.textContent.includes('"HSKK"') && warn.textContent.includes('"nonsense"'), "both problems named");
+  assert(el.querySelectorAll("tbody tr").length === 1, "and it fails open — the row is still drawn");
+});
+
+await test("csv-view: a filter that matches nothing says so", async () => {
+  const { registerCsvViewBlock } = await load("./src/inline-view.ts");
+  const file = { path: "k.csv", name: "k.csv", basename: "k", parent: { path: "" } };
+  const app = {
+    vault: {
+      getAbstractFileByPath: (p) => (p === "k.csv" ? file : null),
+      read: async () => "Character,HSK\n\u4e00,1\n",
+      modify: async () => {}, on: () => ({}),
+      adapter: { exists: async () => false, mkdir: async () => {}, write: async () => {} },
+    },
+    metadataCache: { getFirstLinkpathDest: () => null },
+    workspace: { getActiveFile: () => null, on: () => ({}) },
+  };
+  let handler = null;
+  const settings = {
+    defaultMode: "table", notesColumns: ["notes", "Notes"], statusColumn: "status",
+    categoryColumn: "category", notesSubfolder: "Notes", columnWidths: {},
+    selectColumns: [], fileConfigs: {}, residencyRules: [], showResidency: false,
+  };
+  registerCsvViewBlock(app, settings, async () => {}, (_lang, h) => { handler = h; });
+
+  const el = document.body.createDiv();
+  let host = null;
+  handler("file: k.csv\nfilter: HSK == 9", el, { sourcePath: "note.md", addChild: (c) => { host = c; } });
+  host.onload();
+  await new Promise(r => setTimeout(r, 30));
+
+  const empty = el.querySelector(".csv-empty-state");
+  assert(empty && empty.textContent.includes("No entries match"), "an empty result is explained, not blank");
+  assert(!el.querySelector("tbody tr"), "and no rows are drawn");
 });
 
 await test("csv-view: a hidden column survives an edit — the file keeps every column", async () => {
@@ -1679,7 +1860,7 @@ function budgetView(rows, cfg = {}, overrides = {}) {
   const view = {
     headers, rows, searchQuery: "", app: {},
     fileCfg: cfg, resolveCol,
-    getFilteredRows: () => rows,
+    getFilteredRows: () => rows, baseRows: () => rows,
     saveFileCfg: (c) => { savedCfg = c; view.fileCfg = c; },
     getSavedCfg: () => savedCfg,
     renderView: () => {}, renderViewPreservingScroll: () => {},
@@ -2340,7 +2521,7 @@ function chartView(rows, cfg = {}) {
   let savedCfg = null;
   const view = {
     rows, headers: Object.keys(rows[0] ?? {}), searchQuery: "",
-    getFilteredRows: () => rows,
+    getFilteredRows: () => rows, baseRows: () => rows,
     fileCfg: cfg, saveFileCfg: (c) => { savedCfg = c; view.fileCfg = c; },
     getDateCol: () => (Object.keys(rows[0] ?? {}).includes("date") ? "date" : null),
     isDateCol: (h) => h === "date",

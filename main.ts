@@ -793,6 +793,16 @@ export class CardView extends FileView {
 
   // ── Search filtering ─────────────────────────────────────────────────────────
 
+  /**
+   * The rows a renderer is allowed to draw before search and the Cards view's
+   * own filters narrow them further. Only the inline `csv-view` block has a
+   * reason to return less than everything (its `filter:` directive); a full
+   * view always draws the whole file.
+   */
+  baseRows(): CSVRow[] {
+    return this.rows;
+  }
+
   getFilteredRows(): CSVRow[] {
     let result = this.rows;
 

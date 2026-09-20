@@ -43,7 +43,7 @@ export function renderKanbanGenre(view: CardView, container: HTMLElement): void 
 
   // Show search result count if searching
   if (view.searchQuery.trim()) {
-    container.createDiv({ cls: "csv-search-results", text: `Found ${filteredRows.length} of ${view.rows.length} entries` });
+    container.createDiv({ cls: "csv-search-results", text: `Found ${filteredRows.length} of ${view.baseRows().length} entries` });
   }
 
   // Group-by selector. Rendered before the empty-state check so a grouping

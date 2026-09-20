@@ -12,6 +12,7 @@
 //   height: 480              (optional max content height in px)
 //   columns: Character, Image   (optional: show only these, in this order)
 //   hide: Notes, Source         (optional: drop these from the display)
+//   filter: HSK == 2            (optional: only draw rows matching this)
 //   ```
 //
 // Edits (inline cell edits, status chips, drag-free status changes via the
@@ -38,6 +39,7 @@ import { CSVRow, ViewMode, FileConfig, CardViewSettings } from "./types";
 import { parseCSV, resolvePath, sanitizeFilename, showSelectPicker, stashSyncConflict, IMAGE_COL_ALIASES, TITLE_COL_ALIASES, CATEGORY_COL_ALIASES, STATUS_COL_ALIASES, NOTES_COL_ALIASES, looksBoolean, looksCategorical, isMultiValueColName, assumeShape } from "./utils";
 import { isDateCol } from "./field-types";
 import { AddEntryModal, NoteExpanderModal } from "./modals";
+import { FilterCond, CompiledFilter, parseFilterLine, compileRowFilter } from "./row-filter";
 import { renderTable } from "./view/table";
 import { renderLibrary } from "./view/library";
 import { renderKanbanGenre, effectiveGroupCol } from "./view/kanban";
@@ -68,6 +70,8 @@ interface BlockOptions {
   collapse: string[];   // group values collapsed by default in Cards view
   columns: string[];    // display allow-list (in order); empty = every column
   hide: string[];       // display deny-list, applied after `columns`
+  filters: FilterCond[];    // row conditions, AND-ed; empty = every row
+  filterErrors: string[];   // `filter:` lines with no operator in them
 }
 
 /**
@@ -85,6 +89,14 @@ export function parseBlockSource(source: string): BlockOptions {
     : rawMode === "cards" || rawMode === "card" || rawMode === "library" ? "library"
     : "table";
 
+  // Every `filter:` line, not just the first — they AND together, so `opt()`
+  // (which takes one line per key) isn't the right shape for this one.
+  const filterLines = lines
+    .filter(l => l.toLowerCase().startsWith("filter:"))
+    .map(l => l.slice("filter:".length).trim())
+    .filter(Boolean);
+  const parsedFilters = filterLines.map(l => ({ line: l, cond: parseFilterLine(l) }));
+
   const heightRaw = parseInt(opt("height"), 10);
   return {
     file: opt("file"),
@@ -93,6 +105,8 @@ export function parseBlockSource(source: string): BlockOptions {
     collapse: opt("collapse").split(",").map(s => s.trim()).filter(Boolean),
     columns: opt("columns").split(",").map(s => s.trim()).filter(Boolean),
     hide: opt("hide").split(",").map(s => s.trim()).filter(Boolean),
+    filters: parsedFilters.map(f => f.cond).filter((c): c is FilterCond => !!c),
+    filterErrors: parsedFilters.filter(f => !f.cond).map(f => f.line),
   };
 }
 
@@ -131,6 +145,12 @@ export class InlineCardHost extends MarkdownRenderChild {
   // editable in the entry expander — it is just not drawn as a table column
   // or a card field. Recomputed whenever headers are (re)loaded.
   displayHeaders: string[] | undefined;
+  // Compiled form of the block's `filter:` directives, or null when it has
+  // none. Display only, like displayHeaders: `rows` stays the whole file, so a
+  // filtered-out row is still searched over on save and still written back —
+  // it is simply not drawn. Recompiled whenever headers are (re)loaded, since
+  // resolving a condition's column needs them.
+  private rowFilter: CompiledFilter | null = null;
 
   private saveTimer: number | null = null;
   // Serialized form of our own last write. On a vault `modify` event we re-read
@@ -211,6 +231,7 @@ export class InlineCardHost extends MarkdownRenderChild {
    */
   private setHeaders(headers: string[]): void {
     this.headers = headers;
+    this.rowFilter = compileRowFilter(this.opts.filters, headers);
     const { columns, hide } = this.opts;
     if (!columns.length && !hide.length) { this.displayHeaders = undefined; return; }
     const find = (name: string) => headers.find(h => h.toLowerCase() === name.toLowerCase());
@@ -405,8 +426,19 @@ export class InlineCardHost extends MarkdownRenderChild {
     return isDateCol(h);
   }
 
+  /**
+   * The rows this block is allowed to draw: everything, minus what the
+   * `filter:` directives exclude. The renderers start from here rather than
+   * from `rows` so the directive also governs the Cards view's own
+   * status/genre filtering and every "N of M" count.
+   */
+  baseRows(): CSVRow[] {
+    const f = this.rowFilter;
+    return f ? this.rows.filter(f.test) : this.rows;
+  }
+
   getFilteredRows(): CSVRow[] {
-    let result = this.rows;
+    let result = this.baseRows();
     if (this.searchQuery.trim()) {
       const query = this.searchQuery.toLowerCase().trim();
       result = result.filter(row => this.headers.some(h => (row[h] ?? "").toLowerCase().includes(query)));
@@ -527,7 +559,10 @@ export class InlineCardHost extends MarkdownRenderChild {
         this.rows.push(row);
         this.scheduleSave();
         this.renderView();
-        new Notice(`Added: ${this.getTitle(row)}`);
+        // It's in the file either way — say so when this block won't draw it,
+        // rather than letting a successful add look like it did nothing.
+        const hidden = this.rowFilter ? !this.rowFilter.test(row) : false;
+        new Notice(`Added: ${this.getTitle(row)}${hidden ? " (hidden by this block's filter)" : ""}`);
       },
       {},
       // Habit/0-1 columns render as toggles in the add form.
@@ -571,6 +606,7 @@ export class InlineCardHost extends MarkdownRenderChild {
     if (!contentOnly) {
       root.empty();
       this.renderToolbar(root);
+      this.renderFilterWarning(root);
       this.contentArea = root.createDiv({ cls: "csv-content-area" });
       if (this.opts.height) this.contentArea.style.maxHeight = this.opts.height + "px";
     } else if (this.contentArea) {
@@ -591,6 +627,14 @@ export class InlineCardHost extends MarkdownRenderChild {
         .addEventListener("click", () => this.openAddModal());
       return;
     }
+    if (this.baseRows().length === 0) {
+      // Every row excluded by `filter:`. Distinct from "No entries yet." — the
+      // file has data, this block just isn't showing any of it, and saying so
+      // is the difference between a working directive and a broken block.
+      content.createDiv({ cls: "csv-empty-state" })
+        .createEl("p", { text: `No entries match this block's filter (${this.rows.length} in the file).` });
+      return;
+    }
     // Cards/Kanban need a groupable column; fall back to table if there isn't one.
     if ((this.mode === "library" || this.mode === "kanban-genre") && !effectiveGroupCol(this.asView)) {
       this.mode = "table";
@@ -600,12 +644,31 @@ export class InlineCardHost extends MarkdownRenderChild {
     else renderTable(this.asView, content);
   }
 
+  /**
+   * Name the `filter:` lines that did nothing — a condition on a column the
+   * file doesn't have, or a line with no operator in it. Both fail open (the
+   * condition is dropped, the rest still apply), so without this the block
+   * would just quietly show more than it was asked to.
+   */
+  private renderFilterWarning(root: HTMLElement): void {
+    const unknown = this.rowFilter?.unknown ?? [];
+    const bad = this.opts.filterErrors;
+    if (!unknown.length && !bad.length) return;
+    const parts: string[] = [];
+    if (unknown.length) parts.push(`no column named ${unknown.map(u => `"${u}"`).join(", ")}`);
+    if (bad.length) parts.push(`couldn't read ${bad.map(b => `"${b}"`).join(", ")}`);
+    root.createEl("p", { cls: "csv-add-error", text: `filter: ${parts.join("; ")} — ignored` });
+  }
+
   private renderToolbar(root: HTMLElement): void {
     const bar = root.createDiv({ cls: "csv-toolbar csv-inline-toolbar" });
     bar.createDiv({ cls: "csv-toolbar-title", text: this.file?.basename ?? "" })
       .addEventListener("click", () => { if (this.file) void this.app.workspace.getLeaf("tab").openFile(this.file); });
     const ctrl = bar.createDiv({ cls: "csv-toolbar-controls" });
-    ctrl.createDiv({ cls: "csv-row-count", text: `${this.rows.length} entries` });
+    // With a `filter:` on, the honest count is what's drawn out of what exists
+    // — it's also what makes a directive that matched nothing obvious at a glance.
+    const shown = this.baseRows().length, total = this.rows.length;
+    ctrl.createDiv({ cls: "csv-row-count", text: shown === total ? `${total} entries` : `${shown} of ${total} entries` });
 
     // Mode segmented control. Cards/Kanban only when a groupable column exists.
     const groupable = !!effectiveGroupCol(this.asView);

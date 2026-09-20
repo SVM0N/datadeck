@@ -42,7 +42,8 @@ diffs, syncs, and outlives any tool.
   formula overlays, week/month bucketing, rolling-average smoothing, bar
   aggregates for categorical axes, and one-click PNG export.
 - **Embed blocks** put live views inside any note: `csv-view` (table /
-  cards / kanban), `csv-chart`, `csv-tasks` (a cross-file tasks board),
+  cards / kanban, narrowed to the columns and rows you want),
+  `csv-chart`, `csv-tasks` (a cross-file tasks board),
   `csv-random` (quote of the day), and `csv-add` (a mobile-friendly entry
   form).
 - **Sync-safe saves** — if the file changed on disk while you were editing
@@ -136,6 +137,7 @@ height: 480              ← optional max content height in px
 collapse: Removed, Done  ← optional: card groups collapsed by default
 columns: Title, Rating   ← optional: show only these columns, in this order
 hide: Notes, Source      ← optional: drop these columns from the display
+filter: HSK == 2         ← optional: only draw rows matching this
 ```
 ````
 
@@ -148,6 +150,25 @@ still searched, still written back on save, and still editable in the entry
 expander. Names match the CSV's headers case-insensitively; ones the file
 doesn't have are ignored. They apply to the block's table columns and its
 card/kanban fields.
+
+`filter:` is the row-wise counterpart: the block draws only the rows that
+match. One condition per line, and several `filter:` lines narrow together
+(all of them have to hold):
+
+| | |
+|---|---|
+| `filter: HSK == 2` | `==` `!=` — the whole cell. Numeric when both sides are numbers, so `2` matches `2.0`; otherwise case-insensitive text, so `Status == done` matches `Done`. |
+| `filter: Rating >= 7.5` | `>` `>=` `<` `<=` — numbers, or ISO dates. A blank cell is outside every range. |
+| `filter: Tags contains noun` | `contains` `!contains` — substring, case-insensitive. This is the one for multi-value cells like `Drama, Crime`. |
+| `filter: Status in Watching, Queued` | `in` `not in` — matches any value in the comma-separated list. |
+| `filter: Notes not empty` | `empty` `not empty` — whether the cell has anything in it. |
+
+Like `columns:`/`hide:`, this changes only what the block *draws*. Filtered-out
+rows are still written back on save, so a filtered block is a window on the
+file, never a way to prune it — and `+ add` still adds to the file, saying so
+when the new entry doesn't match the filter. The toolbar count shows `N of M`
+whenever a filter is on. A condition naming a column the file doesn't have is
+dropped and reported above the table rather than silently showing everything.
 
 Table mode inside a block uses a narrower column floor than a full tab does
 (the note's text column is much narrower than a leaf), so a few-column sheet

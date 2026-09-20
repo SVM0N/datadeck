@@ -75,7 +75,8 @@ Wide modal (~780px) for viewing/editing a full entry. Three sections: header (ti
 | `openOrCreateNotes(row)` | Creates/opens sidecar `.md` |
 | `resolveCol(candidates)` | First header matching any candidate (case-insensitive) |
 | `getNotesCol/getStatusCol/getCategoryCol/getDateCol` | Per-file override → fallback chain |
-| `getFilteredRows()` | Rows matching current search query |
+| `baseRows()` | Rows a renderer may draw before search narrows them. Everything, except in an inline `csv-view` block, where its `filter:` directive applies (`src/row-filter.ts`) |
+| `getFilteredRows()` | `baseRows()` matching the current search query |
 | `deleteWithUndo(row)` | Routes every delete path through a 6s Notice with Undo |
 | `backupToArchive()` | Copies the current csv to `Archive/<basename>_YYYY-MM-DD.csv` (byte-identical, `readBinary` → `writeBinary`) |
 
